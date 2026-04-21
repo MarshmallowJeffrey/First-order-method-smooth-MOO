@@ -36,6 +36,7 @@ from objectives import (
     make_logreg_strongly_convex,
     make_mlp_nonconvex,
 )
+from baseline import *
 
 
 # =====================================================================
@@ -93,25 +94,49 @@ def experiment_logreg_gap():
     print(f"  K={K}, p={p}, n={n}, reg={reg}, d={d}, ε={eps}")
     print(f"  L = {np.round(L, 4)},  µ = {mu}")
 
+    # --- Algorithm 2 ---
     t0 = time.time()
     res = algorithm2(
         K=K, d=d, objectives=objs, grad_objectives=grads,
         L=L, x0=W0, eps=eps, mode="gap", mu=mu,
         max_outer=80, max_inner=200, verbose=True,
     )
-    elapsed = time.time() - t0
+    elapsed_alg2 = time.time() - t0
 
-    print(f"\n  Outer iterations : {res['outer_iters']}")
-    print(f"  Oracle calls     : {res['oracle_calls']}")
-    print(f"  Final PC*        : {res['pc_history'][-1]:.4e}")
-    print(f"  Wall time        : {elapsed:.2f}s\n")
-    res["elapsed"] = elapsed
+    # --- Baseline ---
+    t0 = time.time()
+    bl = uniform_discretisation(
+        K=K, d=d, objectives=objs, grad_objectives=grads,
+        L=L, x0=W0, eps=eps, mode="gap", mu=mu,
+        max_inner=4000, verbose=True,
+    )
+    elapsed_ud = time.time() - t0
+
+    rows=[{
+        "eps": eps,
+        "a2_outer": res["outer_iters"],
+        "a2_inner": sum(res["inner_steps_history"]),
+        "a2_bundle": res["bundle"].m,
+        "a2_time": elapsed_alg2,
+        "bl_outer": bl['oracle_calls']/K,
+        "bl_bundle": 1,  # only last iterate retained
+        "bl_time": elapsed_ud,
+    }]
+
+
+    print(f"\n  Alg 2 Outer iterations : {res['outer_iters']}"); print(f"\n  Ud iterations : {sum(bl['steps_per_point'])}")
+    print(f"\n  Alg 2 Oracle calls     : {res['oracle_calls']}"); print(f"\n  Ud Oracle calls : {bl['oracle_calls']}")
+    print(f"  Final PC*: {res['pc_history'][-1]:.4e}");
+    print(f"  Wall time alg2: {elapsed_alg2:.2f}s\n"); print(f"  Wall time Ud: {elapsed_ud:.2f}s\n")
+    res["elapsed"] = (elapsed_alg2, elapsed_ud)
     res["config"] = {
         "name": "Exp 1: Regularised logreg",
         "pc": "GAP",
         "eps": eps,
         "params": {"K": K, "p": p, "n": n, "d": d, "reg": reg},
     }
+    _write_baseline_comparison_table(rows, path="results_table.tex",
+                                     problem_params={"K": K, "p": p, "n": n, "d": d, "reg": reg})
     return res
 
 
@@ -363,69 +388,72 @@ def _fmt_params_latex(params):
     return r",\; ".join(parts)
 
 
-def write_results_table(results, path="results_table.tex"):
-    """Write a LaTeX results table summarising a list of experiments.
+def _write_baseline_comparison_table(
+    rows: List[Dict],
+    problem_params: Dict,
+    path: str = "baseline_comparison.tex",
+) -> None:
+    """Write a LaTeX table comparing Algorithm 2 vs baseline across ε values.
 
-    Each entry in ``results`` must be a result dict with a ``config`` key
-    containing:  {"name": str, "pc": str, "eps": float, "params": dict}
-    in addition to the standard algorithm2 outputs (``outer_iters``,
-    ``inner_steps_history``, ``bundle``, ``elapsed``).
+    Schema:  Method | ε | Outer iters | Inner iters | Bundle size | Runtime (s)
 
-    Schema:
-        Experiment | PC | ε | Outer iters | Inner steps | Bundle size | Time (s)
+    Each ε produces two rows (one per method).  The problem-parameter
+    footnote under the caption is pulled from ``problem_params``.
     """
     lines = [
         r"\begin{table}[ht]",
         r"\centering",
-        r"\label{tab:experiment-results}",
+        r"\label{tab:baseline-comparison}",
         r"\smallskip",
-        r"\begin{tabular}{@{}l c c c c c c@{}}",
+        r"\begin{tabular}{@{}l c c c c c@{}}",
         r"\toprule",
-        (r"\textbf{Experiment} & \textbf{PC} & $\boldsymbol{\varepsilon}$ & "
-         r"\textbf{Outer iters} & \textbf{Inner steps} & "
-         r"\textbf{Bundle size} & \textbf{Time (s)} \\"),
+        (r"\textbf{Method} & $\boldsymbol{\varepsilon}$ & "
+         r"\textbf{Outer iters} & \textbf{Inner iters} & "
+         r"\textbf{Bundle size} & \textbf{Runtime (s)} \\"),
         r"\midrule",
     ]
 
-    for idx, res in enumerate(results):
-        cfg = res["config"]
-        outers = res["outer_iters"]
-        inner_range = _fmt_inner_range(res.get("inner_steps_history", []))
-        bundle_size = res["bundle"].m
-        elapsed = res["elapsed"]
-
+    for idx, r in enumerate(rows):
+        eps_cell = _fmt_eps_latex(r["eps"])
         lines.append(
-            f"{cfg['name']}  & {cfg['pc']} & {_fmt_eps_latex(cfg['eps'])} & "
-            f"{outers} & {inner_range} & {_fmt_int(bundle_size)} & "
-            f"{elapsed:.2f} \\\\"
+            f"Algorithm 2 & {eps_cell} & {r['a2_outer']} & "
+            f"{_fmt_int(r['a2_inner'])} & {_fmt_int(r['a2_bundle'])} & "
+            f"{r['a2_time']:.2f} \\\\"
         )
-        trailer = r"\\[6pt]" if idx < len(results) - 1 else r"\\"
-        stats_body = _fmt_params_latex(cfg["params"])
+        trailer = r"\\[4pt]" if idx < len(rows) - 1 else r"\\"
         lines.append(
-            f"{{\\footnotesize (${stats_body}$)}} & & & & & & {trailer}"
+            f"Baseline    & {eps_cell} & {_fmt_int(r['bl_outer'])} & --- & "
+            f"{r['bl_bundle']} & {r['bl_time']:.2f} {trailer}"
         )
 
     lines += [
         r"\bottomrule",
         r"\end{tabular}",
-        r"\caption{Performance of the first-order bundle method under "
-        r"different objective-function assumptions.}",
+        (r"\caption{Algorithm 2 vs uniform-discretisation baseline on "
+         r"regularised multi-class logistic regression "
+         f"$({_fmt_params_latex(problem_params)})$.  "
+         r"For Algorithm 2, ``Outer iters'' is the number of bundle-method "
+         r"iterations and ``Inner iters'' is their summed inner-loop count.  "
+         r"For the baseline, ``Outer iters'' is the total number of "
+         r"gradient-descent iterations summed across all grid points and "
+         r"``Bundle size'' is $1$ since only the most recent iterate is "
+         r"retained for warm-starting.}"),
         r"\end{table}",
     ]
 
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"LaTeX table saved to {path}")
+    print(f"\nLaTeX table saved to {path}")
 
 
 
 # =====================================================================
 if __name__ == "__main__":
     res1 = experiment_logreg_gap()
-    #res2 = experiment_logreg_ub()
+    #res2 = experiment_
     res3 = experiment_mlp_gn()
     pareto = experiment_pareto_front()
     make_plots(res1=res1, res3=res3, pareto_data=pareto)
     #make_plots(res1, res2, res3, pareto)
-    write_results_table([res1, res3], path="results_table.tex")
+
     print("✓ All experiments completed.")
