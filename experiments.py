@@ -30,7 +30,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import time
 
-from algorithm import algorithm2
+#from algorithm import algorithm2
 from bundle import Bundle, UB, GAP, GN, T_map
 from objectives import (
     make_logreg_strongly_convex,
@@ -70,74 +70,141 @@ def simplex_grid(K: int, resolution: int = 20) -> np.ndarray:
 # =====================================================================
 #  Experiment 1:  Regularised multi-class logreg  (PC = GAP)
 # =====================================================================
-def experiment_logreg_gap():
-    """Strongly convex regime: ℓ₂-regularised multi-class logistic regression.
+def experiment_logreg_gap(
+    verbose: bool = True,
+    coarse_resolution: int = 10,
+    fine_resolution: int = 20,
+    n_passes: int = 25,
+    steps_per_point_per_pass: int = 1,
+    max_outer: int = 60,
+    max_inner: int = 5,
+    plot_path: str = "cpu_vs_accuracy.png",
+) -> Dict:
+    """Compare Algorithm 2 vs the uniform-discretisation baseline on a
+    CPU-time-vs-worst-case-accuracy axis.
 
-    F_i(W) = (1/n_i) Σ_{j: y_j=i} {−⟨w^i,x_j⟩ + log Σ_l exp(⟨w^l,x_j⟩)}
-             + (reg/2) ‖W‖²
+    Protocol
+    --------
+    1. Precompute a reference optimal-value map  F*_λ  on a very fine
+       uniform grid G_fine of Δ_K (one-time offline cost, not charged
+       to either method).
+    2. Run the baseline in "progressive" mode: pass through a coarse
+       grid G_r doing M_pp gradient-descent steps per point per pass,
+       checkpoint worst-case error (vs G_fine) after each pass.
+    3. Run Algorithm 2 with a checkpoint after every outer iteration.
+    4. Plot (CPU time) vs (worst-case suboptimality) for both methods
+       on a log-y axis.
 
-    The ℓ₂ term makes each F_i  reg-strongly convex (µ_i = reg = 0.1).
-    We use the GAP = UB − LB progress criterion.
+    Under strong convexity, the worst-case suboptimality
+        err  =  sup_{λ ∈ G_fine}  [F_λ(x̂(λ)) − F*_λ]
+    is the right metric — it directly measures how well the returned
+    solution map approximates the true Pareto-scalarised optima
+    uniformly over Δ_K.
     """
     print("=" * 65)
-    print("Exp 1: Regularised multi-class logreg  (PC = GAP)")
+    print("Exp 1: Regularised multi-class logreg — CPU time vs worst-case err")
     print("=" * 65)
 
-    K, p, n, reg = 4, 4, 60, 0.1
-    d = K * p                                # d = 12
+    K, p, n, reg = 4, 4, 30, 0.1
+    d = K * p
     objs, grads, L, mu = make_logreg_strongly_convex(
-        K=K, p=p, n=n, reg=reg, seed=42,
+        K=K, p=p, n=n, reg=reg, seed=43,
     )
     W0 = np.zeros(d)
-    eps = 5e-2
 
-    print(f"  K={K}, p={p}, n={n}, reg={reg}, d={d}, ε={eps}")
-    print(f"  L = {np.round(L, 4)},  µ = {mu}")
+    print(f"  K={K}, p={p}, n={n}, reg={reg}, d={d}")
+    print(f"  L = {np.round(L, 4)}, µ = {mu}")
 
-    # --- Algorithm 2 ---
-    t0 = time.time()
-    res = algorithm2(
+    # --- 1. Precompute reference map on the fine grid ---
+    if verbose:
+        print(f"\n  Precomputing reference map on fine grid "
+              f"(resolution = {fine_resolution}) ...")
+    ref_t0 = time.time()
+    reference_map = compute_reference_map(
         K=K, d=d, objectives=objs, grad_objectives=grads,
-        L=L, x0=W0, eps=eps, mode="gap", mu=mu,
-        max_outer=80, max_inner=200, verbose=True,
+        L=L, x0=W0, fine_resolution=fine_resolution,
+        n_iters=20_000, grad_tol=1e-5, verbose=False,
     )
-    elapsed_alg2 = time.time() - t0
+    ref_time = time.time() - ref_t0
+    print(f"  Reference map ready: {len(reference_map['fine_grid'])} points, "
+          f"{ref_time:.1f}s")
 
-    # --- Baseline ---
-    t0 = time.time()
-    bl = uniform_discretisation(
+    # --- 2. Run the progressive baseline ---
+    if verbose:
+        print(f"\n  Running baseline (coarse resolution = {coarse_resolution}, "
+              f"{n_passes} passes, {steps_per_point_per_pass} GD steps/point/pass) ...")
+    bl = uniform_discretisation_progressive(
         K=K, d=d, objectives=objs, grad_objectives=grads,
-        L=L, x0=W0, eps=eps, mode="gap", mu=mu,
-        max_inner=4000, verbose=True,
+        L=L, x0=W0, resolution=coarse_resolution,
+        reference_map=reference_map,
+        n_passes=n_passes,
+        steps_per_point_per_pass=steps_per_point_per_pass,
+        verbose=verbose,
     )
-    elapsed_ud = time.time() - t0
 
-    rows=[{
-        "eps": eps,
-        "a2_outer": res["outer_iters"],
-        "a2_inner": sum(res["inner_steps_history"]),
-        "a2_bundle": res["bundle"].m,
-        "a2_time": elapsed_alg2,
-        "bl_outer": bl['oracle_calls']/K,
-        "bl_bundle": 1,  # only last iterate retained
-        "bl_time": elapsed_ud,
-    }]
+    # --- 3. Run Algorithm 2 with per-outer checkpoints ---
+    if verbose:
+        print(f"\n  Running Algorithm 2 ({max_outer} outer iters, "
+              f"up to {max_inner} inner steps each) ...")
+    a2 = algorithm2_progressive(
+        K=K, d=d, objectives=objs, grad_objectives=grads,
+        L=L, x0=W0, reference_map=reference_map,
+        mu=mu, mode="gap",
+        max_outer=max_outer, max_inner=max_inner, verbose=verbose,
+    )
 
+    # --- 4. Plot ---
+    _plot_cpu_vs_accuracy(
+        bl=bl, a2=a2, plot_path=plot_path,
+        problem_params={"K": K, "p": p, "n": n, "d": d, "reg": reg},
+        coarse_resolution=coarse_resolution,
+        fine_resolution=fine_resolution,
+    )
 
-    print(f"\n  Alg 2 Outer iterations : {res['outer_iters']}"); print(f"\n  Ud iterations : {sum(bl['steps_per_point'])}")
-    print(f"\n  Alg 2 Oracle calls     : {res['oracle_calls']}"); print(f"\n  Ud Oracle calls : {bl['oracle_calls']}")
-    print(f"  Final PC*: {res['pc_history'][-1]:.4e}");
-    print(f"  Wall time alg2: {elapsed_alg2:.2f}s\n"); print(f"  Wall time Ud: {elapsed_ud:.2f}s\n")
-    res["elapsed"] = (elapsed_alg2, elapsed_ud)
-    res["config"] = {
-        "name": "Exp 1: Regularised logreg",
-        "pc": "GAP",
-        "eps": eps,
-        "params": {"K": K, "p": p, "n": n, "d": d, "reg": reg},
+    return {
+        "reference_map": reference_map,
+        "baseline": bl,
+        "algorithm2": a2,
+        "problem_params": {"K": K, "p": p, "n": n, "d": d, "reg": reg},
     }
-    _write_baseline_comparison_table(rows, path="results_table.tex",
-                                     problem_params={"K": K, "p": p, "n": n, "d": d, "reg": reg})
-    return res
+
+
+def _plot_cpu_vs_accuracy(
+    bl: Dict, a2: Dict,
+    plot_path: str,
+    problem_params: Dict,
+    coarse_resolution: int,
+    fine_resolution: int,
+) -> None:
+    """Plot CPU time vs worst-case suboptimality for both methods."""
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+
+    ax.semilogy(
+        a2["cpu_times"], a2["worst_errs"],
+        "o-", color="#2563eb", markersize=5, linewidth=1.8,
+        label="Algorithm 2 (GAP)",
+    )
+    ax.semilogy(
+        bl["cpu_times"], bl["worst_errs"],
+        "s-", color="#dc2626", markersize=5, linewidth=1.8,
+        label=f"Uniform discretisation (r = {coarse_resolution})",
+    )
+
+    ax.set_xlabel("CPU time (s)")
+    ax.set_ylabel(r"$\sup_{\lambda \in G_{\mathrm{fine}}}\,"
+                  r"[F_\lambda(\hat x(\lambda)) - F_\lambda^*]$")
+    params_str = _format_params(problem_params)
+    ax.set_title(
+        f"CPU time vs worst-case suboptimality\n"
+        f"{params_str}  |  G_fine res = {fine_resolution}"
+    )
+    ax.legend()
+    ax.grid(True, which="both", alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(plot_path, dpi=150)
+    plt.close()
+    print(f"\n  Plot saved to {plot_path}")
 
 
 # =====================================================================
@@ -176,7 +243,7 @@ def experiment_mlp_gn():
     print(f"  Estimated L = {np.round(L, 2)}")
 
     t0 = time.time()
-    res = algorithm2(
+    res = algorithm2_progressive(
         K=K, d=d, objectives=objs, grad_objectives=grads,
         L=L, x0=theta0, eps=eps, mode="gn", mu=None,
         max_outer=40, max_inner=200, verbose=True,
@@ -224,7 +291,7 @@ def experiment_pareto_front():
 
     print(f"  K={K}, p={p}, n={n}, reg={reg}, d={d}, ε={eps}")
 
-    res = algorithm2(
+    res = algorithm2_progressive(
         K=K, d=d, objectives=objs, grad_objectives=grads,
         L=L, x0=W0, eps=eps, mode="gap", mu=mu,
         max_outer=80, max_inner=200, verbose=False,
@@ -266,7 +333,7 @@ def _format_params(params):
         else:
             parts.append(f"{k}={v}")
     return ", ".join(parts)
-def make_plots(res1, res3, pareto_data, res2=None):
+def make_plots(res1, pareto_data, res2=None, res3=None):
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
     # ---- Plot 1: GAP convergence (regularised logreg) ----
@@ -300,19 +367,19 @@ def make_plots(res1, res3, pareto_data, res2=None):
     # ax.grid(True, alpha=0.3)
 
     # ---- Plot 3: GN convergence (MLP) ----
-    ax = axes[1, 0]
-    ax.semilogy(res3["pc_history"], "^-", color="#16a34a", markersize=4, linewidth=1.5,
-                label="Algorithm 2 (GN)")
-    eps3 = res3["config"]["eps"]
-    ax.axhline(y=eps3, color="grey", ls="--", lw=1, label=f"ε = {eps3}")
-    ax.set_xlabel("Outer iteration t")
-    ax.set_ylabel("max_λ GN(λ; B_t)")
-    ax.set_title(
-        f"Exp 3: Single-Hidden-Layer MLP (GN)\n"
-        f"{_format_params(res3['config']['params'])}"
-    )
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+    # ax = axes[1, 0]
+    # ax.semilogy(res3["pc_history"], "^-", color="#16a34a", markersize=4, linewidth=1.5,
+    #             label="Algorithm 2 (GN)")
+    # eps3 = res3["config"]["eps"]
+    # ax.axhline(y=eps3, color="grey", ls="--", lw=1, label=f"ε = {eps3}")
+    # ax.set_xlabel("Outer iteration t")
+    # ax.set_ylabel("max_λ GN(λ; B_t)")
+    # ax.set_title(
+    #     f"Exp 3: Single-Hidden-Layer MLP (GN)\n"
+    #     f"{_format_params(res3['config']['params'])}"
+    # )
+    # ax.legend()
+    # ax.grid(True, alpha=0.3)
 
     # ---- Plot 4: Pareto front (2-class logreg) ----
     f1, f2, _ = pareto_data
@@ -395,7 +462,7 @@ def _write_baseline_comparison_table(
 ) -> None:
     """Write a LaTeX table comparing Algorithm 2 vs baseline across ε values.
 
-    Schema:  Method | ε | Outer iters | Inner iters | Bundle size | Runtime (s)
+    Schema:  Method | ε | Outer iters | Inner iters | PC | Runtime (s)
 
     Each ε produces two rows (one per method).  The problem-parameter
     footnote under the caption is pulled from ``problem_params``.
@@ -409,7 +476,7 @@ def _write_baseline_comparison_table(
         r"\toprule",
         (r"\textbf{Method} & $\boldsymbol{\varepsilon}$ & "
          r"\textbf{Outer iters} & \textbf{Inner iters} & "
-         r"\textbf{Bundle size} & \textbf{Runtime (s)} \\"),
+         r"\textbf{PC} & \textbf{Runtime (s)} \\"),
         r"\midrule",
     ]
 
@@ -417,13 +484,13 @@ def _write_baseline_comparison_table(
         eps_cell = _fmt_eps_latex(r["eps"])
         lines.append(
             f"Algorithm 2 & {eps_cell} & {r['a2_outer']} & "
-            f"{_fmt_int(r['a2_inner'])} & {_fmt_int(r['a2_bundle'])} & "
+            f"{_fmt_int(r['a2_inner'])} & {'GAP'} & "
             f"{r['a2_time']:.2f} \\\\"
         )
         trailer = r"\\[4pt]" if idx < len(rows) - 1 else r"\\"
         lines.append(
             f"Baseline    & {eps_cell} & {_fmt_int(r['bl_outer'])} & --- & "
-            f"{r['bl_bundle']} & {r['bl_time']:.2f} {trailer}"
+            f"{'GN'} & {r['bl_time']:.2f} {trailer}"
         )
 
     lines += [
@@ -432,12 +499,7 @@ def _write_baseline_comparison_table(
         (r"\caption{Algorithm 2 vs uniform-discretisation baseline on "
          r"regularised multi-class logistic regression "
          f"$({_fmt_params_latex(problem_params)})$.  "
-         r"For Algorithm 2, ``Outer iters'' is the number of bundle-method "
-         r"iterations and ``Inner iters'' is their summed inner-loop count.  "
-         r"For the baseline, ``Outer iters'' is the total number of "
-         r"gradient-descent iterations summed across all grid points and "
-         r"``Bundle size'' is $1$ since only the most recent iterate is "
-         r"retained for warm-starting.}"),
+         r"}"),
         r"\end{table}",
     ]
 
@@ -450,10 +512,4 @@ def _write_baseline_comparison_table(
 # =====================================================================
 if __name__ == "__main__":
     res1 = experiment_logreg_gap()
-    #res2 = experiment_
-    res3 = experiment_mlp_gn()
-    pareto = experiment_pareto_front()
-    make_plots(res1=res1, res3=res3, pareto_data=pareto)
-    #make_plots(res1, res2, res3, pareto)
-
-    print("✓ All experiments completed.")
+    print("✓ Experiment completed.")

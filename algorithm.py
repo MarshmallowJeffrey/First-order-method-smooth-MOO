@@ -38,7 +38,6 @@ With PC = GAP and ε = 0.01, the algorithm:
 from __future__ import annotations
 
 import numpy as np
-import math
 from typing import Callable, Dict, List, Optional, Tuple
 from scipy.optimize import minimize as sp_minimize
 
@@ -325,11 +324,14 @@ def _bundle_update_adaptive(
     steps = 0
     for _ in range(max_steps):
         x_new = T_map(bundle, lam)
-        bundle.add_point(x_new, objectives, grad_objectives)
         steps += 1
 
-        # Check if PC at λ_t has dropped below ε/3
+        pc_valPrev = pc_fn(bundle, lam)
+        bundle.add_point(x_new, objectives, grad_objectives)
         pc_val = pc_fn(bundle, lam)
+        if pc_valPrev - pc_val < 1e-2:
+            bundle.pop_point()
+        # Check if PC at λ_t has dropped below ε/3
         if pc_val <= eps_third:
             break
 
@@ -339,106 +341,106 @@ def _bundle_update_adaptive(
 # =====================================================================
 #  Algorithm 2  –  the main routine
 # =====================================================================
-def algorithm2(
-    K: int,
-    d: int,
-    objectives: List[Callable],
-    grad_objectives: List[Callable],
-    L: np.ndarray,
-    x0: np.ndarray,
-    eps: float = 1e-3,
-    mode: str = "gap",                # "ub", "gap", or "gn"
-    mu: Optional[np.ndarray] = None,  # needed for "gap" and "ub" (PL)
-    max_outer: int = 200,
-    max_inner: int = 500,             # safety cap on inner steps
-    verbose: bool = False,
-) -> Dict:
-    """Run Algorithm 2 from the paper.
-
-    Parameters
-    ----------
-    K, d             : number of objectives, dimension.
-    objectives       : list of K callables  f_k(x) -> float.
-    grad_objectives  : list of K callables  g_k(x) -> np.ndarray shape (d,).
-    L                : smoothness constants, shape (K,).
-    x0               : initial point, shape (d,).
-    eps              : target accuracy.
-    mode             : "gap"  – strongly convex (GAP = UB − LB),
-                       "ub"   – interpolation + PL (upper bound),
-                       "gn"   – generic non-convex (gradient norm).
-    mu               : strong convexity / PL constants, shape (K,).
-    max_outer        : max outer iterations.
-    max_inner        : safety cap on inner steps per outer iteration.
-    verbose          : print progress.
-
-    Returns
-    -------
-    dict with keys:
-        "bundle"       : final Bundle object,
-        "pc_history"   : list of PC*_t at each outer iteration,
-        "lam_history"  : list of λ_t chosen at each iteration,
-        "oracle_calls" : total number of oracle (gradient) evaluations,
-        "outer_iters"  : number of outer iterations executed.
-    """
-    # ---- choose PC function and maximiser ----
-    if mode == "gap":
-        assert mu is not None
-        pc_fn = GAP
-        maximise_pc = _maximise_GAP
-    elif mode == "ub":
-        assert mu is not None
-        pc_fn = UB
-        maximise_pc = _maximise_UB
-    elif mode == "gn":
-        pc_fn = GN
-        maximise_pc = _maximise_GN
-    else:
-        raise ValueError(f"Unknown mode: {mode}")
-
-    # ---- initialise bundle ----
-    bundle = Bundle(K=K, d=d, L=L, mu=mu)
-    bundle.add_point(x0, objectives, grad_objectives)
-
-    eps_third = eps / 3.0
-
-    pc_history = []
-    lam_history = []
-    inner_steps_history = []
-    oracle_calls = K  # initial point
-
-    for t in range(max_outer):
-        # Step 1: find  λ_t = argmax_{λ ∈ Δ_K}  PC(λ; B_t)
-        pc_star, best_lam = maximise_pc(bundle)
-
-        pc_history.append(pc_star)
-        lam_history.append(best_lam.copy())
-
-        if verbose:
-            print(f"  outer iter {t:3d} | PC* = {pc_star:.6e} | λ = {best_lam}")
-
-        if pc_star <= eps:
-            if verbose:
-                print(f"  Converged at outer iteration {t}.")
-            break
-
-        # Step 2: inner loop — add points at λ_t until PC(λ_t; B) ≤ ε/3
-        steps = _bundle_update_adaptive(
-            bundle, best_lam, pc_fn, eps_third,
-            objectives, grad_objectives, max_inner,
-        )
-        inner_steps_history.append(steps)
-        oracle_calls += steps * K
-
-        if verbose:
-            pc_after = pc_fn(bundle, best_lam)
-            print(f"           inner steps = {steps:3d} | "
-                  f"PC(λ_t; B) = {pc_after:.6e} after update")
-
-    return {
-        "bundle": bundle,
-        "pc_history": pc_history,
-        "lam_history": lam_history,
-        "inner_steps_history": inner_steps_history,
-        "oracle_calls": oracle_calls,
-        "outer_iters": len(pc_history),
-    }
+# def algorithm2(
+#     K: int,
+#     d: int,
+#     objectives: List[Callable],
+#     grad_objectives: List[Callable],
+#     L: np.ndarray,
+#     x0: np.ndarray,
+#     eps: float = 1e-3,
+#     mode: str = "gap",                # "ub", "gap", or "gn"
+#     mu: Optional[np.ndarray] = None,  # needed for "gap" and "ub" (PL)
+#     max_outer: int = 200,
+#     max_inner: int = 500,             # safety cap on inner steps
+#     verbose: bool = False,
+# ) -> Dict:
+#     """Run Algorithm 2 from the paper.
+#
+#     Parameters
+#     ----------
+#     K, d             : number of objectives, dimension.
+#     objectives       : list of K callables  f_k(x) -> float.
+#     grad_objectives  : list of K callables  g_k(x) -> np.ndarray shape (d,).
+#     L                : smoothness constants, shape (K,).
+#     x0               : initial point, shape (d,).
+#     eps              : target accuracy.
+#     mode             : "gap"  – strongly convex (GAP = UB − LB),
+#                        "ub"   – interpolation + PL (upper bound),
+#                        "gn"   – generic non-convex (gradient norm).
+#     mu               : strong convexity / PL constants, shape (K,).
+#     max_outer        : max outer iterations.
+#     max_inner        : safety cap on inner steps per outer iteration.
+#     verbose          : print progress.
+#
+#     Returns
+#     -------
+#     dict with keys:
+#         "bundle"       : final Bundle object,
+#         "pc_history"   : list of PC*_t at each outer iteration,
+#         "lam_history"  : list of λ_t chosen at each iteration,
+#         "oracle_calls" : total number of oracle (gradient) evaluations,
+#         "outer_iters"  : number of outer iterations executed.
+#     """
+#     # ---- choose PC function and maximiser ----
+#     if mode == "gap":
+#         assert mu is not None
+#         pc_fn = GAP
+#         maximise_pc = _maximise_GAP
+#     elif mode == "ub":
+#         assert mu is not None
+#         pc_fn = UB
+#         maximise_pc = _maximise_UB
+#     elif mode == "gn":
+#         pc_fn = GN
+#         maximise_pc = _maximise_GN
+#     else:
+#         raise ValueError(f"Unknown mode: {mode}")
+#
+#     # ---- initialise bundle ----
+#     bundle = Bundle(K=K, d=d, L=L, mu=mu)
+#     bundle.add_point(x0, objectives, grad_objectives)
+#
+#     eps_third = eps / 3.0
+#
+#     pc_history = []
+#     lam_history = []
+#     inner_steps_history = []
+#     oracle_calls = K  # initial point
+#
+#     for t in range(max_outer):
+#         # Step 1: find  λ_t = argmax_{λ ∈ Δ_K}  PC(λ; B_t)
+#         pc_star, best_lam = maximise_pc(bundle)
+#
+#         pc_history.append(pc_star)
+#         lam_history.append(best_lam.copy())
+#
+#         if verbose:
+#             print(f"  outer iter {t:3d} | PC* = {pc_star:.6e} | λ = {best_lam}")
+#
+#         if pc_star <= eps:
+#             if verbose:
+#                 print(f"  Converged at outer iteration {t}.")
+#             break
+#
+#         # Step 2: inner loop — add points at λ_t until PC(λ_t; B) ≤ ε/3
+#         steps = _bundle_update_adaptive(
+#             bundle, best_lam, pc_fn, eps_third,
+#             objectives, grad_objectives, max_inner,
+#         )
+#         inner_steps_history.append(steps)
+#         oracle_calls += steps * K
+#
+#         if verbose:
+#             pc_after = pc_fn(bundle, best_lam)
+#             print(f"           inner steps = {steps:3d} | "
+#                   f"PC(λ_t; B) = {pc_after:.6e} after update")
+#
+#     return {
+#         "bundle": bundle,
+#         "pc_history": pc_history,
+#         "lam_history": lam_history,
+#         "inner_steps_history": inner_steps_history,
+#         "oracle_calls": oracle_calls,
+#         "outer_iters": len(pc_history),
+#    }

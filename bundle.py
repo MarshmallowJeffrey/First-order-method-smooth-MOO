@@ -126,6 +126,12 @@ class Bundle:
         self.fvals.append(fv)
         self.grads.append(gv)
 
+    def pop_point(self):
+        """Pop the last element out of the oracle."""
+        self.points.pop()
+        self.fvals.pop()
+        self.grads.pop()
+
 
 # ---------------------------------------------------------------------------
 # Progress criteria  (Section 5.2)

@@ -2,31 +2,43 @@
 baseline.py  –  Uniform-discretisation baseline for smooth MOO
 ==============================================================
 
-This file implements the baseline method referenced in Section 6 of the
-paper, against which Algorithm 2 is compared.
+Evaluation protocol
+-------------------
+We compare Algorithm 2 against the uniform-discretisation baseline on
+a **CPU-time-vs-worst-case-accuracy** axis.
 
-Method
-------
-1. **Grid construction.**  Tile the unit simplex Δ_K with a uniform grid
-   at spacing  h_grid ≈ ε  (as suggested by Section 6).  The grid
-   resolution is  resolution = ⌈1/h_grid⌉ = ⌈1/ε⌉.
+- A very fine uniform grid G_fine on Δ_K is treated as our benchmark
+  for evaluating worst-case metric accuracy.  The reference optimal
+  values F*_λ at each fine-grid point are computed offline once (by
+  running gradient descent to very high accuracy) and stored.
 
-2. **Offline solve (warm-started).**  Sort the grid points by a simple
-   scan order and, for each point  λ, run gradient descent
-   on  F_λ(·)  from the previous grid point's solution (warm start).
-   Each loop stops when the same progress criterion used by
-   Algorithm 2 — UB, GAP, or GN — drops below ε.
+- The baseline uses a coarser resolution r (r << resolution of G_fine)
+  and runs warm-started gradient descent across the coarse grid
+  repeatedly.  The inner loop does NOT stop based on any per-point
+  tolerance — instead, after every M total gradient-descent iterations
+  (a "checkpoint"), we pause, evaluate the current worst-case error of
+  the rounded solution map, record (CPU time, err), and resume.
 
-3. **Query-time rounding.**  For any query λ ∈ Δ_K, the baseline's
-   approximate solution map  Ŵ_baseline(λ)  returns the solution stored
-   at the nearest grid point (in ℓ₁ distance).
+- Algorithm 2 is similarly checkpointed: after every outer iteration
+  we evaluate the worst-case error of  T(·; B_t)  on G_fine and record
+  (CPU time, err).
+
+- The final comparison plot is CPU time (x-axis) vs worst-case
+  function-value suboptimality (y-axis).
+  Under PL-condition, the
+  worst-case suboptimality  sup_{λ ∈ G_fine} [F_λ(x̂(λ)) − F*_λ]  is
+  the right "apples-to-apples" metric across methods.
+  Under generic non-convexity,
+  worst-case suboptimality  sup_{λ ∈ G_fine} ||∇F_λ(x̂(λ))||^2  is
+  the right "apples-to-apples" metric across methods.
 """
 
 from __future__ import annotations
-import math
+import time
 from typing import Callable, Dict, List, Optional
+
 import numpy as np
-from bundle import Bundle, UB, GAP, GN
+from bundle import Bundle, T_map
 
 
 # =====================================================================
@@ -36,9 +48,6 @@ def _uniform_simplex_grid(K: int, resolution: int) -> np.ndarray:
     """Tile Δ_K at grid spacing 1/resolution.
 
     Returns an (N, K) array of grid points, where N = C(resolution + K − 1, K − 1).
-
-    For K = 2 and resolution = 4 the grid is
-    {(0, 1), (1/4, 3/4), (1/2, 1/2), (3/4, 1/4), (1, 0)} — 5 points.
     """
     if K == 1:
         return np.array([[1.0]])
@@ -60,232 +69,339 @@ def _uniform_simplex_grid(K: int, resolution: int) -> np.ndarray:
 
 
 def _sort_grid_for_warmstart(grid: np.ndarray) -> np.ndarray:
-    """Order grid points so consecutive points are ℓ₁-close.
-
-    A lexicographic sort on the first K−1 coordinates works well in
-    practice for small K: it traces a zig-zag path that keeps consecutive
-    points within ≤ 2/resolution of each other.
-
-    Using a true TSP-style ordering would improve warm-starting marginally
-    but adds complexity; the lex sort is the standard simple choice.
-    """
-    # np.lexsort sorts by the *last* key first, so reverse the columns.
+    """Lex sort: consecutive points are ℓ₁-close (≤ 2/resolution apart)."""
     order = np.lexsort(grid[:, ::-1].T)
     return grid[order]
 
 
 # =====================================================================
-#  Per-grid-point local solve
+#  Reference map:  compute F*_λ on a fine grid by high-accuracy GD
 # =====================================================================
-def _local_solve(
-    K: int,
-    d: int,
-    lam: np.ndarray,
-    W_init: np.ndarray,
-    objectives: List[Callable],
-    grad_objectives: List[Callable],
-    L: np.ndarray,
-    mu: Optional[np.ndarray],
-    mode: str,
-    eps: float,
-    max_inner: int,
-) -> tuple[np.ndarray, int]:
-    """Solve min_W F_λ(W) by gradient descent from W_init.
-
-    Runs gradient descent with step 1/Lλ, where Lλ = λ^T L, and stops when
-    the single-point progress criterion PC(λ; {W}) ≤ eps.
-
-    Returns (W_final, num_steps).  num_steps is the count of gradient-descent
-    iterations executed at this λ; each iteration costs K gradient oracle calls
-    (one per objective).
-    """
-    # Local bundle containing a single point — just enough to evaluate PC.
-    bundle = Bundle(K=K, d=d, L=L, mu=mu)
-    bundle.add_point(W_init.copy(), objectives, grad_objectives)
-    pc_fn = _select_pc_fn(mode)
-
-    W = W_init.copy()
-    Ll = float(lam @ L)
-    steps = 0
-
-    # Shortcut: if already converged at W_init, don't step.
-    if pc_fn(bundle, lam) <= eps:
-        return W, steps
-
-    for _ in range(max_inner):
-        # Gradient step:  W ← W − (1/Lλ) ∇F_λ(W)
-        g_lambda = sum(lam[k] * grad_objectives[k](W) for k in range(K))
-        W = W - (1.0 / Ll) * g_lambda
-        steps += 1
-
-        # Rebuild a one-point bundle at the new W and check PC.
-        bundle = Bundle(K=K, d=d, L=L, mu=mu)
-        bundle.add_point(W, objectives, grad_objectives)
-        if pc_fn(bundle, lam) <= eps:
-            break
-
-    return W, steps
-
-
-def _select_pc_fn(mode: str) -> Callable:
-    """Dispatch to UB / GAP / GN with the same semantics as algorithm.py."""
-    if mode == "gap":
-        return GAP
-    if mode == "ub":
-        return UB
-    if mode == "gn":
-        return GN
-    raise ValueError(f"Unknown mode: {mode!r}.  Use 'gap', 'ub', or 'gn'.")
-
-
-# =====================================================================
-#  Main baseline routine
-# =====================================================================
-def uniform_discretisation(
+def compute_reference_map(
     K: int,
     d: int,
     objectives: List[Callable],
     grad_objectives: List[Callable],
     L: np.ndarray,
     x0: np.ndarray,
-    eps: float,
-    mode: str = "gap",
-    mu: Optional[np.ndarray] = None,
-    max_inner: int = 200,
-    resolution: Optional[int] = None,
+    fine_resolution: int = 40,
+    n_iters: int = 20_000,
+    grad_tol: float = 1e-10,
     verbose: bool = False,
 ) -> Dict:
-    """Run the uniform-discretisation baseline.
+    """Precompute the reference optimal-value map on a fine grid.
 
-    Parameters
-    ----------
-    K, d              : number of objectives and dimension of W.
-    objectives        : list of K callables  F_k(W) → float.
-    grad_objectives   : list of K callables  ∇F_k(W) → ndarray shape (d,).
-    L                 : smoothness constants, shape (K,).
-    x0                : initial iterate (used at the first grid point).
-    eps               : target accuracy — also sets the grid spacing  ≈ √ε.
-    mode              : "gap", "ub", or "gn" (same semantics as algorithm2).
-    mu                : strong convexity / PL constants; required for "gap" / "ub".
-    max_inner         : safety cap on inner steps per grid point.
-    resolution        : grid resolution override; default is ⌈1/√ε⌉.
-    verbose           : if True, print per-grid-point progress.
+    For each λ in G_fine, run gradient descent on F_λ(·) to very high
+    accuracy (either ``n_iters`` iterations or until the gradient norm
+    falls below ``grad_tol``).  Warm-starting from the previous fine-
+    grid point's solution dramatically accelerates convergence for
+    strongly-convex problems.
 
-    Returns
-    -------
-    dict with keys:
-        "grid"              : (N, K) array of grid points (in warm-start order).
-        "solutions"         : (N, d) array of per-grid-point solutions Ŵ(λ^(g)).
-        "steps_per_point"   : list of inner-step counts at each grid point.
-        "oracle_calls"      : total gradient oracle evaluations.
-        "resolution"        : grid resolution used.
-        "eps"               : target accuracy.
-
-    Example
-    -------
-    >>> res = uniform_discretisation(
-    ...     K=3, d=12, objectives=objs, grad_objectives=grads,
-    ...     L=L, x0=np.zeros(12), eps=1e-2, mode="gap", mu=mu,
-    ... )
-    >>> res["oracle_calls"]
-    19800
-    >>> Ŵ_hat = predict_baseline(res, np.array([0.4, 0.3, 0.3]))
+    Returns a dict with keys "fine_grid", "F_star", "x_star".  This
+    reference map is the "ground truth" used to evaluate worst-case
+    suboptimality of any approximate solution map.  Compute it once per
+    problem, re-use across methods and checkpoints.
     """
-    if resolution is None:
-        resolution = max(1, math.ceil(1.0 / eps))
-
-    grid = _uniform_simplex_grid(K, resolution)
+    grid = _uniform_simplex_grid(K, fine_resolution)
     grid = _sort_grid_for_warmstart(grid)
-    n_grid = grid.shape[0]
+    N_fine = grid.shape[0]
 
-    if verbose:
-        print(
-            f"  Baseline: resolution={resolution},  grid points={n_grid},  "
-            f"√ε spacing = {1.0 / resolution:.4f}"
-        )
-
-    solutions = np.zeros((n_grid, d))
-    steps_per_point: List[int] = []
-    W_prev = x0.copy()  # warm start seed
+    F_star = np.zeros(N_fine)
+    x_star = np.zeros((N_fine, d))
+    x_prev = x0.copy()
 
     for g, lam in enumerate(grid):
-        W_g, steps = _local_solve(
-            K=K, d=d, lam=lam, W_init=W_prev,
-            objectives=objectives, grad_objectives=grad_objectives,
-            L=L, mu=mu, mode=mode,
-            eps=eps, max_inner=max_inner,
-        )
-        solutions[g] = W_g
-        steps_per_point.append(steps)
-        W_prev = W_g  # warm-start the next grid point
+        x = x_prev.copy()
+        Ll = float(lam @ L)
+        for _ in range(n_iters):
+            g_lam = sum(lam[k] * grad_objectives[k](x) for k in range(K))
+            if np.linalg.norm(g_lam) < grad_tol:
+                break
+            x = x - (1.0 / Ll) * g_lam
 
-        if verbose and (g % max(1, n_grid // 10) == 0 or g == n_grid - 1):
-            print(
-                f"  grid {g + 1:4d}/{n_grid} | λ = {np.round(lam, 3)} | "
-                f"inner steps = {steps:3d}"
-            )
+        F_star[g] = sum(lam[k] * objectives[k](x) for k in range(K))
+        x_star[g] = x
+        x_prev = x
 
-    oracle_calls = K * sum(steps_per_point)
+        if verbose and (g % max(1, N_fine // 10) == 0 or g == N_fine - 1):
+            print(f"    reference: {g + 1:4d}/{N_fine}  |  F*_λ = {F_star[g]:.6e}")
 
-    return {
-        "grid": grid,
-        "solutions": solutions,
-        "steps_per_point": steps_per_point,
-        "oracle_calls": oracle_calls,
-        "resolution": resolution,
-        "eps": eps,
-    }
+    return {"fine_grid": grid, "F_star": F_star, "x_star": x_star}
 
 
 # =====================================================================
-#  Query-time prediction: round-to-nearest-grid-point
+#  Worst-case suboptimality evaluation
 # =====================================================================
-def predict_baseline(baseline_res: Dict, lam: np.ndarray) -> np.ndarray:
-    """Return the baseline's approximate solution at a query λ.
+def _nearest_coarse_index(lam: np.ndarray, coarse_grid: np.ndarray) -> int:
+    """Return g* = argmin_g ‖lam − coarse_grid[g]‖_1."""
+    dists = np.sum(np.abs(coarse_grid - lam[None, :]), axis=1)
+    return int(np.argmin(dists))
 
-    Rounds ``lam`` to the nearest stored grid point (ℓ₁ distance) and
-    returns the precomputed W at that grid point.
 
-    This realises the baseline's solution map  Ŵ_baseline : Δ_K → R^d.
+def worst_case_suboptimality_baseline(
+    coarse_grid: np.ndarray,
+    coarse_solutions: np.ndarray,
+    reference_map: Dict,
+    objectives: List[Callable],
+    K: int,
+) -> float:
+    """Worst-case function-value suboptimality of the rounded baseline map.
+
+        err := sup_{λ ∈ G_fine}  [F_λ(x̂_baseline(λ)) − F*_λ]
+
+    where  x̂_baseline(λ) = coarse_solutions[argmin_g ‖λ − λ^(g)‖_1].
     """
-    grid = baseline_res["grid"]
-    sols = baseline_res["solutions"]
-    # ℓ₁ distance from lam to every grid point.
-    dists = np.sum(np.abs(grid - lam[None, :]), axis=1)
-    g_best = int(np.argmin(dists))
-    return sols[g_best]
+    fine_grid = reference_map["fine_grid"]
+    F_star = reference_map["F_star"]
+    worst = -np.inf
+    for i, lam in enumerate(fine_grid):
+        g_star = _nearest_coarse_index(lam, coarse_grid)
+        x_hat = coarse_solutions[g_star]
+        F_lam = sum(lam[k] * objectives[k](x_hat) for k in range(K))
+        err = F_lam - F_star[i]
+        if err > worst:
+            worst = err
+    return float(worst)
+
+
+def worst_case_suboptimality_algorithm2(
+    bundle: Bundle,
+    reference_map: Dict,
+    objectives: List[Callable],
+    K: int,
+) -> float:
+    """Worst-case function-value suboptimality of Algorithm 2's T(·; B) map.
+
+    Uses  T(λ; B_t)  as the approximate solution at each fine-grid λ.
+    """
+    fine_grid = reference_map["fine_grid"]
+    F_star = reference_map["F_star"]
+    worst = -np.inf
+    for i, lam in enumerate(fine_grid):
+        x_hat = T_map(bundle, lam)
+        F_lam = sum(lam[k] * objectives[k](x_hat) for k in range(K))
+        err = F_lam - F_star[i]
+        if err > worst:
+            worst = err
+    return float(worst)
 
 
 # =====================================================================
-#  Evaluating the solution map's worst-case PC on a fine test grid
+#  Progressive baseline:  GD along the coarse grid with checkpoints
 # =====================================================================
-def evaluate_map_worstcase(
-    baseline_res: Dict,
+def uniform_discretisation_progressive(
     K: int,
     d: int,
     objectives: List[Callable],
     grad_objectives: List[Callable],
     L: np.ndarray,
-    mu: Optional[np.ndarray],
-    mode: str = "gap",
-    test_resolution: int = 50,
-) -> float:
-    """Compute  sup_{λ ∈ Δ_K}  PC(λ; {Ŵ_baseline(λ)}).
+    x0: np.ndarray,
+    resolution: int,
+    reference_map: Dict,
+    n_passes: int = 20,
+    steps_per_point_per_pass: int = 1,
+    verbose: bool = False,
+) -> Dict:
+    """Run the baseline in "progressive" mode, with per-pass checkpoints.
 
-    This is the analogue of Algorithm 2's PC*_t at convergence — it
-    measures how well the baseline's rounded solution map satisfies the
-    progress criterion uniformly over the simplex.
+    We construct a coarse grid G_r of Δ_K at resolution ``resolution``
+    and walk through it in warm-start order (lex sort).  Each pass
+    does ``steps_per_point_per_pass`` gradient-descent steps at every
+    grid point.  After each pass, we evaluate the current worst-case
+    suboptimality of the rounded solution map against ``reference_map``
+    and record (CPU time, err).
 
-    Because the baseline rounds to the nearest grid point and the PC is
-    typically worst at the *mid-point* between adjacent grid points, this
-    quantity scales with the grid spacing and usually exceeds ε.
+    One "pass" = one full sweep across all grid points with M_pp steps
+    per point = |G_r| · M_pp total gradient-descent iterations.
+
+    Parameters
+    ----------
+    resolution                : coarse grid resolution  r.
+    reference_map             : output of ``compute_reference_map(..)``.
+    n_passes                  : total number of passes to run.
+    steps_per_point_per_pass  : GD steps taken at each grid point per pass.
+
+    Returns
+    -------
+    dict with keys:
+        "coarse_grid"             : (N, K) array of grid points.
+        "final_solutions"         : (N, d) array of final solutions.
+        "cpu_times"               : list of CPU times at each checkpoint (s).
+        "worst_errs"              : list of worst-case suboptimality values.
+        "total_iters_history"     : list of cumulative GD iters per checkpoint.
+        "resolution"              : grid resolution used.
     """
-    pc_fn = _select_pc_fn(mode)
-    test_grid = _uniform_simplex_grid(K, test_resolution)
-    worst = -np.inf
-    for lam in test_grid:
-        W_hat = predict_baseline(baseline_res, lam)
-        bundle = Bundle(K=K, d=d, L=L, mu=mu)
-        bundle.add_point(W_hat, objectives, grad_objectives)
-        worst = max(worst, pc_fn(bundle, lam))
-    return float(worst)
+    coarse_grid = _sort_grid_for_warmstart(_uniform_simplex_grid(K, resolution))
+    N = coarse_grid.shape[0]
+
+    # Initialise all grid-point solutions to x0.
+    solutions = np.tile(x0, (N, 1)).astype(float)
+
+    cpu_times: List[float] = []
+    worst_errs: List[float] = []
+    total_iters_history: List[int] = []
+    total_iters = 0
+    t_start = time.time()
+
+    # Checkpoint 0:  all solutions = x0.
+    err0 = worst_case_suboptimality_baseline(
+        coarse_grid, solutions, reference_map, objectives, K,
+    )
+    cpu_times.append(time.time() - t_start)
+    worst_errs.append(err0)
+    total_iters_history.append(0)
+    if verbose:
+        print(f"  Baseline pass 0/{n_passes} | t={cpu_times[-1]:.2f}s "
+              f"| iters={total_iters} | err={err0:.4e}")
+
+    for pass_idx in range(1, n_passes + 1):
+        # One pass:  cycle through the grid.  On pass 1, chain warm-starts
+        # from one grid point to the next.  On later passes, each grid
+        # point continues from its own current solution.
+        x_prev = solutions[0].copy()
+        for g in range(N):
+            lam = coarse_grid[g]
+            Ll = float(lam @ L)
+            if pass_idx == 1:
+                x = x_prev.copy()  # warm start from previous grid's solution
+            else:
+                x = solutions[g].copy()  # continue from own current solution
+
+            for _ in range(steps_per_point_per_pass):
+                g_lam = sum(lam[k] * grad_objectives[k](x) for k in range(K))
+                x = x - (1.0 / Ll) * g_lam
+                total_iters += 1
+
+            solutions[g] = x
+            x_prev = x
+
+        err_now = worst_case_suboptimality_baseline(
+            coarse_grid, solutions, reference_map, objectives, K,
+        )
+        cpu_times.append(time.time() - t_start)
+        worst_errs.append(err_now)
+        total_iters_history.append(total_iters)
+        if verbose:
+            print(f"  Baseline pass {pass_idx}/{n_passes} | "
+                  f"t={cpu_times[-1]:.2f}s | iters={total_iters} "
+                  f"| err={err_now:.4e}")
+
+    return {
+        "coarse_grid": coarse_grid,
+        "final_solutions": solutions,
+        "cpu_times": cpu_times,
+        "worst_errs": worst_errs,
+        "total_iters_history": total_iters_history,
+        "resolution": resolution,
+    }
+
+
+# =====================================================================
+#  Instrumented Algorithm 2:  checkpoint after each outer iteration
+# =====================================================================
+def algorithm2_progressive(
+    K: int,
+    d: int,
+    objectives: List[Callable],
+    grad_objectives: List[Callable],
+    L: np.ndarray,
+    x0: np.ndarray,
+    reference_map: Dict,
+    mu: Optional[np.ndarray] = None,
+    mode: str = "gap",
+    max_outer: int = 50,
+    max_inner: int = 400,
+    verbose: bool = False,
+) -> Dict:
+    """Run Algorithm 2 with a checkpoint after every outer iteration.
+
+    Thin wrapper around the algorithm.py primitives that interleaves
+    worst-case-error evaluations with the main outer loop.
+
+    Returns
+    -------
+    dict with keys:
+        "bundle"                  : final Bundle.
+        "cpu_times"               : list of CPU times at each checkpoint.
+        "worst_errs"              : list of worst-case suboptimality values.
+        "outer_iters_history"     : list of outer-iter counts per checkpoint.
+        "pc_history"              : PC*_t values across outer iterations.
+    """
+    from algorithm import (
+        _maximise_UB, _maximise_GAP, _maximise_GN,
+        _bundle_update_adaptive,
+    )
+    from bundle import UB, GAP, GN
+
+    if mode == "gap":
+        # Use LB_2 (single-index minorant) inside both the λ-maximisation
+        # and the inner-loop PC check.  LB_2 is ~100× faster than LB_1 and
+        # doesn't hit the Gurobi size-limited license when the bundle grows
+        # past ~100 points.  It gives a looser lower bound (hence a larger
+        # GAP, i.e. a more conservative progress criterion), but that's
+        # acceptable here because we're benchmarking raw "accuracy per CPU
+        # second" rather than proving a per-iteration decrease rate.
+        pc_fn = lambda bundle, lam: GAP(bundle, lam, variant="lb2")
+        maximise_pc = lambda bundle: _maximise_GAP(bundle, variant="lb2")
+        if mu is None:
+            raise ValueError("mode='gap' requires mu (strong convexity).")
+    elif mode == "ub":
+        pc_fn, maximise_pc = UB, _maximise_UB
+    elif mode == "gn":
+        pc_fn, maximise_pc = GN, _maximise_GN
+        if mu is None:
+            raise ValueError("mode='gn' requires mu.")
+    else:
+        raise ValueError(f"Unknown mode: {mode!r}.")
+
+    bundle = Bundle(K=K, d=d, L=L, mu=mu)
+    bundle.add_point(x0.copy(), objectives, grad_objectives)
+
+    cpu_times: List[float] = []
+    worst_errs: List[float] = []
+    outer_iters_history: List[int] = []
+    pc_history: List[float] = []
+
+    t_start = time.time()
+
+    # Checkpoint 0:  bundle has one point (the initial iterate).
+    err0 = worst_case_suboptimality_algorithm2(bundle, reference_map, objectives, K)
+    cpu_times.append(time.time() - t_start)
+    worst_errs.append(err0)
+    outer_iters_history.append(0)
+    if verbose:
+        print(f"  A2 outer 0/{max_outer} | t={cpu_times[-1]:.2f}s | err={err0:.4e}")
+
+    # The inner loop uses eps/3 as its stopping rule.  Since this wrapper
+    # doesn't take an outer ε, set it very small so inner loops run to
+    # the max_inner cap rather than stopping early.
+    eps_dummy = 1e-12
+
+    for t in range(max_outer):
+        pc_star, best_lam = maximise_pc(bundle)
+        pc_history.append(pc_star)
+
+        steps = _bundle_update_adaptive(
+            bundle, best_lam, pc_fn, eps_dummy,
+            objectives, grad_objectives, max_inner,
+        )
+
+        err_now = worst_case_suboptimality_algorithm2(
+            bundle, reference_map, objectives, K,
+        )
+        cpu_times.append(time.time() - t_start)
+        worst_errs.append(err_now)
+        outer_iters_history.append(t + 1)
+
+        if verbose:
+            print(f"  A2 outer {t + 1}/{max_outer} | t={cpu_times[-1]:.2f}s "
+                  f"| PC*={pc_star:.4e} | inner={steps:3d} "
+                  f"| bundle={bundle.m} | err={err_now:.4e}")
+
+    return {
+        "bundle": bundle,
+        "cpu_times": cpu_times,
+        "worst_errs": worst_errs,
+        "outer_iters_history": outer_iters_history,
+        "pc_history": pc_history,
+    }
