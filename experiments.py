@@ -76,33 +76,36 @@ def experiment_logreg_gap(
     fine_resolution: int = 20,
     n_passes: int = 25,
     steps_per_point_per_pass: int = 1,
-    max_outer: int = 60,
-    max_inner: int = 5,
-    plot_path: str = "cpu_vs_accuracy.png",
+    max_outer: int = 10,
+    max_inner: int = 20,
+    eval_every_n_grads: int = 200,
+    plot_path_cpu: str = "cpu_vs_accuracy.png",
+    plot_path_grads: str = "grads_vs_accuracy.png",
 ) -> Dict:
-    """Compare Algorithm 2 vs the uniform-discretisation baseline on a
-    CPU-time-vs-worst-case-accuracy axis.
+    """Compare Algorithm 2 vs the uniform-discretisation baseline.
+
+    Two complementary plots are produced:
+      * CPU time   vs worst-case suboptimality   ("real-time" comparison)
+      * Gradient evals vs worst-case suboptimality ("oracle-cost" comparison)
+
+    The CPU plot reflects practical wall-time cost (including Algorithm
+    2's overhead from maximising PC, T_map calls, and bundle bookkeeping).
+    The gradient-eval plot reflects pure oracle complexity: how much
+    gradient information each algorithm needs to achieve a given
+    accuracy, regardless of overhead.  This is the metric that the
+    paper's Theorems 2-3 bound asymptotically.
 
     Protocol
     --------
-    1. Precompute a reference optimal-value map  F*_λ  on a very fine
-       uniform grid G_fine of Δ_K (one-time offline cost, not charged
-       to either method).
-    2. Run the baseline in "progressive" mode: pass through a coarse
-       grid G_r doing M_pp gradient-descent steps per point per pass,
-       checkpoint worst-case error (vs G_fine) after each pass.
-    3. Run Algorithm 2 with a checkpoint after every outer iteration.
-    4. Plot (CPU time) vs (worst-case suboptimality) for both methods
-       on a log-y axis.
-
-    Under strong convexity, the worst-case suboptimality
-        err  =  sup_{λ ∈ G_fine}  [F_λ(x̂(λ)) − F*_λ]
-    is the right metric — it directly measures how well the returned
-    solution map approximates the true Pareto-scalarised optima
-    uniformly over Δ_K.
+    1. Precompute reference  F*_λ  on a very fine grid G_fine of Δ_K.
+    2. Run baseline progressively, checkpointing at every M gradient
+       evaluations (and at every pass boundary).
+    3. Run Algorithm 2 progressively, same checkpointing rule.
+    4. Plot two figures.
     """
     print("=" * 65)
-    print("Exp 1: Regularised multi-class logreg — CPU time vs worst-case err")
+    print("Exp 1: Regularised multi-class logreg — CPU time and grad-evals "
+          "vs worst-case err")
     print("=" * 65)
 
     K, p, n, reg = 4, 4, 30, 0.1
@@ -114,6 +117,7 @@ def experiment_logreg_gap(
 
     print(f"  K={K}, p={p}, n={n}, reg={reg}, d={d}")
     print(f"  L = {np.round(L, 4)}, µ = {mu}")
+    print(f"  Checkpoint cadence: M = {eval_every_n_grads} gradient evals")
 
     # --- 1. Precompute reference map on the fine grid ---
     if verbose:
@@ -139,6 +143,7 @@ def experiment_logreg_gap(
         reference_map=reference_map,
         n_passes=n_passes,
         steps_per_point_per_pass=steps_per_point_per_pass,
+        eval_every_n_grads=eval_every_n_grads,
         verbose=verbose,
     )
 
@@ -150,12 +155,20 @@ def experiment_logreg_gap(
         K=K, d=d, objectives=objs, grad_objectives=grads,
         L=L, x0=W0, reference_map=reference_map,
         mu=mu, mode="gap",
-        max_outer=max_outer, max_inner=max_inner, verbose=verbose,
+        max_outer=max_outer, max_inner=max_inner,
+        eval_every_n_grads=eval_every_n_grads,
+        verbose=verbose,
     )
 
-    # --- 4. Plot ---
+    # --- 4. Plots ---
     _plot_cpu_vs_accuracy(
-        bl=bl, a2=a2, plot_path=plot_path,
+        bl=bl, a2=a2, plot_path=plot_path_cpu,
+        problem_params={"K": K, "p": p, "n": n, "d": d, "reg": reg},
+        coarse_resolution=coarse_resolution,
+        fine_resolution=fine_resolution,
+    )
+    _plot_grads_vs_accuracy(
+        bl=bl, a2=a2, plot_path=plot_path_grads,
         problem_params={"K": K, "p": p, "n": n, "d": d, "reg": reg},
         coarse_resolution=coarse_resolution,
         fine_resolution=fine_resolution,
@@ -205,6 +218,56 @@ def _plot_cpu_vs_accuracy(
     plt.savefig(plot_path, dpi=150)
     plt.close()
     print(f"\n  Plot saved to {plot_path}")
+
+
+def _plot_grads_vs_accuracy(
+    bl: Dict, a2: Dict,
+    plot_path: str,
+    problem_params: Dict,
+    coarse_resolution: int,
+    fine_resolution: int,
+) -> None:
+    """Plot gradient evaluations vs worst-case suboptimality.
+
+    For each method, the x-axis is the cumulative number of gradient-
+    oracle evaluations  ∇F_k(x)  used so far (one scalarised GD step
+    costs K such evaluations, since it computes ∇F_k for all k ∈ [K]).
+    The y-axis is the worst-case function-value suboptimality of the
+    method's solution map at that point in its execution.
+
+    This is the "oracle complexity" view: how much gradient information
+    does each method need to achieve a given accuracy?  Unlike the CPU-
+    time view, this strips away algorithmic overhead and reflects only
+    the information-theoretic cost.
+    """
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+
+    ax.loglog(
+        a2["grad_evals_history"], a2["worst_errs"],
+        "o-", color="#2563eb", markersize=5, linewidth=1.8,
+        label="Algorithm 2 (GAP)",
+    )
+    ax.loglog(
+        bl["grad_evals_history"], bl["worst_errs"],
+        "s-", color="#dc2626", markersize=5, linewidth=1.8,
+        label=f"Uniform discretisation (r = {coarse_resolution})",
+    )
+
+    ax.set_xlabel("Gradient evaluations  $\\sum_k \\sum_t |\\nabla F_k(\\cdot)|$")
+    ax.set_ylabel(r"$\sup_{\lambda \in G_{\mathrm{fine}}}\,"
+                  r"[F_\lambda(\hat x(\lambda)) - F_\lambda^*]$")
+    params_str = _format_params(problem_params)
+    ax.set_title(
+        f"Gradient evaluations vs worst-case suboptimality\n"
+        f"{params_str}  |  G_fine res = {fine_resolution}"
+    )
+    ax.legend()
+    ax.grid(True, which="both", alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(plot_path, dpi=150)
+    plt.close()
+    print(f"  Plot saved to {plot_path}")
 
 
 # =====================================================================
