@@ -38,10 +38,12 @@ With PC = GAP and ε = 0.01, the algorithm:
 from __future__ import annotations
 
 import numpy as np
+import time
 from typing import Callable, Dict, List, Optional, Tuple
 from scipy.optimize import minimize as sp_minimize
 
 from bundle import Bundle, UB, GAP, GN, LB, T_map
+from baseline import worst_case_suboptimality_algorithm2
 
 
 # =====================================================================
@@ -339,108 +341,146 @@ def _bundle_update_adaptive(
 
 
 # =====================================================================
-#  Algorithm 2  –  the main routine
+#  Instrumented Algorithm 2:  checkpoint after each outer iteration
 # =====================================================================
-# def algorithm2(
-#     K: int,
-#     d: int,
-#     objectives: List[Callable],
-#     grad_objectives: List[Callable],
-#     L: np.ndarray,
-#     x0: np.ndarray,
-#     eps: float = 1e-3,
-#     mode: str = "gap",                # "ub", "gap", or "gn"
-#     mu: Optional[np.ndarray] = None,  # needed for "gap" and "ub" (PL)
-#     max_outer: int = 200,
-#     max_inner: int = 500,             # safety cap on inner steps
-#     verbose: bool = False,
-# ) -> Dict:
-#     """Run Algorithm 2 from the paper.
-#
-#     Parameters
-#     ----------
-#     K, d             : number of objectives, dimension.
-#     objectives       : list of K callables  f_k(x) -> float.
-#     grad_objectives  : list of K callables  g_k(x) -> np.ndarray shape (d,).
-#     L                : smoothness constants, shape (K,).
-#     x0               : initial point, shape (d,).
-#     eps              : target accuracy.
-#     mode             : "gap"  – strongly convex (GAP = UB − LB),
-#                        "ub"   – interpolation + PL (upper bound),
-#                        "gn"   – generic non-convex (gradient norm).
-#     mu               : strong convexity / PL constants, shape (K,).
-#     max_outer        : max outer iterations.
-#     max_inner        : safety cap on inner steps per outer iteration.
-#     verbose          : print progress.
-#
-#     Returns
-#     -------
-#     dict with keys:
-#         "bundle"       : final Bundle object,
-#         "pc_history"   : list of PC*_t at each outer iteration,
-#         "lam_history"  : list of λ_t chosen at each iteration,
-#         "oracle_calls" : total number of oracle (gradient) evaluations,
-#         "outer_iters"  : number of outer iterations executed.
-#     """
-#     # ---- choose PC function and maximiser ----
-#     if mode == "gap":
-#         assert mu is not None
-#         pc_fn = GAP
-#         maximise_pc = _maximise_GAP
-#     elif mode == "ub":
-#         assert mu is not None
-#         pc_fn = UB
-#         maximise_pc = _maximise_UB
-#     elif mode == "gn":
-#         pc_fn = GN
-#         maximise_pc = _maximise_GN
-#     else:
-#         raise ValueError(f"Unknown mode: {mode}")
-#
-#     # ---- initialise bundle ----
-#     bundle = Bundle(K=K, d=d, L=L, mu=mu)
-#     bundle.add_point(x0, objectives, grad_objectives)
-#
-#     eps_third = eps / 3.0
-#
-#     pc_history = []
-#     lam_history = []
-#     inner_steps_history = []
-#     oracle_calls = K  # initial point
-#
-#     for t in range(max_outer):
-#         # Step 1: find  λ_t = argmax_{λ ∈ Δ_K}  PC(λ; B_t)
-#         pc_star, best_lam = maximise_pc(bundle)
-#
-#         pc_history.append(pc_star)
-#         lam_history.append(best_lam.copy())
-#
-#         if verbose:
-#             print(f"  outer iter {t:3d} | PC* = {pc_star:.6e} | λ = {best_lam}")
-#
-#         if pc_star <= eps:
-#             if verbose:
-#                 print(f"  Converged at outer iteration {t}.")
-#             break
-#
-#         # Step 2: inner loop — add points at λ_t until PC(λ_t; B) ≤ ε/3
-#         steps = _bundle_update_adaptive(
-#             bundle, best_lam, pc_fn, eps_third,
-#             objectives, grad_objectives, max_inner,
-#         )
-#         inner_steps_history.append(steps)
-#         oracle_calls += steps * K
-#
-#         if verbose:
-#             pc_after = pc_fn(bundle, best_lam)
-#             print(f"           inner steps = {steps:3d} | "
-#                   f"PC(λ_t; B) = {pc_after:.6e} after update")
-#
-#     return {
-#         "bundle": bundle,
-#         "pc_history": pc_history,
-#         "lam_history": lam_history,
-#         "inner_steps_history": inner_steps_history,
-#         "oracle_calls": oracle_calls,
-#         "outer_iters": len(pc_history),
-#    }
+def algorithm2_progressive(
+    K: int,
+    d: int,
+    objectives: List[Callable],
+    grad_objectives: List[Callable],
+    L: np.ndarray,
+    x0: np.ndarray,
+    reference_map: Dict,
+    mu: Optional[np.ndarray] = None,
+    mode: str = "gap",
+    max_outer: int = 50,
+    max_inner: int = 400,
+    checkpoint_every: int = 1,
+    eval_every_n_grads: Optional[int] = None,
+    verbose: bool = False,
+) -> Dict:
+    """Run Algorithm 2 with periodic worst-case-error checkpoints.
+
+    Thin wrapper around the algorithm.py primitives that interleaves
+    worst-case-error evaluations with the main outer loop.
+
+    Checkpoint cadence
+    ------------------
+    Two complementary controls:
+      - ``checkpoint_every``    : checkpoint every k outer iterations.
+      - ``eval_every_n_grads``  : if set, additionally checkpoint at
+                                  the next outer-iteration boundary
+                                  after every M cumulative gradient
+                                  evaluations.
+
+    Setting ``eval_every_n_grads = M`` makes A2 directly comparable
+    to the baseline's gradient-vs-error curve at matched M.
+
+    Parameters
+    ----------
+    checkpoint_every     : evaluate worst-case error every k outer iters.
+    eval_every_n_grads   : checkpoint after each M cumulative gradient evals.
+    """
+    if mode == "gap":
+        # Use LB_2 (single-index minorant) inside both the λ-maximisation
+        # and the inner-loop PC check.  LB_2 is ~100× faster than LB_1 and
+        # avoids hitting the Gurobi size-limited license once the bundle
+        # grows past ~100 points.
+        pc_fn = lambda bundle, lam: GAP(bundle, lam, variant="lb2")
+        maximise_pc = lambda bundle: _maximise_GAP(bundle, variant="lb2")
+        if mu is None:
+            raise ValueError("mode='gap' requires mu (strong convexity).")
+    elif mode == "ub":
+        pc_fn, maximise_pc = UB, _maximise_UB
+    elif mode == "gn":
+        pc_fn, maximise_pc = GN, _maximise_GN
+        if mu is None:
+            raise ValueError("mode='gn' requires mu.")
+    else:
+        raise ValueError(f"Unknown mode: {mode!r}.")
+
+    bundle = Bundle(K=K, d=d, L=L, mu=mu)
+    bundle.add_point(x0.copy(), objectives, grad_objectives)
+    # The initial bundle point cost K gradient evals at x0.
+    grad_evals = K
+
+    cpu_times: List[float] = []
+    worst_errs: List[float] = []
+    outer_iters_history: List[int] = []
+    grad_evals_history: List[int] = []
+    pc_history: List[float] = []
+    grad_evals_at_last_ckpt = 0
+
+    t_start = time.time()
+
+    def _checkpoint(label: str, pc_star=None, steps=None) -> None:
+        err = worst_case_suboptimality_algorithm2(bundle, reference_map, objectives, K)
+        cpu_times.append(time.time() - t_start)
+        worst_errs.append(err)
+        outer_iters_history.append(label_to_outer(label))
+        grad_evals_history.append(grad_evals)
+        if verbose:
+            extra = ""
+            if pc_star is not None:
+                extra = f" | PC*={pc_star:.4e} | inner={steps:3d} | bundle={bundle.m}"
+            print(f"  A2 {label} | t={cpu_times[-1]:.2f}s | grad_evals={grad_evals}"
+                  f"{extra} | err={err:.4e}")
+
+    def label_to_outer(label: str) -> int:
+        # Helper:  parse label like "outer 5/20" -> 5,  "outer 0/20" -> 0
+        try:
+            return int(label.split()[1].split("/")[0])
+        except Exception:
+            return -1
+
+    # Checkpoint 0:  bundle has one point (the initial iterate).
+    _checkpoint(f"outer 0/{max_outer}")
+
+    # Inner loop uses eps/3 as its stopping rule; here we want it to run
+    # to the max_inner cap (or to the new pruning rule), so set ε tiny.
+    eps_dummy = 1e-12
+
+    for t in range(max_outer):
+        pc_star, best_lam = maximise_pc(bundle)
+        pc_history.append(pc_star)
+
+        bundle_m_before = bundle.m
+        steps = _bundle_update_adaptive(
+            bundle, best_lam, pc_fn, eps_dummy,
+            objectives, grad_objectives, max_inner,
+        )
+        # Each inner step corresponds to a retained bundle point (the new
+        # _bundle_update_adaptive prunes BEFORE evaluating gradients, so
+        # every committed step costs K gradient evals and is kept).
+        # The bundle-size delta should equal steps, but we use the delta
+        # directly to be robust to any future changes to the inner loop.
+        retained_steps = bundle.m - bundle_m_before
+        grad_evals += retained_steps * K
+
+        do_checkpoint = (
+            ((t + 1) % checkpoint_every == 0)
+            or (t + 1 == max_outer)
+            or (
+                eval_every_n_grads is not None
+                and (grad_evals - grad_evals_at_last_ckpt) >= eval_every_n_grads
+            )
+        )
+        if do_checkpoint:
+            _checkpoint(f"outer {t + 1}/{max_outer}", pc_star=pc_star, steps=steps)
+            grad_evals_at_last_ckpt = grad_evals
+            if verbose and retained_steps < steps:
+                print(f"        (attempted {steps}, retained {retained_steps} "
+                      f"after PC-drop pruning)")
+        elif verbose:
+            print(f"  A2 outer {t + 1}/{max_outer} | grad_evals={grad_evals} "
+                  f"| PC*={pc_star:.4e} | inner={steps:3d} (retained {retained_steps}) "
+                  f"| bundle={bundle.m} | (no checkpoint)")
+
+    return {
+        "bundle": bundle,
+        "cpu_times": cpu_times,
+        "worst_errs": worst_errs,
+        "outer_iters_history": outer_iters_history,
+        "grad_evals_history": grad_evals_history,
+        "pc_history": pc_history,
+    }

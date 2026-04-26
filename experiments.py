@@ -30,10 +30,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import time
 
-#from algorithm import algorithm2
+from algorithm import algorithm2_progressive
 from bundle import Bundle, UB, GAP, GN, T_map
 from objectives import (
     make_logreg_strongly_convex,
+    #make_logreg_separable_gaussian,
     make_mlp_nonconvex,
 )
 from baseline import *
@@ -270,10 +271,160 @@ def _plot_grads_vs_accuracy(
     print(f"  Plot saved to {plot_path}")
 
 
-# =====================================================================
-#  Experiment 2:  Single Layer MLP  (PC = UB)
-# =====================================================================
 
+# =====================================================================
+#  Experiment 2:  Separable Gaussian mixture  +  multi-class logreg
+#                 ("inverse logistic regression" — interpolation +
+#                 sublevel-set PL regime, PC = UB)
+# =====================================================================
+def experiment_logreg_separable_gaussian(
+    verbose: bool = True,
+    coarse_resolution: int = 6,
+    fine_resolution: int = 8,
+    n_passes: int = 20,
+    steps_per_point_per_pass: int = 1,
+    max_outer: int = 25,
+    max_inner: int = 200,
+    eval_every_n_grads: int = 100,
+    plot_path_cpu: str = "exp2_cpu_vs_accuracy.png",
+    plot_path_grads: str = "exp2_grads_vs_accuracy.png",
+) -> Dict:
+    r"""Separable Gaussian mixture fit with unregularised multi-class logreg.
+
+    Setting (the "inverse logistic regression" construction)
+    --------------------------------------------------------
+    Data:    K isotropic Gaussian clusters with shared covariance σ²·I and
+             centres ‖μ_k − μ_l‖ = sep·√2.  By Bayes' rule, the posterior
+             P(Y=k | X=x) is exactly softmax-linear in x — so multinomial
+             logistic regression is well-specified, with planted weights
+             w_k* = μ_k/σ² and biases  b_k* = −‖μ_k‖²/(2σ²).
+    Loss:    F_i(W) = (1/n_i) Σ_{j: y_j=i} {−⟨w^i, x_j⟩ + log Σ_l exp(⟨w^l,x_j⟩)}
+             — no ℓ₂ regulariser.
+
+    Why interpolation holds (in the inf sense, Asn 5.1)
+    ---------------------------------------------------
+    F_i ≥ 0 trivially.  For separable clusters  inf F_i = 0  (drive the
+    weights along a separating direction; the limit is reached only as
+    ‖W‖ → ∞, never at a finite W — Soudry et al. 2018).  Both per-class
+    objectives and every  F_λ  share the same property, so F_λ* = 0.
+
+    Why strict global PL (Asn 5.2) FAILS
+    ------------------------------------
+    For one sample, set p := P(correct | x; w).  Then  F = −log p ∼ (1−p)
+    while  ‖∇F‖² ∼ (1−p)²;  hence  ‖∇F‖²/F ∼ (1−p) → 0.  No global
+    constant µ > 0 satisfies the PL inequality.
+
+    Sublevel-set PL — what the algorithm actually uses
+    --------------------------------------------------
+    On the sublevel set  S_α := {W : F_λ(W) ≤ α},  separability gives a
+    constant µ_λ(α) > 0 (generalized self-concordance, Bach 2014).
+    Algorithm 2 starts at W_0 = 0 with F_i(W_0) = log K, so its iterates
+    stay inside  S_{log K},  where ``make_logreg_separable_gaussian``
+    reports a numerical estimate µ_i.  We pass that to algorithm2 in
+    mode="ub" and check empirically how the upper bound evolves.
+
+    Practical caveat
+    ----------------
+    Because separable softmax CE has  µ/L → 0  along the algorithm's
+    trajectory (the very phenomenon that causes the global-PL failure),
+    the inner gradient-descent iterates in mode="ub" make sub-percent
+    UB reductions per step.  The default pruning rule in
+    ``_bundle_update_adaptive`` rejects such steps, so the algorithm
+    can stall after a few outer iterations.  This is reported faithfully
+    in the convergence plot — it is *not* a bug, but the practical
+    cost of the global-PL failure flagged in the docstring of
+    ``make_logreg_separable_gaussian``.  A follow-up experiment with
+    a small ℓ₂ regulariser and PC = GAP recovers fast convergence at
+    the price of strict interpolation.
+    """
+    print("=" * 65)
+    print("Exp 2: Separable Gaussian-mixture + softmax CE  (PC = UB)")
+    print("=" * 65)
+
+    K, p, n_per_class, sep, sigma = 3, 5, 30, 6.0, 1.0
+    n_total = K * n_per_class
+    objs, grads, L, mu = make_logreg_separable_gaussian(
+        K=K, p=p, n_per_class=n_per_class, sep=sep, sigma=sigma, seed=17,
+    )
+    d = K * p
+    W0 = np.zeros(d)
+
+    print(f"  K={K}, p={p}, n={n_total}, sep={sep}, σ={sigma}, d={d}")
+    print(f"  L = {np.round(L, 3)}")
+    print(f"  µ (sublevel-set PL on {{F_i ≤ log K}}) = {np.round(mu, 4)}")
+    print(f"  µ_min / L_max ≈ {mu.min()/L.max():.4f}    "
+          f"(small ⇒ slow inner convergence, by global-PL failure)")
+    print(f"  Checkpoint cadence: M = {eval_every_n_grads} gradient evals")
+
+    # --- 1. Precompute reference map.  Note: separable softmax CE has
+    #        no finite minimiser, so GD on F_λ converges only at rate
+    #        O(1/log t).  We use a modest budget — the F*_λ estimates
+    #        are correct to roughly the budget's tolerance, which is
+    #        all we need for worst-case-suboptimality comparison.
+    if verbose:
+        print(f"\n  Precomputing reference map "
+              f"(fine grid resolution = {fine_resolution}) ...")
+    ref_t0 = time.time()
+    reference_map = compute_reference_map(
+        K=K, d=d, objectives=objs, grad_objectives=grads,
+        L=L, x0=W0, fine_resolution=fine_resolution,
+        n_iters=5_000, grad_tol=1e-6, verbose=False,
+    )
+    ref_time = time.time() - ref_t0
+    print(f"  Reference map ready: {len(reference_map['fine_grid'])} points, "
+          f"{ref_time:.1f}s  (F*_λ range: "
+          f"[{reference_map['F_star'].min():.4f}, "
+          f"{reference_map['F_star'].max():.4f}])")
+
+    # --- 2. Run progressive baseline ---
+    if verbose:
+        print(f"\n  Running baseline (coarse resolution = {coarse_resolution}, "
+              f"{n_passes} passes) ...")
+    bl = uniform_discretisation_progressive(
+        K=K, d=d, objectives=objs, grad_objectives=grads,
+        L=L, x0=W0, resolution=coarse_resolution,
+        reference_map=reference_map,
+        n_passes=n_passes,
+        steps_per_point_per_pass=steps_per_point_per_pass,
+        eval_every_n_grads=eval_every_n_grads,
+        verbose=verbose,
+    )
+
+    # --- 3. Run Algorithm 2 in mode="ub" (interpolation + PL) ---
+    if verbose:
+        print(f"\n  Running Algorithm 2 mode=\"ub\" "
+              f"({max_outer} outer iters, up to {max_inner} inner steps) ...")
+    a2 = algorithm2_progressive(
+        K=K, d=d, objectives=objs, grad_objectives=grads,
+        L=L, x0=W0, reference_map=reference_map,
+        mu=mu, mode="ub",
+        max_outer=max_outer, max_inner=max_inner,
+        eval_every_n_grads=eval_every_n_grads,
+        verbose=verbose,
+    )
+
+    # --- 4. Plots ---
+    problem_params = {"K": K, "p": p, "n": n_total, "d": d,
+                      "sep": sep, "sigma": sigma}
+    _plot_cpu_vs_accuracy(
+        bl=bl, a2=a2, plot_path=plot_path_cpu,
+        problem_params=problem_params,
+        coarse_resolution=coarse_resolution,
+        fine_resolution=fine_resolution,
+    )
+    _plot_grads_vs_accuracy(
+        bl=bl, a2=a2, plot_path=plot_path_grads,
+        problem_params=problem_params,
+        coarse_resolution=coarse_resolution,
+        fine_resolution=fine_resolution,
+    )
+
+    return {
+        "reference_map": reference_map,
+        "baseline": bl,
+        "algorithm2": a2,
+        "problem_params": problem_params,
+    }
 
 
 # =====================================================================
@@ -576,3 +727,5 @@ def _write_baseline_comparison_table(
 if __name__ == "__main__":
     res1 = experiment_logreg_gap()
     print("✓ Experiment completed.")
+    #res2 = experiment_logreg_separable_gaussian()
+    #print("✓ Experiment 2 (separable Gaussian mixture, UB) completed.")

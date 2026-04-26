@@ -51,7 +51,7 @@ Per-class loss (the i-th objective in the MOO problem):
     F_i(W)  =  (1/n_i) Σ_{j: y_j=i} { −log P(Y = i | x_j ; W) }
             =  (1/n_i) Σ_{j: y_j=i} { −⟨w^i, x_j⟩ + log Σ_l exp(⟨w^l, x_j⟩) }.
 
-Two objective families
+Three objective families
 ----------------------
 1. **Regularised multi-class logistic regression** (strongly convex):
        F_i(W) = (1/n_i) Σ_{j: y_j=i} {−⟨w^i,x_j⟩ + log Σ_l exp(⟨w^l,x_j⟩)}
@@ -59,7 +59,15 @@ Two objective families
    The ℓ₂ term makes each F_i  reg-strongly convex  (µ_i = reg).
    The planted model is well-specified for this hypothesis class.
 
-2. **Generic non-convex** – Single-hidden-layer MLP with ReLU and
+2. **Separable Gaussian mixture, unregularised softmax CE** ("inverse
+    logistic regression" — interpolation + sublevel-set PL):
+        Data:  K isotropic Gaussian clusters with shared covariance σ²·I,
+        chosen separable so that  inf F_i = 0.  Strict global PL fails
+        (gradient²/loss → 0 along the separating ray, by a one-line
+        argument), but PL holds on the bounded sublevel set
+        {W : F_i(W) ≤ log K} where Algorithm 2's iterates live.
+
+3. **Generic non-convex** – Single-hidden-layer MLP with ReLU and
    softmax cross-entropy.  Fit to the same planted-model (X, y) from
    above.  The MLP is an over-parameterised non-convex hypothesis class
    that contains the true linear-softmax model as a special case.
@@ -316,183 +324,258 @@ def make_logreg_strongly_convex(
     return objectives, grad_objectives, L_arr, mu_arr
 
 
-# 2.  Single-hidden-layer MLP  (interpolation + PL)
+# 2.  Multi-class logistic regression on a separable Gaussian mixture
+#      (interpolation + sublevel-set PL — the "inverse logistic regression" example)
 # ====================================================================
-def make_mlp_interpolation_pl(
-    K: int = 3,
-    p: int = 4,
-    h: int = None,
-    n_per_class: int = 20,
-    seed: int = 11,
-) -> Tuple[List[Callable], List[Callable], np.ndarray, np.ndarray]:
-    """Create K per-class squared-loss objectives for a 1-hidden-layer MLP
-    in a setting where both the interpolation (Asn 5.1) and the PL
-    condition (Asn 5.2) are satisfied **globally** with µ_i = 1.
-
-    Architecture (simplest choice satisfying both assumptions)
-    ----------------------------------------------------------
-    Input  x_j ∈ R^p
-      →  hidden layer:   a_j = σ(W_1 x_j + b_1) ∈ R^h    (σ = identity)
-      →  output layer:   z_j = W_2 a_j + b_2 ∈ R^K
-      →  squared loss:   L_j = ½ ‖z_j − t_{y_j}‖²        (t_k = e_k ∈ R^K)
-
-    Parameters  θ = (W_1, b_1, W_2, b_2),  d = h·p + h + K·h + K.
-
-    Per-class objective:
-
-        F_i(θ) = 1/(2 n_i) Σ_{j: y_j=i} ‖z(x_j; θ) − e_i‖² ≥ 0.
-
-    Why σ = identity
-    ----------------
-    A nonlinear activation (ReLU, tanh, …) introduces kinks / saturation
-    regions that break PL globally even in the interpolation regime.
-    With σ = identity the loss is a 4th-degree polynomial in θ and
-    admits a one-line global PL proof (see below).
-
-    Data (K orthonormal class prototypes)
-    -------------------------------------
-    1. Draw a random orthogonal Q ∈ R^{p×p}, let μ_k = Q[:, k]  (k=1..K).
-       Then  ‖μ_k‖ = 1  and  μ_k^T μ_l = δ_{kl}.
-    2. Each class has n_per_class identical copies of its prototype:
-          X_j = μ_{y_j},    y_j ∈ [K].
-
-    Closed-form interpolator  θ*
-    ----------------------------
-    Set  W_1* = M := [μ_1 | ... | μ_K]^T  ∈ R^{K×p}
-         b_1* = 0 ∈ R^K,
-         W_2* = I_K ∈ R^{K×K},
-         b_2* = 0 ∈ R^K.
-    Then  W_1* μ_k = e_k  (rows of M are the μ_k's, and M M^T = I_K), so
-         z(μ_k; θ*) = I_K · e_k + 0 = e_k = t_k.
-    Hence every F_i(θ*) = 0 simultaneously  ⇒  (Asn 5.1) holds.
-
-    Global PL condition  (µ_i = 1, proved in closed form)
-    -----------------------------------------------------
-    Let r_i(θ) := z(μ_i; θ) − e_i ∈ R^K, so F_i = ½ ‖r_i‖².  Writing the
-    four partial derivatives directly (σ' ≡ 1):
-
-        ∂F_i/∂W_1 = W_2^T r_i μ_i^T,      ∂F_i/∂b_1 = W_2^T r_i,
-        ∂F_i/∂W_2 = r_i (W_1 μ_i + b_1)^T, ∂F_i/∂b_2 = r_i.
-
-    Taking Frobenius norms and using  ‖μ_i‖² = 1:
-
-        ‖∇F_i‖² = 2‖W_2^T r_i‖² + ‖r_i‖²(‖W_1 μ_i + b_1‖² + 1)
-                ≥ ‖r_i‖² = 2 F_i.
-
-    Thus  F_i(θ) ≤ ½ ‖∇F_i(θ)‖²  for every θ ∈ R^d, which is Asn 5.2
-    with µ_i = 1.  No neighbourhood / sublevel-set restriction.
-
-    Smoothness
-    ----------
-    F_i is a 4th-degree polynomial in θ, so it is *not* globally L-smooth.
-    We report a numerical estimate of L_i obtained by probing gradient
-    Lipschitz ratios on a ball around 0 (the natural init in experiments.py).
-    The bundle algorithm only needs L_i to be valid along its iterates.
-
-    Parameters
-    ----------
-    K            : number of classes (= output dim = hidden width).
-    p            : input dimension,  must satisfy p ≥ K.
-    h            : hidden width; must equal K  (default: K).
-    n_per_class  : number of identical copies of each prototype.
-    seed         : RNG seed for the orthonormal basis and L-probing.
-
-    Returns
-    -------
-    objectives      : list of K callables F_i(θ) → float.
-    grad_objectives : list of K callables ∇F_i(θ) → ndarray (d,).
-    L               : smoothness constants, shape (K,)  (numerical).
-    mu              : PL constants,       shape (K,)  (= 1, analytic).
-
-    Illustrative example
-    --------------------
-    With K=3, p=4, h=3:  d = 3·4 + 3 + 3·3 + 3 = 27.
-    F_i(θ*) = 0, F_i(0) = ½ ‖0 − e_i‖² = 0.5.
-    PL check over 600 random (θ,i) pairs yields
-    ‖∇F_i(θ)‖² − 2 F_i(θ) > 0 with large slack (see tests).
-
-    >>> objs, grads, L, mu = make_mlp_interpolation_pl(K=3, p=4, n_per_class=20)
-    >>> mu
-    array([1., 1., 1.])
-    """
-    if h is None:
-        h = K
-    assert p >= K, "need p ≥ K for K orthonormal prototypes"
-    assert h == K, "closed-form interpolator requires h = K"
-
-    rng = np.random.RandomState(seed)
-    d = h * p + h + K * h + K
-
-    # ---- K orthonormal prototypes in R^p ----
-    Q, _ = np.linalg.qr(rng.randn(p, p))
-    M = Q[:, :K].T                                    # (K, p),  M M^T = I_K
-
-    # ---- data: n_per_class copies of each prototype ----
-    X = np.repeat(M, n_per_class, axis=0)             # (K·n_per_class, p)
-    labels = np.repeat(np.arange(K), n_per_class)
-    T = np.eye(K)                                     # targets, row k = e_k
-
-    class_idx = [np.where(labels == i)[0] for i in range(K)]
-    n_i = np.array([len(idx) for idx in class_idx], dtype=float)
-
-    # ---- parameter packing / unpacking (same layout as make_mlp_nonconvex) ----
-    def _unpack(theta: np.ndarray):
-        idx = 0
-        W1 = theta[idx: idx + h * p].reshape(h, p);  idx += h * p
-        b1 = theta[idx: idx + h];                     idx += h
-        W2 = theta[idx: idx + K * h].reshape(K, h);   idx += K * h
-        b2 = theta[idx: idx + K];                      idx += K
-        return W1, b1, W2, b2
-
-    # ---- forward pass (identity activation) ----
-    def _forward(theta: np.ndarray, X_batch: np.ndarray):
-        W1, b1, W2, b2 = _unpack(theta)
-        A = X_batch @ W1.T + b1                       # σ = id
-        Z = A @ W2.T + b2
-        return A, Z, W1, b1, W2, b2
-
-    # ---- per-class squared-loss objective ----
-    def _F_i(theta: np.ndarray, i: int) -> float:
-        X_i = X[class_idx[i]]
-        _, Z_i, *_ = _forward(theta, X_i)
-        R = Z_i - T[i]
-        return 0.5 * float((R ** 2).sum()) / n_i[i]
-
-    # ---- per-class gradient via backprop (σ' = 1) ----
-    def _grad_F_i(theta: np.ndarray, i: int) -> np.ndarray:
-        X_i = X[class_idx[i]]
-        ni  = n_i[i]
-        A_i, Z_i, W1, b1, W2, b2 = _forward(theta, X_i)
-        dZ  = (Z_i - T[i]) / ni                       # (n_i, K)
-        dW2 = dZ.T @ A_i                              # (K, h)
-        db2 = dZ.sum(axis=0)                          # (K,)
-        dA  = dZ @ W2                                 # (n_i, h)
-        dW1 = dA.T @ X_i                              # (h, p)
-        db1 = dA.sum(axis=0)                          # (h,)
-        return np.concatenate([dW1.ravel(), db1, dW2.ravel(), db2])
-
-    objectives      = [lambda th, i=i: _F_i(th, i)      for i in range(K)]
-    grad_objectives = [lambda th, i=i: _grad_F_i(th, i) for i in range(K)]
-
-    # ---- numerical smoothness estimate (local, for the bundle algorithm) ----
-    n_probes = 30
-    L_arr = np.zeros(K)
-    for i in range(K):
-        best = 0.0
-        for _ in range(n_probes):
-            t1 = rng.randn(d)
-            t2 = t1 + 0.05 * rng.randn(d)
-            g1 = grad_objectives[i](t1)
-            g2 = grad_objectives[i](t2)
-            dt = np.linalg.norm(t1 - t2)
-            if dt > 1e-12:
-                best = max(best, np.linalg.norm(g1 - g2) / dt)
-        L_arr[i] = 2.0 * best                         # safety factor of 2
-
-    # PL constant:  µ_i = 1 globally (proved in docstring).
-    mu_arr = np.ones(K)
-
-    return objectives, grad_objectives, L_arr, mu_arr
+# def _sample_gaussian_mixture(
+#     K: int,
+#     p: int,
+#     n_per_class: int,
+#     rng: np.random.RandomState,
+#     sep: float = 4.0,
+#     sigma: float = 1.0,
+# ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+#     """Sample data from a K-class isotropic Gaussian mixture.
+#
+#     Procedure
+#     ---------
+#     1. Build K cluster centres on a randomly rotated frame:
+#          μ_k = sep · Q · e_k    for k = 1, ..., K,
+#        where Q ∈ R^{p×p} is a random orthogonal matrix and e_k is the
+#        k-th standard basis vector of R^p.  Then ‖μ_k − μ_l‖ = sep·√2 for
+#        all k ≠ l, and ‖μ_k‖ = sep.
+#     2. For each k, draw n_per_class iid points  x ~ N(μ_k, σ² I_p).
+#     3. Stack and label:  y_j = k  for the points drawn from cluster k.
+#
+#     Why this generative model is "the inverse of logistic regression"
+#     ----------------------------------------------------------------
+#     With X | Y=k ~ N(μ_k, σ² I) and uniform priors P(Y=k) = 1/K, Bayes' rule
+#     gives the posterior
+#
+#         P(Y=k | X=x) = exp(⟨w_k*, x⟩ + b_k*) / Σ_l exp(⟨w_l*, x⟩ + b_l*)
+#
+#     with  w_k* = μ_k / σ²  and  b_k* = − ‖μ_k‖² / (2 σ²),  i.e. *exactly*
+#     multinomial logistic regression with a particular planted parameter.
+#     So fitting softmax CE to this data is well-specified, and the
+#     Bayes-optimal classifier lies in the hypothesis class.
+#
+#     Separability
+#     ------------
+#     For sep / σ sufficiently large (sep ≳ √(2 log K) suffices in
+#     expectation, and we use sep = 4 σ by default), the sample is
+#     linearly separable with high probability — the LDA classifier
+#     achieves 100% training accuracy with a positive margin.
+#
+#     Returns
+#     -------
+#     X       : shape (K · n_per_class, p)
+#     labels  : shape (K · n_per_class,), values in [0, K)
+#     centres : shape (K, p), rows are the μ_k (returned for diagnostics).
+#     """
+#     assert p >= K, "need p ≥ K to place K orthogonal centre directions"
+#     Q, _ = np.linalg.qr(rng.randn(p, p))
+#     centres = sep * np.eye(K, p) @ Q.T                       # (K, p)
+#     X = np.vstack([
+#         centres[k] + sigma * rng.randn(n_per_class, p)
+#         for k in range(K)
+#     ])
+#     labels = np.repeat(np.arange(K), n_per_class)
+#     return X, labels, centres
+#
+#
+# def make_logreg_separable_gaussian(
+#     K: int = 3,
+#     p: int = 4,
+#     n_per_class: int = 30,
+#     sep: float = 6.0,
+#     sigma: float = 1.0,
+#     seed: int = 17,
+# ) -> Tuple[List[Callable], List[Callable], np.ndarray, np.ndarray]:
+#     r"""Multinomial logistic regression on a separable Gaussian mixture.
+#
+#     This is the "inverse logistic regression" construction: the data is
+#     generated by an LDA-style Gaussian mixture (the Bayes-optimal
+#     posterior under that model is exactly softmax-linear in x), so the
+#     *unregularised* multi-class logistic-regression hypothesis class is
+#     well-specified and the Bayes-optimal classifier is reachable in the
+#     limit of unbounded weights.
+#
+#     Architecture
+#     ------------
+#     Decision variable  W = [w¹, …, w^K] ∈ R^{Kp},
+#     softmax model  P(Y=i | x; W) = exp(⟨w^i, x⟩) / Σ_l exp(⟨w^l, x⟩),
+#     per-class objective (no ℓ₂ regulariser):
+#
+#         F_i(W) = (1/n_i) Σ_{j: y_j=i} { −⟨w^i, x_j⟩ + log Σ_l exp(⟨w^l, x_j⟩) }.
+#
+#     Note the contrast with `make_logreg_strongly_convex`: that one adds
+#     (reg/2)·‖W‖², which gives strong convexity with µ = reg but breaks
+#     interpolation (F_i* > 0 since the regulariser is paid).
+#
+#     Interpolation (Asn 5.1) — strict reading: holds.
+#     -------------------------------------------------
+#     F_i ≥ 0 trivially.  When the sample is linearly separable for class i
+#     (true here for sep ≫ σ), there exists a direction d ∈ R^{Kp} along
+#     which  F_i(c·d) → 0  as c → ∞.  Hence  F_i* = inf F_i = 0  and
+#     F_λ* = 0 for every λ ∈ Δ_K.  *The infimum is not attained at any
+#     finite W* (Soudry et al. 2018) — strict global Asn 5.1 in the
+#     "common minimiser" reading fails, but the inf-form holds.
+#
+#     PL condition (Asn 5.2) — global: FAILS.  Sublevel-set: HOLDS.
+#     -------------------------------------------------------------
+#     Take a single sample, binary case, and let p := P(correct | x; w).
+#     Then  F = −log p  and  ‖∇F‖² = (1−p)² ‖x‖².  As p → 1,
+#     F ∼ (1−p)  while  ‖∇F‖² ∼ (1−p)², so  ‖∇F‖² / F ∼ (1−p) → 0:
+#     no global PL constant µ > 0 exists for unregularised softmax CE.
+#     This is also why GD on separable logistic regression converges only
+#     at rate O(1/log t) (Soudry, Hoffer, Nacson, Gunasekar, Srebro 2018),
+#     rather than the geometric rate that strict PL would imply.
+#
+#     What *does* hold, and what the bundle algorithm uses, is sublevel-set
+#     PL.  On the sublevel set  S_α := {W : F_λ(W) ≤ α}  with finite α,
+#     separability gives a constant µ_λ(α) > 0 such that
+#
+#         F_λ(W) − F_λ* ≤ (1/(2 µ_λ(α))) ‖∇F_λ(W)‖²   for all W ∈ S_α.
+#
+#     Algorithm 2 starts at W_0 = 0 and is monotone in F_λ(·; B_t), so
+#     its iterates stay in S_{F_λ(0)} = S_{log K}.  We estimate µ_λ on
+#     this set numerically and pass it to algorithm2(mode="ub").
+#
+#     Smoothness
+#     ----------
+#     Each F_i is L_i-smooth with  L_i ≤ ‖X_i‖² / (4 n_i),  where X_i is
+#     the design matrix restricted to class i.  This bound follows from
+#     the standard fact that the Hessian of the softmax cross-entropy
+#     has spectral norm ≤ ‖x‖² / 4 per sample, and is independent of W.
+#
+#     Parameters
+#     ----------
+#     K            : number of classes.
+#     p            : feature dimension (require p ≥ K).
+#     n_per_class  : number of samples per class.
+#     sep          : centre separation; ‖μ_k − μ_l‖ = sep·√2 for k≠l.
+#     sigma        : per-class noise std-dev.  For sep / sigma ≳ 3 the
+#                    sample is linearly separable with high probability.
+#     seed         : RNG seed.
+#
+#     Returns
+#     -------
+#     objectives      : list of K callables  F_i(W) → float.
+#     grad_objectives : list of K callables  ∇F_i(W) → ndarray of shape (Kp,).
+#     L               : analytic smoothness constants, shape (K,).
+#     mu              : numerical sublevel-set PL constants, shape (K,).
+#                       These are valid on the sublevel set
+#                       {W : F_i(W) ≤ F_i(0) = log K}, which contains all
+#                       bundle iterates.
+#
+#     Illustrative example
+#     --------------------
+#     >>> objs, grads, L, mu = make_logreg_separable_gaussian(K=3, p=4,
+#     ...                                                    n_per_class=30,
+#     ...                                                    sep=4.0, sigma=1.0)
+#     >>> W = np.zeros(12)
+#     >>> objs[0](W)         # F_1(0) = log(3) ≈ 1.099
+#     >>> # Along the LDA ray μ ↦ μ/σ², F_i can be driven below 1e-3:
+#     >>> # objs[0]((5 * centres).ravel()) is essentially zero.
+#     """
+#     rng = np.random.RandomState(seed)
+#     d = K * p
+#
+#     # ---- data ----
+#     X, labels, centres = _sample_gaussian_mixture(
+#         K=K, p=p, n_per_class=n_per_class, rng=rng,
+#         sep=sep, sigma=sigma,
+#     )
+#
+#     # Sanity check: linear separability of the training sample.
+#     # The LDA-Bayes plug-in classifier is sometimes too pessimistic (a
+#     # finite Gaussian-mixture sample can be linearly separable even when
+#     # LDA-plug-in fails on a tail point), so we test separability the
+#     # right way: run a short softmax-CE gradient descent and see whether
+#     # the loss can be driven below a small threshold.  If not, raise.
+#     def _is_separable(threshold: float = 1e-3, n_steps: int = 3000,
+#                        lr: float = 0.5) -> Tuple[bool, float]:
+#         W = np.zeros((K, p))
+#         n_total = len(labels_local := labels)
+#         Y_oh = np.eye(K)[labels_local]
+#         for _ in range(n_steps):
+#             logits = X @ W.T
+#             lse = _logsumexp(logits)
+#             loss = float((lse - logits[np.arange(n_total), labels_local]).mean())
+#             if loss < threshold:
+#                 return True, loss
+#             probs = _softmax(logits)
+#             gW = (probs - Y_oh).T @ X / n_total
+#             W -= lr * gW
+#         return False, loss
+#
+#     sep_ok, _final_loss = _is_separable()
+#     if not sep_ok:
+#         raise ValueError(
+#             f"Sample is not linearly separable at this seed "
+#             f"(short-GD final CE = {_final_loss:.3f}); "
+#             f"increase `sep` or decrease `sigma`."
+#         )
+#
+#     class_idx = [np.where(labels == i)[0] for i in range(K)]
+#     n_i = np.array([len(idx) for idx in class_idx], dtype=float)
+#
+#     # ---- per-class objective and gradient (NO regulariser) ----
+#     def _F_i(W_flat: np.ndarray, i: int) -> float:
+#         W = W_flat.reshape(K, p)
+#         idx = class_idx[i]
+#         X_i = X[idx]
+#         logits = X_i @ W.T                          # (n_i, K)
+#         lse = _logsumexp(logits)                    # (n_i,)
+#         losses = -logits[:, i] + lse                # (n_i,)
+#         return float(losses.sum() / n_i[i])
+#
+#     def _grad_F_i(W_flat: np.ndarray, i: int) -> np.ndarray:
+#         W = W_flat.reshape(K, p)
+#         idx = class_idx[i]
+#         X_i = X[idx]
+#         logits = X_i @ W.T                          # (n_i, K)
+#         probs = _softmax(logits)                    # (n_i, K)
+#         grad_W = (probs.T @ X_i) / n_i[i]           # (K, p)
+#         grad_W[i] -= X_i.sum(axis=0) / n_i[i]
+#         return grad_W.ravel()
+#
+#     objectives = [lambda W, i=i: _F_i(W, i) for i in range(K)]
+#     grad_objectives = [lambda W, i=i: _grad_F_i(W, i) for i in range(K)]
+#
+#     # ---- analytic smoothness constants ----
+#     # ‖X_i‖²_op / (4 n_i)  is the standard softmax-CE Hessian bound.
+#     L_arr = np.zeros(K)
+#     for i in range(K):
+#         X_i = X[class_idx[i]]
+#         L_arr[i] = (np.linalg.norm(X_i, ord=2) ** 2) / (4.0 * n_i[i])
+#
+#     # ---- numerical sublevel-set PL constants ----
+#     # On S_i := {W : F_i(W) ≤ log K} (which contains W = 0, the algorithm's
+#     # starting point, and all bundle iterates by monotonicity), estimate
+#     # the worst-case  inf  ‖∇F_i(W)‖² / (2 F_i(W)).
+#     mu_arr = np.zeros(K)
+#     F0 = np.log(K)                                  # F_i(0) for every i
+#     n_pl_probes = 400
+#     for i in range(K):
+#         worst_inv = 0.0
+#         ntried = 0
+#         while ntried < n_pl_probes:
+#             R = rng.uniform(0.05, 1.5)
+#             W = R * rng.randn(d) / np.sqrt(d)
+#             Fi = _F_i(W, i)
+#             if Fi > F0:
+#                 continue
+#             ntried += 1
+#             if Fi <= 1e-10:
+#                 continue
+#             gi = _grad_F_i(W, i)
+#             inv = 2.0 * Fi / max(gi @ gi, 1e-30)
+#             if inv > worst_inv:
+#                 worst_inv = inv
+#         mu_arr[i] = 1.0 / worst_inv if worst_inv > 0 else 1.0
+#
+#     return objectives, grad_objectives, L_arr, mu_arr
 
 
 # ====================================================================
