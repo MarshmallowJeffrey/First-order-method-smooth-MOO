@@ -122,7 +122,7 @@ def _plot_grads_vs_accuracy(
     """Plot gradient evaluations vs worst-case suboptimality.
 
     For each method, the x-axis is the cumulative number of gradient-
-    oracle evaluations  ∇F_k(x)  used so far (one scalarised GD step
+    oracle evaluations  ∇F_k(x) used so far (one scalarised GD step
     costs K such evaluations, since it computes ∇F_k for all k ∈ [K]).
     The y-axis is the worst-case function-value suboptimality of the
     method's solution map at that point in its execution.
@@ -165,6 +165,55 @@ def _plot_grads_vs_accuracy(
     print(f"  Plot saved to {plot_path}")
 
 
+def _plot_pc_history(
+    a2: Dict,
+    plot_path: str,
+    problem_params: Dict,
+    pc_label: str = "GAP",
+) -> None:
+    """Plot the progress-criterion history  PC*_t  of Algorithm 2.
+
+    For each outer iteration  t = 1, 2, ..., the value
+        PC*_t := max_{λ ∈ Δ_K} PC(λ; B_t)
+    is recorded (this is the value attained by the inner λ-maximisation).
+    Theorem 2 bounds PC*_t ≤ ε after at most  (C · Lip_PC / ε)^{K−1}
+    iterations, which translates to  PC*_t = O(t^{-1/(K-1)}).
+
+    A log-y axis makes the (empirically much faster than worst-case)
+    decay rate easy to read.  The baseline has no analogous quantity,
+    so only Algorithm 2's curve is shown.
+    """
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+
+    pc_values = a2["pc_history"]
+    if len(pc_values) == 0:
+        print(f"  Skipping {plot_path}: empty pc_history.")
+        plt.close()
+        return
+    iters = np.arange(1, len(pc_values) + 1)
+
+    ax.semilogy(
+        iters, pc_values,
+        "o-", color="#2563eb", markersize=5, linewidth=1.8,
+        label=f"Algorithm 2 ({pc_label})",
+    )
+
+    ax.set_xlabel("Outer iteration  $t$")
+    ax.set_ylabel(rf"$\mathrm{{PC}}^*_t \;=\; \max_{{\lambda \in \Delta_K}} \,"
+                  rf"\mathrm{{{pc_label}}}(\lambda;\,B_t)$")
+    params_str = _format_params(problem_params)
+    ax.set_title(
+        f"Progress-criterion decay across outer iterations\n"
+        f"{params_str}"
+    )
+    ax.legend()
+    ax.grid(True, which="both", alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(plot_path, dpi=150)
+    plt.close()
+    print(f"  Plot saved to {plot_path}")
+
 
 # =====================================================================
 #  Experiment 1:  Regularised multi-class logreg  (PC = GAP)
@@ -175,11 +224,12 @@ def experiment_logreg_gap(
     fine_resolution: int = 20,
     n_passes: int = 10,
     steps_per_point_per_pass: int = 20,
-    max_outer: int = 10,
+    max_outer: int = 20,
     max_inner: int = 20,
     eval_every_n_grads: int = 200,
     plot_path_cpu: str = "cpu_vs_accuracy.png",
     plot_path_grads: str = "grads_vs_accuracy.png",
+    plot_path_pc: str = "pc_history.png",
 ) -> Dict:
     """Compare Algorithm 2 vs the uniform-discretisation baseline.
 
@@ -271,6 +321,12 @@ def experiment_logreg_gap(
         problem_params={"K": K, "p": p, "n": n, "d": d, "reg": reg},
         coarse_resolution=coarse_resolution,
         fine_resolution=fine_resolution,
+    )
+
+    _plot_pc_history(
+        a2=a2, plot_path=plot_path_pc,
+        problem_params={"K": K, "p": p, "n": n, "d": d, "reg": reg},
+        pc_label="GAP",
     )
 
     return {
@@ -738,9 +794,9 @@ def make_plots(res1, pareto_data, res2=None, res3=None):
 
 # =====================================================================
 if __name__ == "__main__":
-    #res1 = experiment_logreg_gap()
+    res1 = experiment_logreg_gap()
     print("✓ Experiment 1 completed.")
     #res2 = experiment_logreg_separable_gaussian()
     #print("✓ Experiment 2 (separable Gaussian mixture, UB) completed.")
-    res3 = experiment_mlp_gn()
-    print("✓ Experiment 3 completed.")
+    #res3 = experiment_mlp_gn()
+    #print("✓ Experiment 3 completed.")
