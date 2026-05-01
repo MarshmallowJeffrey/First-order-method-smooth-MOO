@@ -222,14 +222,14 @@ def experiment_logreg_gap(
     verbose: bool = True,
     coarse_resolution: int = 10,
     fine_resolution: int = 20,
-    n_passes: int = 10,
-    steps_per_point_per_pass: int = 20,
-    max_outer: int = 20,
+    n_passes: int = 25,
+    steps_per_point_per_pass: int = 3,
+    max_outer: int = 100,
     max_inner: int = 20,
-    eval_every_n_grads: int = 200,
-    plot_path_cpu: str = "cpu_vs_accuracy.png",
-    plot_path_grads: str = "grads_vs_accuracy.png",
-    plot_path_pc: str = "pc_history.png",
+    eval_every_n_grads: int = 1,
+    plot_path_cpu: str = "logreg_cpu_vs_accuracy.png",
+    plot_path_grads: str = "logreg_grads_vs_accuracy.png",
+    plot_path_pc: str = "logreg_pc_history.png",
 ) -> Dict:
     """Compare Algorithm 2 vs the uniform-discretisation baseline.
 
@@ -257,7 +257,7 @@ def experiment_logreg_gap(
           "vs worst-case err")
     print("=" * 65)
 
-    K, p, n, reg = 4, 4, 30, 0.1
+    K, p, n, reg = 3, 5, 30, 0.1
     d = K * p
     objs, grads, L, mu = make_logreg_strongly_convex(
         K=K, p=p, n=n, reg=reg, seed=43,
@@ -276,7 +276,7 @@ def experiment_logreg_gap(
     reference_map = compute_reference_map(
         K=K, d=d, objectives=objs, grad_objectives=grads,
         L=L, x0=W0, fine_resolution=fine_resolution,
-        n_iters=20_000, grad_tol=1e-10, verbose=False,
+        n_iters=20_000, grad_tol=1e-12, verbose=False,
     )
     ref_time = time.time() - ref_t0
     print(f"  Reference map ready: {len(reference_map['fine_grid'])} points, "
@@ -407,7 +407,7 @@ def experiment_logreg_separable_gaussian(
     print("Exp 2: Separable Gaussian-mixture + softmax CE  (PC = UB)")
     print("=" * 65)
 
-    K, p, n_per_class, sep, sigma = 3, 5, 30, 6.0, 1.0
+    K, p, n_per_class, sep, sigma = 3, 20, 30, 6.0, 1.0
     n_total = K * n_per_class
     objs, grads, L, mu = make_logreg_separable_gaussian(
         K=K, p=p, n_per_class=n_per_class, sep=sep, sigma=sigma, seed=17,
@@ -500,13 +500,14 @@ def experiment_mlp_gn(
     verbose: bool = True,
     coarse_resolution: int = 10,
     fine_resolution: int = 20,
-    n_passes: int = 5,
-    steps_per_point_per_pass: int = 10,
-    max_outer: int = 10,
-    max_inner: int = 100,
-    eval_every_n_grads: int = 200,
-    plot_path_cpu: str = "exp3_cpu_vs_accuracy.png",
-    plot_path_grads: str = "exp3_grads_vs_accuracy.png",
+    n_passes: int = 25,
+    steps_per_point_per_pass: int = 3,
+    max_outer: int = 100,
+    max_inner: int = 20,
+    eval_every_n_grads: int = 1,
+    plot_path_cpu: str = "MLP_cpu_vs_accuracy.png",
+    plot_path_grads: str = "MLP_grads_vs_accuracy.png",
+    plot_path_pc: str = "MLP_pc_history.png",
 ) -> Dict:
     """Compare Algorithm 2 (mode="gn") vs the uniform-discretisation baseline
     on a single-hidden-layer MLP with softmax cross-entropy (Exp 3).
@@ -565,7 +566,7 @@ def experiment_mlp_gn(
           "grad-evals vs worst-case err")
     print("=" * 65)
 
-    K, p, n, h = 3, 4, 60, 8
+    K, p, n, h = 3, 10, 30, 8
     d = h * p + h + K * h + K               # d = 67
     objs, grads, L = make_mlp_nonconvex(K=K, p=p, n=n, h=h, seed=7)
     theta0 = np.zeros(d)
@@ -798,5 +799,5 @@ if __name__ == "__main__":
     print("✓ Experiment 1 completed.")
     #res2 = experiment_logreg_separable_gaussian()
     #print("✓ Experiment 2 (separable Gaussian mixture, UB) completed.")
-    #res3 = experiment_mlp_gn()
-    #print("✓ Experiment 3 completed.")
+    res3 = experiment_mlp_gn()
+    print("✓ Experiment 3 completed.")

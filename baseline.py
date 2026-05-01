@@ -25,12 +25,10 @@ a **CPU-time-vs-worst-case-accuracy** axis.
 
 - The final comparison plot is CPU time (x-axis) vs worst-case
   function-value suboptimality (y-axis).
-  Under PL-condition, the
-  worst-case suboptimality  sup_{λ ∈ G_fine} [F_λ(x̂(λ)) − F*_λ]  is
-  the right "apples-to-apples" metric across methods.
-  Under generic non-convexity,
-  worst-case suboptimality  sup_{λ ∈ G_fine} ||∇F_λ(x̂(λ))||^2  is
-  the right "apples-to-apples" metric across methods.
+  Under PL-condition, the worst-case suboptimality  sup_{λ ∈ G_fine} [F_λ(x̂(λ)) − F*_λ]
+  is the right "apples-to-apples" metric across methods.
+  Under generic non-convexity, worst-case suboptimality  sup_{λ ∈ G_fine} ||∇F_λ(x̂(λ))||^2
+  is the right "apples-to-apples" metric across methods.
 """
 
 from __future__ import annotations
@@ -84,7 +82,7 @@ def compute_reference_map(
     grad_objectives: List[Callable],
     L: np.ndarray,
     x0: np.ndarray,
-    fine_resolution: int = 40,
+    fine_resolution: int = 80,
     n_iters: int = 20_000,
     grad_tol: float = 1e-10,
     verbose: bool = False,
@@ -93,9 +91,8 @@ def compute_reference_map(
 
     For each λ in G_fine, run gradient descent on F_λ(·) to very high
     accuracy (either ``n_iters`` iterations or until the gradient norm
-    falls below ``grad_tol``).  Warm-starting from the previous fine-
-    grid point's solution dramatically accelerates convergence for
-    strongly-convex problems.
+    falls below ``grad_tol``).  Warm-starting from the previous fine-grid
+    point's solution dramatically accelerates convergence for strongly-convex problems.
 
     Returns a dict with keys "fine_grid", "F_star", "x_star".  This
     reference map is the "ground truth" used to evaluate worst-case
@@ -198,8 +195,8 @@ def uniform_discretisation_progressive(
     x0: np.ndarray,
     resolution: int,
     reference_map: Dict,
-    n_passes: int = 20,
-    steps_per_point_per_pass: int = 1,
+    n_passes: int = 1,
+    steps_per_point_per_pass: int = 20,
     eval_every_n_grads: Optional[int] = None,
     verbose: bool = False,
 ) -> Dict:
@@ -207,8 +204,7 @@ def uniform_discretisation_progressive(
 
     We construct a coarse grid G_r of Δ_K at resolution ``resolution``
     and walk through it in warm-start order (lex sort).  Each pass
-    does ``steps_per_point_per_pass`` gradient-descent steps at every
-    grid point.
+    does ``steps_per_point_per_pass`` gradient-descent steps at every grid point.
 
     Checkpoint cadence
     ------------------
@@ -314,5 +310,3 @@ def uniform_discretisation_progressive(
         "grad_evals_history": grad_evals_history,
         "resolution": resolution,
     }
-
-

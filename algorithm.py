@@ -38,6 +38,7 @@ With PC = GAP and ε = 0.01, the algorithm:
 from __future__ import annotations
 
 import numpy as np
+import copy
 import time
 from typing import Callable, Dict, List, Optional, Tuple
 from scipy.optimize import minimize as sp_minimize
@@ -145,7 +146,7 @@ def _maximise_UB(bundle: Bundle) -> Tuple[float, np.ndarray]:
 # ---------------------------------------------------------------------------
 # GAP₁ = UB − LB₁:  difference-of-concave  →  multi-start local search
 # ---------------------------------------------------------------------------
-def _maximise_GAP(bundle: Bundle, variant: str = "lb2") -> Tuple[float, np.ndarray]:
+def _maximise_GAP(bundle: Bundle, variant: str = "lb1") -> Tuple[float, np.ndarray]:
     """Find  λ* = argmax_{λ ∈ Δ_K}  GAP(λ; B_m).
 
     Structure
@@ -271,73 +272,48 @@ def _maximise_GN(bundle: Bundle) -> Tuple[float, np.ndarray]:
 
 
 # =====================================================================
-#  Adaptive inner loop (BundleUpdate with ε/3 stopping)
+#  Adaptive inner loop (BundleUpdate with max_steps)
 # =====================================================================
 def _bundle_update_adaptive(
     bundle: Bundle,
     lam: np.ndarray,
     pc_fn: Callable,
-    eps_third: float,
     objectives: List[Callable],
     grad_objectives: List[Callable],
     max_steps: int,
 ) -> int:
-    """Run inner gradient-descent steps at fixed λ, stopping adaptively.
-
-    From the proof of Theorem 1 (Appendix B.1):
-
-        "At any iteration t of Algorithm 2, [...] applying Corollary 4.2
-         [...] yields  PC(λ_t; B_{t+1}) ≤ ε/3."
-
-    The theoretical IIC is a *sufficient* upper bound on the number of
-    steps needed to achieve this.  Instead, we run steps one at a time
-    and check the actual PC value, stopping as soon as:
-
-        PC(λ_t; B_current) ≤ ε/3
-
-    This is tighter: if the problem is well-conditioned at λ_t, we stop
-    early; if the theoretical bound is loose, we don't over-iterate.
-
-    A safety cap ``max_steps`` prevents infinite loops in degenerate cases.
-
-    Parameters
-    ----------
-    bundle          : current bundle (modified in place).
-    lam             : weight vector λ_t.
-    pc_fn           : progress criterion function PC(bundle, lam) → float.
-    eps_third       : the threshold ε/3.
-    objectives      : list of K objective callables.
-    grad_objectives : list of K gradient callables.
-    max_steps       : safety cap on inner iterations.
+    """Run ``max_steps`` inner T_map steps at fixed λ; commit only the
+    candidate with the smallest ∥∇F_λ∥ to the bundle.
 
     Returns
     -------
-    Number of inner steps actually taken.
-
-    Illustrative example
-    --------------------
-    Suppose PC(λ_t; B_t) = 0.5 and ε = 0.03, so ε/3 = 0.01.
-    The inner loop adds gradient-descent points at λ_t:
-      step 1: PC = 0.30  (still > 0.01)
-      step 2: PC = 0.08  (still > 0.01)
-      step 3: PC = 0.005 (≤ 0.01 → stop)
-    Total: 3 oracle calls instead of the theoretical upper bound.
+    Number of inner steps taken (always equals ``max_steps``).
     """
-    steps = 0
+    work = copy.deepcopy(bundle)
+    base_m = work.m
+
+    # Generate the candidate chain on the work bundle.  Each T_map call
+    # sees all previously-added in-round candidates, matching the
+    # original inner-loop semantics.
     for _ in range(max_steps):
-        x_new = T_map(bundle, lam)
-        steps += 1
+        x_new = T_map(work, lam)
+        work.add_point(x_new, objectives, grad_objectives)
 
-        pc_valPrev = pc_fn(bundle, lam)
-        bundle.add_point(x_new, objectives, grad_objectives)
-        pc_val = pc_fn(bundle, lam)
-        if pc_valPrev - pc_val < 1e-2:
-            bundle.pop_point()
-        # Check if PC at λ_t has dropped below ε/3
-        if pc_val <= eps_third:
-            break
+    # Pick argmin ∥∇F_λ(x^i)∥ from the cached gradients.
+    best_idx = base_m
+    #print('best_idx before:', best_idx)
+    best_gnorm = float(np.linalg.norm(work.grad_F_lam(base_m, lam)))
+    for idx in range(base_m + 1, base_m + max_steps):
+        gnorm = float(np.linalg.norm(work.grad_F_lam(idx, lam)))
+        if gnorm < best_gnorm:
+            best_gnorm = gnorm
+            best_idx = idx
 
-    return steps
+    # Commit only the winner to the real bundle.
+    #print('best_idx after:', best_idx)
+    bundle.add_point(work.points[best_idx], objectives, grad_objectives)
+
+    return max_steps
 
 
 # =====================================================================
@@ -392,10 +368,10 @@ def algorithm2_progressive(
             raise ValueError("mode='gap' requires mu (strong convexity).")
     elif mode == "ub":
         pc_fn, maximise_pc = UB, _maximise_UB
+        if mu is None:
+            raise ValueError("mode='ub' requires mu.")
     elif mode == "gn":
         pc_fn, maximise_pc = GN, _maximise_GN
-        if mu is None:
-            raise ValueError("mode='gn' requires mu.")
     else:
         raise ValueError(f"Unknown mode: {mode!r}.")
 
@@ -436,9 +412,6 @@ def algorithm2_progressive(
     # Checkpoint 0:  bundle has one point (the initial iterate).
     _checkpoint(f"outer 0/{max_outer}")
 
-    # Inner loop uses eps/3 as its stopping rule; here we want it to run
-    # to the max_inner cap (or to the new pruning rule), so set ε tiny.
-    eps_dummy = 1e-12
 
     for t in range(max_outer):
         pc_star, best_lam = maximise_pc(bundle)
@@ -446,8 +419,7 @@ def algorithm2_progressive(
 
         bundle_m_before = bundle.m
         steps = _bundle_update_adaptive(
-            bundle, best_lam, pc_fn, eps_dummy,
-            objectives, grad_objectives, max_inner,
+            bundle, best_lam, pc_fn, objectives, grad_objectives, max_inner,
         )
         # Each inner step corresponds to a retained bundle point (the new
         # _bundle_update_adaptive prunes BEFORE evaluating gradients, so
