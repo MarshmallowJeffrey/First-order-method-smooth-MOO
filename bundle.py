@@ -326,7 +326,6 @@ def LB(bundle: Bundle, lam: np.ndarray, variant: str = "lb1") -> float:
     """
     if bundle.m == 0:
         return -np.inf
-
     if variant == "lb1":
         return _LB_1(bundle, lam)
     elif variant == "lb2":

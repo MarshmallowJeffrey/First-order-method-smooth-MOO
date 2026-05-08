@@ -228,11 +228,11 @@ def experiment_logreg_gap(
     verbose: bool = True,
     coarse_resolution: int = 10,
     fine_resolution: int = 20,
-    n_passes: int = 3,
-    steps_per_point_per_pass: int = 10,
-    max_outer: int = 300,
-    max_inner: int = 5,
-    eval_every_n_grads: int = 1,
+    n_passes: int = 20,
+    steps_per_point_per_pass: int = 30,
+    max_outer: int = 200,
+    max_inner: int = 3,
+    eval_every_n_grads: int = 30,
     plot_path_cpu: str = "logreg_cpu_vs_accuracy.png",
     plot_path_grads: str = "logreg_grads_vs_accuracy.png",
     plot_path_pc: str = "logreg_pc_history.png",
@@ -311,6 +311,7 @@ def experiment_logreg_gap(
         L=L, x0=W0, reference_map=reference_map,
         mu=mu, mode="gap",
         max_outer=max_outer, max_inner=max_inner,
+        checkpoint_every=10**9,           # rely solely on eval_every_n_grads
         eval_every_n_grads=eval_every_n_grads,
         verbose=verbose,
     )
@@ -504,13 +505,17 @@ def experiment_logreg_separable_gaussian(
 # =====================================================================
 def experiment_mlp_gn(
     verbose: bool = True,
+    K: int = 3,
+    p: int = 10,
+    n: int = 50,
+    h: int = 8,
     coarse_resolution: int = 10,
     fine_resolution: int = 20,
-    n_passes: int = 25,
-    steps_per_point_per_pass: int = 3,
-    max_outer: int = 100,
-    max_inner: int = 20,
-    eval_every_n_grads: int = 1,
+    n_passes: int = 40,
+    steps_per_point_per_pass: int = 10,
+    max_outer: int = 300,
+    max_inner: int = 2,
+    eval_every_n_grads: int = 30,
     plot_path_cpu: str = "MLP_cpu_vs_accuracy.png",
     plot_path_grads: str = "MLP_grads_vs_accuracy.png",
     plot_path_pc: str = "MLP_pc_history.png",
@@ -572,8 +577,8 @@ def experiment_mlp_gn(
           "grad-evals vs worst-case err")
     print("=" * 65)
 
-    K, p, n, h = 3, 10, 30, 8
-    d = h * p + h + K * h + K               # d = 67
+    K, p, n, h = int(K), int(p), int(n), int(h)
+    d = h * p + h + K * h + K
     objs, grads, L = make_mlp_nonconvex(K=K, p=p, n=n, h=h, seed=7)
     theta0 = np.zeros(d)
 
@@ -631,6 +636,7 @@ def experiment_mlp_gn(
         L=L, x0=theta0, reference_map=reference_map,
         mu=None, mode="gn",
         max_outer=max_outer, max_inner=max_inner,
+        checkpoint_every=10**9,           # rely solely on eval_every_n_grads
         eval_every_n_grads=eval_every_n_grads,
         verbose=verbose,
     )
@@ -650,6 +656,11 @@ def experiment_mlp_gn(
         coarse_resolution=coarse_resolution,
         fine_resolution=fine_resolution,
         pc_label='GN'
+    )
+    _plot_pc_history(
+        a2=a2, plot_path=plot_path_pc,
+        problem_params=problem_params,
+        pc_label="GN",
     )
 
     return {
