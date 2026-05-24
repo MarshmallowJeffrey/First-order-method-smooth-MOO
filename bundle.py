@@ -118,10 +118,27 @@ class Bundle:
         """∇Fλ(x_i) = J_F(x_i)^T λ,  shape (d,)."""
         return self.grads[idx].T @ lam   # (d, K) @ (K,) = (d,)
 
-    def add_point(self, x: np.ndarray, objectives: List[Callable], grad_objectives: List[Callable]):
-        """Evaluate all objectives and gradients at x and append to bundle."""
-        fv = np.array([f(x) for f in objectives])
-        gv = np.vstack([g(x) for g in grad_objectives])   # (K, d)
+    def add_point(self, x: np.ndarray, objectives: List[Callable], grad_objectives: List[Callable],
+                  joint_oracle: Optional[Callable] = None):
+        """Evaluate all objectives and gradients at x and append to bundle.
+
+        Parameters
+        ----------
+        x                 : iterate at which to evaluate.
+        objectives        : list of K F_i closures (used when ``joint_oracle`` is None).
+        grad_objectives   : list of K ∇F_i closures (used when ``joint_oracle`` is None).
+        joint_oracle      : optional fused oracle ``θ → (fv, gv)`` returning
+                            ``(K,)`` and ``(K, d)`` arrays in a single pass.  When
+                            provided, eliminates the redundant forward-pass work that
+                            otherwise occurs when ``F_i`` and ``∇F_i`` are called
+                            sequentially.  See ``make_mlp_nonconvex`` /
+                            ``make_logreg_strongly_convex`` for fused oracles.
+        """
+        if joint_oracle is not None:
+            fv, gv = joint_oracle(x)
+        else:
+            fv = np.array([f(x) for f in objectives])
+            gv = np.vstack([g(x) for g in grad_objectives])   # (K, d)
         self.points.append(x.copy())
         self.fvals.append(fv)
         self.grads.append(gv)

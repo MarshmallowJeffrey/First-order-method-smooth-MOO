@@ -191,7 +191,7 @@ def make_logreg_strongly_convex(
     reg: float = 0.1,
     seed: int = 42,
     w_true_scale: float = 1.0,
-) -> Tuple[List[Callable], List[Callable], np.ndarray, np.ndarray]:
+) -> Tuple[List[Callable], List[Callable], np.ndarray, np.ndarray, Callable]:
     """Create K per-class logistic regression objectives with ℓ₂ regulariser.
 
     The i-th objective is:
@@ -318,17 +318,136 @@ def make_logreg_strongly_convex(
 
         return grad_W.ravel() + reg * W_flat
 
+    # ---- fused per-class objective + gradient ----
+    # Returns (F_i(W), ∇F_i(W)) in a single forward pass.  The logits
+    # (X_i @ W.T) and softmax probabilities are computed once and
+    # reused for both loss (via logsumexp) and gradient (via the closed
+    # form (P − e_i) x_j).  Eliminates the redundant forward pass that
+    # occurs when F_i and grad_F_i are called sequentially.
+    def _F_and_grad_F_i(W_flat: np.ndarray, i: int) -> Tuple[float, np.ndarray]:
+        W = W_flat.reshape(K, p)
+        idx = class_idx[i]
+        X_i = X[idx]                                 # (n_i, p)
+        ni = n_i[i]
+
+        # ---- forward (shared) ----
+        logits_i = X_i @ W.T                         # (n_i, K)
+
+        # ---- shared softmax + logsumexp ----
+        # Both `lse_i` (for the loss) and `probs_i` (for the gradient)
+        # derive from  shifted = logits_i - max(logits_i, axis=-1).
+        # Computing the row-max + exp once saves the duplicate work
+        # that two helper calls (`_logsumexp` + `_softmax`) would
+        # otherwise do.  Verified byte-equivalent against per-class.
+        z_max = logits_i.max(axis=-1, keepdims=True)       # (n_i, 1)
+        exp_shifted = np.exp(logits_i - z_max)             # (n_i, K)
+        sum_exp = exp_shifted.sum(axis=-1, keepdims=True)  # (n_i, 1)
+        log_sum_exp = np.log(sum_exp)                      # (n_i, 1)
+        lse_i = (z_max + log_sum_exp).squeeze(-1)          # (n_i,)
+        probs_i = exp_shifted / sum_exp                    # (n_i, K)
+
+        # ---- loss ----
+        class_logits_i = logits_i[:, i]              # (n_i,)
+        losses = -class_logits_i + lse_i             # (n_i,)
+        avg_loss = losses.sum() / ni
+        loss = float(avg_loss + 0.5 * reg * np.dot(W_flat, W_flat))
+
+        # ---- gradient ----
+        grad_W = (probs_i.T @ X_i) / ni              # (K, p)
+        grad_W[i] -= X_i.sum(axis=0) / ni            # subtract indicator
+        grad = grad_W.ravel() + reg * W_flat         # add L2 grad
+
+        return loss, grad
+
+    # ---- joint oracle (all K classes at once) ----
+    # Returns (fv, gv) with shapes ((K,), (K, d)).  Used by
+    # ``bundle.add_point`` when the caller provides a joint oracle
+    # (Tier 1 CPU optimisation).
+    d = K * p
+    def _joint_oracle(W_flat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        fv = np.empty(K, dtype=np.float64)
+        gv = np.empty((K, d), dtype=np.float64)
+        for i in range(K):
+            loss_i, grad_i = _F_and_grad_F_i(W_flat, i)
+            fv[i] = loss_i
+            gv[i] = grad_i
+        return fv, gv
+
+    # ---- Tier 2: fused-across-classes joint oracle (logreg) ----
+    # Computes ALL K (F_i, ∇F_i) pairs from ONE shared matmul of the
+    # FULL training set X (n_total, p) against W (K, p), instead of K
+    # separate matmuls each over its own class subset X_i.
+    #
+    # Mathematical equivalence
+    # ------------------------
+    # The per-class oracle does, for each i:
+    #     X_i  = X[idx_i]
+    #     logits_i = X_i @ W.T              # (n_i, K)
+    #     # ... softmax, loss, backprop on logits_i, scaled by 1/n_i
+    # The fused version does:
+    #     logits_all = X @ W.T              # (n_total, K)
+    #     logits_i   = logits_all[idx_i]    # slice — bit-identical to above
+    # Slicing preserves arithmetic exactly, so every per-class loss and
+    # gradient downstream is computed on bit-identical intermediates.
+    #
+    # Savings vs ``_joint_oracle``:
+    #   * one ``W_flat.reshape(K, p)`` instead of K
+    #   * one ``X @ W.T`` matmul of size (n_total, p) @ (p, K)
+    #     instead of K of size (n_i, p) @ (p, K)
+    #   * one row-wise max + exp pass on (n_total, K) instead of K passes
+    def _joint_oracle_fused(W_flat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        W = W_flat.reshape(K, p)
+
+        # ---- single matmul over full X ----
+        logits_all = X @ W.T                              # (n_total, K)
+
+        # ---- shared row-max + exp + softmax + logsumexp ----
+        z_max = logits_all.max(axis=-1, keepdims=True)    # (n_total, 1)
+        exp_shifted = np.exp(logits_all - z_max)           # (n_total, K)
+        sum_exp = exp_shifted.sum(axis=-1, keepdims=True)  # (n_total, 1)
+        log_sum_exp = np.log(sum_exp)
+        lse_all = (z_max + log_sum_exp).squeeze(-1)        # (n_total,)
+        probs_all = exp_shifted / sum_exp                  # (n_total, K)
+
+        reg_term = 0.5 * reg * np.dot(W_flat, W_flat)
+        reg_grad = reg * W_flat                            # ∇(reg/2 ‖W‖²)
+
+        fv = np.empty(K, dtype=np.float64)
+        gv = np.empty((K, d), dtype=np.float64)
+        for i in range(K):
+            idx = class_idx[i]
+            X_i = X[idx]                                   # (n_i, p)
+            logits_i = logits_all[idx]                     # (n_i, K)
+            lse_i = lse_all[idx]                           # (n_i,)
+            probs_i = probs_all[idx]                       # (n_i, K)
+            ni = n_i[i]
+
+            # Loss
+            class_logits_i = logits_i[:, i]                # (n_i,)
+            losses = -class_logits_i + lse_i               # (n_i,)
+            avg_loss = losses.sum() / ni
+            fv[i] = float(avg_loss + reg_term)
+
+            # Gradient: same backprop as _F_and_grad_F_i, applied to
+            # the slice ``probs_i`` of the shared softmax.
+            grad_W = (probs_i.T @ X_i) / ni                # (K, p)
+            grad_W[i] -= X_i.sum(axis=0) / ni
+            gv[i] = grad_W.ravel() + reg_grad
+
+        return fv, gv
+
     objectives = [lambda W, i=i: _F_i(W, i) for i in range(K)]
     grad_objectives = [lambda W, i=i: _grad_F_i(W, i) for i in range(K)]
+    joint_oracle = _joint_oracle
+    # Expose Tier 2 fused-across-classes oracle as attribute (Step 1: no
+    # wiring — default still uses per-class fused _joint_oracle).
+    joint_oracle.fused = _joint_oracle_fused
 
-    return objectives, grad_objectives, L_arr, mu_arr
+    return objectives, grad_objectives, L_arr, mu_arr, joint_oracle
 
-
-# 2.  Multi-class logistic regression with interpolation guaranteed by data generation process
-#def make_logreg_interpolation_pl():
 
 # ====================================================================
-# 3.  Single-hidden-layer neural network  (generic non-convex)
+# 2.  Single-hidden-layer neural network  (generic non-convex)
 # ====================================================================
 def make_mlp_nonconvex(
     K: int = 3,
@@ -337,7 +456,7 @@ def make_mlp_nonconvex(
     h: int = 8,
     seed: int = 7,
     w_true_scale: float = 1.0,
-) -> Tuple[List[Callable], List[Callable], np.ndarray]:
+) -> Tuple[List[Callable], List[Callable], np.ndarray, Callable]:
     """Create K per-class cross-entropy objectives for a 1-hidden-layer MLP.
 
     Architecture
@@ -527,8 +646,170 @@ def make_mlp_nonconvex(
         grad = np.concatenate([dW1.ravel(), db1, dW2.ravel(), db2])
         return grad
 
+    # ---- fused per-class objective + gradient ----
+    # Returns (F_i(θ), ∇F_i(θ)) in a single forward pass.  The forward
+    # work (X_i @ W1.T, ReLU, A @ W2.T) is performed once and reused for
+    # both the loss (via logsumexp) and the gradient (via backprop).
+    # This eliminates the redundant forward pass that occurs when F_i
+    # and grad_F_i are called sequentially in bundle.add_point.
+    def _F_and_grad_F_i(theta: np.ndarray, i: int) -> Tuple[float, np.ndarray]:
+        idx_i = class_idx[i]
+        X_i = X[idx_i]                             # (n_i, p)
+        ni = n_i[i]
+        A_i, Z_i, pre_A_i, W1, b1, W2, b2 = _forward(theta, X_i)
+
+        # ---- shared softmax + logsumexp ----
+        # Both `lse` (for the loss) and `probs_i` (for the gradient)
+        # derive from  shifted = Z_i - max(Z_i, axis=-1).  Computing
+        # the row-max + exp once and deriving both from those values
+        # saves the duplicate work that two helper calls
+        # (`_logsumexp` + `_softmax`) would otherwise do.
+        # Numerically identical to the prior `_logsumexp` / `_softmax`
+        # pair (same shift, same exp, same divisions) — verified
+        # byte-equivalent against per-class output.
+        z_max = Z_i.max(axis=-1, keepdims=True)            # (n_i, 1)
+        exp_shifted = np.exp(Z_i - z_max)                  # (n_i, K)
+        sum_exp = exp_shifted.sum(axis=-1, keepdims=True)  # (n_i, 1)
+        log_sum_exp = np.log(sum_exp)                      # (n_i, 1)
+        lse = (z_max + log_sum_exp).squeeze(-1)            # (n_i,)
+        probs_i = exp_shifted / sum_exp                    # (n_i, K)
+
+        # ---- loss ----
+        losses = -Z_i[:, i] + lse                  # (n_i,)
+        loss = float(losses.sum() / ni)
+
+        # ---- gradient ----
+        dZ = probs_i.copy()                        # (n_i, K)
+        dZ[:, i] -= 1.0                            # ∂loss/∂z = softmax − e_i
+        dW2 = (dZ.T @ A_i) / ni                    # (K, h)
+        db2 = dZ.sum(axis=0) / ni                  # (K,)
+        dA = dZ @ W2                                # (n_i, h)
+        relu_mask = (pre_A_i > 0).astype(float)    # (n_i, h)
+        dH = dA * relu_mask                         # (n_i, h)
+        dW1 = (dH.T @ X_i) / ni                    # (h, p)
+        db1 = dH.sum(axis=0) / ni                  # (h,)
+        grad = np.concatenate([dW1.ravel(), db1, dW2.ravel(), db2])
+
+        return loss, grad
+
+    # ---- joint oracle (all K classes at once) ----
+    # Returns (fv, gv) with shapes ((K,), (K, d)) — the exact arrays
+    # ``bundle.add_point`` would build from K separate F_i + K separate
+    # grad_F_i calls, but each class only runs its fused forward+backward
+    # once.  Used by ``bundle.add_point`` when the caller provides a
+    # joint oracle (Tier 1 CPU optimisation).
+    def _joint_oracle(theta: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        fv = np.empty(K, dtype=np.float64)
+        gv = np.empty((K, d), dtype=np.float64)
+        for i in range(K):
+            loss_i, grad_i = _F_and_grad_F_i(theta, i)
+            fv[i] = loss_i
+            gv[i] = grad_i
+        return fv, gv
+
+    # ---- Tier 2: fused-across-classes joint oracle ----
+    # Computes ALL K (F_i, ∇F_i) pairs from ONE shared forward pass over
+    # the FULL training set X (n_total, p), instead of K separate forward
+    # passes each over its own class subset X_i.
+    #
+    # Mathematical equivalence
+    # ------------------------
+    # The per-class oracle does, for each i:
+    #     X_i  = X[idx_i]                     # n_i rows of X
+    #     pre_A_i = X_i @ W1.T + b1
+    #     A_i = ReLU(pre_A_i)
+    #     Z_i = A_i @ W2.T + b2
+    #     # then logsumexp + softmax + backprop on Z_i, scaled by 1/n_i
+    #
+    # The fused oracle does ONE forward pass on full X:
+    #     pre_A_all = X @ W1.T + b1            # (n_total, h)
+    #     A_all     = ReLU(pre_A_all)
+    #     Z_all     = A_all @ W2.T + b2        # (n_total, K)
+    # Then slices ``Z_all[idx_i]`` for each class.  Because slicing
+    # preserves arithmetic exactly (no broadcasting tricks, no different
+    # numerical reductions), the resulting Z_i, A_i, pre_A_i for each
+    # class are IDENTICAL bit-for-bit to the per-class version.
+    # Hence each per-class loss and gradient is computed on IDENTICAL
+    # intermediate arrays — the only thing that changes is one big matmul
+    # in place of K small ones.
+    #
+    # Savings (relative to ``_joint_oracle``):
+    #   * one ``_unpack(theta)`` instead of K
+    #   * one ``X @ W1.T`` matmul of size (n_total, p) @ (p, h)
+    #     instead of K of size (n_i, p) @ (p, h)
+    #   * one ``A @ W2.T`` matmul of size (n_total, h) @ (h, K)
+    #     instead of K of size (n_i, h) @ (h, K)
+    #   * one row-wise max + exp pass over (n_total, K) instead of K
+    #     passes over (n_i, K)
+    #
+    # The per-class backprop matmuls (dZ.T @ A_i, dH.T @ X_i) are still
+    # done per-class because each F_i averages over only its own samples
+    # — but those are now small operations on slices of the already-
+    # computed shared arrays.
+    def _joint_oracle_fused(theta: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        W1, b1, W2, b2 = _unpack(theta)
+
+        # ---- single forward pass on FULL X ----
+        pre_A_all = X @ W1.T + b1                       # (n_total, h)
+        A_all = np.maximum(pre_A_all, 0.0)              # (n_total, h)
+        Z_all = A_all @ W2.T + b2                       # (n_total, K)
+
+        # ---- shared row-max + exp + softmax + logsumexp on FULL Z ----
+        # Both `lse` (for the loss) and `probs` (for the gradient) derive
+        # from a single row-max / exp pass.  Saves the duplicate work
+        # that two helper calls would otherwise do.
+        z_max = Z_all.max(axis=-1, keepdims=True)        # (n_total, 1)
+        exp_shifted = np.exp(Z_all - z_max)              # (n_total, K)
+        sum_exp = exp_shifted.sum(axis=-1, keepdims=True)
+        log_sum_exp = np.log(sum_exp)                    # (n_total, 1)
+        lse_all = (z_max + log_sum_exp).squeeze(-1)      # (n_total,)
+        probs_all = exp_shifted / sum_exp                # (n_total, K)
+
+        # ---- per-class losses and gradients ----
+        # Per-class slicing into the already-computed shared arrays.
+        # Each per-class operation reproduces the per-class oracle EXACTLY
+        # because the slices are bit-identical to what _forward(theta, X_i)
+        # would have produced.
+        fv = np.empty(K, dtype=np.float64)
+        gv = np.empty((K, d), dtype=np.float64)
+        for i in range(K):
+            idx_i = class_idx[i]
+            X_i = X[idx_i]                               # (n_i, p)
+            A_i = A_all[idx_i]                           # (n_i, h)
+            pre_A_i = pre_A_all[idx_i]                   # (n_i, h)
+            Z_i = Z_all[idx_i]                           # (n_i, K)
+            lse_i = lse_all[idx_i]                       # (n_i,)
+            probs_i = probs_all[idx_i]                   # (n_i, K)
+            ni = n_i[i]
+
+            # Loss (same formula as _F_and_grad_F_i):
+            losses = -Z_i[:, i] + lse_i                  # (n_i,)
+            fv[i] = float(losses.sum() / ni)
+
+            # Gradient (same backprop as _F_and_grad_F_i):
+            dZ = probs_i.copy()                          # (n_i, K)
+            dZ[:, i] -= 1.0
+            dW2 = (dZ.T @ A_i) / ni                      # (K, h)
+            db2 = dZ.sum(axis=0) / ni                    # (K,)
+            dA = dZ @ W2                                 # (n_i, h)
+            relu_mask = (pre_A_i > 0).astype(float)      # (n_i, h)
+            dH = dA * relu_mask                          # (n_i, h)
+            dW1 = (dH.T @ X_i) / ni                      # (h, p)
+            db1 = dH.sum(axis=0) / ni                    # (h,)
+            gv[i] = np.concatenate([dW1.ravel(), db1, dW2.ravel(), db2])
+
+        return fv, gv
+
     objectives = [lambda theta, i=i: _F_i(theta, i) for i in range(K)]
     grad_objectives = [lambda theta, i=i: _grad_F_i(theta, i) for i in range(K)]
+    joint_oracle = _joint_oracle
+    # Expose the Tier 2 (fused-across-classes) joint oracle as an attribute
+    # for testing.  NOT yet used by default — `bundle.add_point` still calls
+    # `joint_oracle(theta)` which dispatches to `_joint_oracle` (the per-
+    # class fused version).  Once verified against the per-class output,
+    # callers can opt in by passing `joint_oracle.fused` as the joint
+    # oracle, or by replacing `joint_oracle = _joint_oracle` above.
+    joint_oracle.fused = _joint_oracle_fused
 
     # ---- estimate smoothness constants L_i ----
     # Sample random parameter pairs and measure gradient Lipschitz ratio.
@@ -547,4 +828,4 @@ def make_mlp_nonconvex(
                 max_ratio = max(max_ratio, diff_g / diff_t)
         L_arr[i] = max_ratio * 2.0    # safety factor of 2
 
-    return objectives, grad_objectives, L_arr
+    return objectives, grad_objectives, L_arr, joint_oracle

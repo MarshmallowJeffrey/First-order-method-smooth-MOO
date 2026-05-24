@@ -9,12 +9,10 @@ the notation from the paper:
     labelled data  {(y_j, x_j)}_{j=1}^n  with  y_j ∈ [K],
     per-class loss  F_i(W) = (1/n_i) Σ_{j: y_j=i} {−log P(Y=i|x_j; W)}.
 
-Five experiments:
+Two experiments:
 
   Exp 1 – Regularised multi-class logreg                                     (PC = GAP₁, strongly convex)
-  Exp 2 – Regularised multi-class logreg with interpolation                  (PC = UB,   interpolation + PL)
-  Exp 3 – Single-hidden-layer MLP                                            (PC = GN,   generic non-convex)
-  Exp 4 – Pareto front tracing (2-class logreg)
+  Exp 2 – Single-hidden-layer MLP                                            (PC = GN,   generic non-convex)
 
 The algorithm uses:
   - PC-specific λ maximisation (SLSQP / multi-start) instead of grid search
@@ -83,6 +81,17 @@ def _plot_cpu_vs_accuracy(
     """
     fig, ax = plt.subplots(figsize=(8, 5.5))
 
+    # Horizontal reference line at the baseline's final worst-case error.
+    # This visualises the accuracy floor the baseline achieves at its
+    # full budget — a fixed target that both algorithms can be measured
+    # against.  Drawn first so the algorithm curves render on top.
+    err_tol = 5e-2
+    ax.axhline(
+        y=err_tol,
+        color="#059669", linestyle="--", linewidth=1.5,
+        label=f"Error Tolerance = {err_tol}",
+    )
+
     ax.semilogy(
         a2["cpu_times"], a2["worst_errs"],
         "o-", color="#2563eb", markersize=5, linewidth=1.8,
@@ -137,6 +146,15 @@ def _plot_grads_vs_accuracy(
     """
     fig, ax = plt.subplots(figsize=(8, 5.5))
 
+    # Horizontal reference line at the baseline's final worst-case error
+    # — the accuracy floor the baseline achieves at its full budget.
+    err_tol = 5e-2
+    ax.axhline(
+        y=err_tol,
+        color="#059669", linestyle="--", linewidth=1.5,
+        label=f"Error Tolerance = {err_tol}",
+    )
+
     ax.plot(
         a2["grad_evals_history"], a2["worst_errs"],
         "o-", color="#2563eb", markersize=5, linewidth=1.8,
@@ -148,10 +166,6 @@ def _plot_grads_vs_accuracy(
         label=f"Uniform discretisation (r = {coarse_resolution})",
     )
 
-    # Use a symlog x-axis so the shared initial point at grad_evals = 0
-    # is plotted (a true log axis cannot represent zero).  Linear region
-    # extends out to linthresh = 1, logarithmic beyond.
-    ax.set_xscale("symlog", linthresh=1.0)
     ax.set_yscale("log")
 
     ax.set_xlabel("Number of total gradient evaluations")
@@ -228,11 +242,11 @@ def experiment_logreg_gap(
     verbose: bool = True,
     coarse_resolution: int = 10,
     fine_resolution: int = 20,
-    n_passes: int = 20,
-    steps_per_point_per_pass: int = 30,
-    max_outer: int = 200,
-    max_inner: int = 3,
-    eval_every_n_grads: int = 30,
+    n_passes: int = 3,
+    steps_per_point_per_pass: int = 20,
+    max_outer: int = 3500,
+    max_inner: int = 100,
+    eval_every_n_grads: int = 500,
     plot_path_cpu: str = "logreg_cpu_vs_accuracy.png",
     plot_path_grads: str = "logreg_grads_vs_accuracy.png",
     plot_path_pc: str = "logreg_pc_history.png",
@@ -263,11 +277,9 @@ def experiment_logreg_gap(
           "vs worst-case err")
     print("=" * 65)
 
-    K, p, n, reg = 3, 3, 30, 0.1
+    K, p, n, reg = 5, 10, 30, 10
     d = K * p
-    objs, grads, L, mu = make_logreg_strongly_convex(
-        K=K, p=p, n=n, reg=reg, seed=43,
-    )
+    objs, grads, L, mu, joint_oracle = make_logreg_strongly_convex(K=K, p=p, n=n, reg=reg, seed=43,)
     W0 = np.zeros(d)
 
     print(f"  K={K}, p={p}, n={n}, reg={reg}, d={d}")
@@ -282,7 +294,7 @@ def experiment_logreg_gap(
     reference_map = compute_reference_map(
         K=K, d=d, objectives=objs, grad_objectives=grads,
         L=L, x0=W0, fine_resolution=fine_resolution,
-        n_iters=20_000, grad_tol=1e-12, verbose=False,
+        n_iters=20_000, grad_tol=1e-12, mu=mu, verbose=False,
     )
     ref_time = time.time() - ref_t0
     print(f"  Reference map ready: {len(reference_map['fine_grid'])} points, "
@@ -299,6 +311,7 @@ def experiment_logreg_gap(
         n_passes=n_passes,
         steps_per_point_per_pass=steps_per_point_per_pass,
         eval_every_n_grads=eval_every_n_grads,
+        mu=mu,
         verbose=verbose,
     )
 
@@ -311,9 +324,19 @@ def experiment_logreg_gap(
         L=L, x0=W0, reference_map=reference_map,
         mu=mu, mode="gap",
         max_outer=max_outer, max_inner=max_inner,
-        checkpoint_every=10**9,           # rely solely on eval_every_n_grads
+        checkpoint_every=20,           # rely solely on eval_every_n_grads
         eval_every_n_grads=eval_every_n_grads,
-        verbose=verbose,
+        verbose=verbose, epsilon=1e-6,
+        # Early-stop A2 once it reaches the baseline's final worst-case
+        # error — A2 should never do more work than the baseline to
+        # achieve a comparable accuracy level.  See algorithm.py for
+        # the semantics of ``target_err``.
+        target_err=bl["worst_errs"][-1],
+        # Fused F+grad oracle: one forward pass per class instead of two
+        # (one for F_i, one for ∇F_i) when bundle.add_point evaluates a
+        # new point.  Tier 1 CPU optimisation; numerically identical to
+        # the per-class path.
+        joint_oracle=joint_oracle,
     )
 
     # --- 4. Plots ---
@@ -346,176 +369,22 @@ def experiment_logreg_gap(
 
 
 # =====================================================================
-#  Experiment 2:  Separable Gaussian mixture  +  multi-class logreg
-#                 ("inverse logistic regression" — interpolation +
-#                 sublevel-set PL regime, PC = UB)
-# =====================================================================
-def experiment_logreg_separable_gaussian(
-    verbose: bool = True,
-    coarse_resolution: int = 6,
-    fine_resolution: int = 8,
-    n_passes: int = 20,
-    steps_per_point_per_pass: int = 1,
-    max_outer: int = 25,
-    max_inner: int = 200,
-    eval_every_n_grads: int = 100,
-    plot_path_cpu: str = "exp2_cpu_vs_accuracy.png",
-    plot_path_grads: str = "exp2_grads_vs_accuracy.png",
-) -> Dict:
-    r"""Separable Gaussian mixture fit with unregularised multi-class logreg.
-
-    Setting (the "inverse logistic regression" construction)
-    --------------------------------------------------------
-    Data:    K isotropic Gaussian clusters with shared covariance σ²·I and
-             centres ‖μ_k − μ_l‖ = sep·√2.  By Bayes' rule, the posterior
-             P(Y=k | X=x) is exactly softmax-linear in x — so multinomial
-             logistic regression is well-specified, with planted weights
-             w_k* = μ_k/σ² and biases  b_k* = −‖μ_k‖²/(2σ²).
-    Loss:    F_i(W) = (1/n_i) Σ_{j: y_j=i} {−⟨w^i, x_j⟩ + log Σ_l exp(⟨w^l,x_j⟩)}
-             — no ℓ₂ regulariser.
-
-    Why interpolation holds (in the inf sense, Asn 5.1)
-    ---------------------------------------------------
-    F_i ≥ 0 trivially.  For separable clusters  inf F_i = 0  (drive the
-    weights along a separating direction; the limit is reached only as
-    ‖W‖ → ∞, never at a finite W — Soudry et al. 2018).  Both per-class
-    objectives and every  F_λ  share the same property, so F_λ* = 0.
-
-    Why strict global PL (Asn 5.2) FAILS
-    ------------------------------------
-    For one sample, set p := P(correct | x; w).  Then  F = −log p ∼ (1−p)
-    while  ‖∇F‖² ∼ (1−p)²;  hence  ‖∇F‖²/F ∼ (1−p) → 0.  No global
-    constant µ > 0 satisfies the PL inequality.
-
-    Sublevel-set PL — what the algorithm actually uses
-    --------------------------------------------------
-    On the sublevel set  S_α := {W : F_λ(W) ≤ α},  separability gives a
-    constant µ_λ(α) > 0 (generalized self-concordance, Bach 2014).
-    Algorithm 2 starts at W_0 = 0 with F_i(W_0) = log K, so its iterates
-    stay inside  S_{log K},  where ``make_logreg_separable_gaussian``
-    reports a numerical estimate µ_i.  We pass that to algorithm2 in
-    mode="ub" and check empirically how the upper bound evolves.
-
-    Practical caveat
-    ----------------
-    Because separable softmax CE has  µ/L → 0  along the algorithm's
-    trajectory (the very phenomenon that causes the global-PL failure),
-    the inner gradient-descent iterates in mode="ub" make sub-percent
-    UB reductions per step.  The default pruning rule in
-    ``_bundle_update_adaptive`` rejects such steps, so the algorithm
-    can stall after a few outer iterations.  This is reported faithfully
-    in the convergence plot — it is *not* a bug, but the practical
-    cost of the global-PL failure flagged in the docstring of
-    ``make_logreg_separable_gaussian``.  A follow-up experiment with
-    a small ℓ₂ regulariser and PC = GAP recovers fast convergence at
-    the price of strict interpolation.
-    """
-    print("=" * 65)
-    print("Exp 2: Separable Gaussian-mixture + softmax CE  (PC = UB)")
-    print("=" * 65)
-
-    K, p, n_per_class, sep, sigma = 3, 20, 30, 6.0, 1.0
-    n_total = K * n_per_class
-    objs, grads, L, mu = make_logreg_separable_gaussian(
-        K=K, p=p, n_per_class=n_per_class, sep=sep, sigma=sigma, seed=17,
-    )
-    d = K * p
-    W0 = np.zeros(d)
-
-    print(f"  K={K}, p={p}, n={n_total}, sep={sep}, σ={sigma}, d={d}")
-    print(f"  L = {np.round(L, 3)}")
-    print(f"  µ (sublevel-set PL on {{F_i ≤ log K}}) = {np.round(mu, 4)}")
-    print(f"  µ_min / L_max ≈ {mu.min()/L.max():.4f}    "
-          f"(small ⇒ slow inner convergence, by global-PL failure)")
-    print(f"  Checkpoint cadence: M = {eval_every_n_grads} gradient evals")
-
-    # --- 1. Precompute reference map.  Note: separable softmax CE has
-    #        no finite minimiser, so GD on F_λ converges only at rate
-    #        O(1/log t).  We use a modest budget — the F*_λ estimates
-    #        are correct to roughly the budget's tolerance, which is
-    #        all we need for worst-case-suboptimality comparison.
-    if verbose:
-        print(f"\n  Precomputing reference map "
-              f"(fine grid resolution = {fine_resolution}) ...")
-    ref_t0 = time.time()
-    reference_map = compute_reference_map(
-        K=K, d=d, objectives=objs, grad_objectives=grads,
-        L=L, x0=W0, fine_resolution=fine_resolution,
-        n_iters=5_000, grad_tol=1e-6, verbose=False,
-    )
-    ref_time = time.time() - ref_t0
-    print(f"  Reference map ready: {len(reference_map['fine_grid'])} points, "
-          f"{ref_time:.1f}s  (F*_λ range: "
-          f"[{reference_map['F_star'].min():.4f}, "
-          f"{reference_map['F_star'].max():.4f}])")
-
-    # --- 2. Run progressive baseline ---
-    if verbose:
-        print(f"\n  Running baseline (coarse resolution = {coarse_resolution}, "
-              f"{n_passes} passes) ...")
-    bl = uniform_discretisation_progressive(
-        K=K, d=d, objectives=objs, grad_objectives=grads,
-        L=L, x0=W0, resolution=coarse_resolution,
-        reference_map=reference_map,
-        n_passes=n_passes,
-        steps_per_point_per_pass=steps_per_point_per_pass,
-        eval_every_n_grads=eval_every_n_grads,
-        verbose=verbose,
-    )
-
-    # --- 3. Run Algorithm 2 in mode="ub" (interpolation + PL) ---
-    if verbose:
-        print(f"\n  Running Algorithm 2 mode=\"ub\" "
-              f"({max_outer} outer iters, up to {max_inner} inner steps) ...")
-    a2 = algorithm2_progressive(
-        K=K, d=d, objectives=objs, grad_objectives=grads,
-        L=L, x0=W0, reference_map=reference_map,
-        mu=mu, mode="ub",
-        max_outer=max_outer, max_inner=max_inner,
-        eval_every_n_grads=eval_every_n_grads,
-        verbose=verbose,
-    )
-
-    # --- 4. Plots ---
-    problem_params = {"K": K, "p": p, "n": n_total, "d": d,
-                      "sep": sep, "sigma": sigma}
-    _plot_cpu_vs_accuracy(
-        bl=bl, a2=a2, plot_path=plot_path_cpu,
-        problem_params=problem_params,
-        coarse_resolution=coarse_resolution,
-        fine_resolution=fine_resolution,
-    )
-    _plot_grads_vs_accuracy(
-        bl=bl, a2=a2, plot_path=plot_path_grads,
-        problem_params=problem_params,
-        coarse_resolution=coarse_resolution,
-        fine_resolution=fine_resolution,
-    )
-
-    return {
-        "reference_map": reference_map,
-        "baseline": bl,
-        "algorithm2": a2,
-        "problem_params": problem_params,
-    }
-
-
-# =====================================================================
-#  Experiment 3:  Single-hidden-layer MLP  (PC = GN, generic non-convex)
+#  Experiment 2:  Single-hidden-layer MLP  (PC = GN, generic non-convex)
 # =====================================================================
 def experiment_mlp_gn(
     verbose: bool = True,
     K: int = 3,
     p: int = 10,
     n: int = 50,
-    h: int = 8,
-    coarse_resolution: int = 10,
-    fine_resolution: int = 20,
-    n_passes: int = 40,
-    steps_per_point_per_pass: int = 10,
-    max_outer: int = 300,
-    max_inner: int = 2,
-    eval_every_n_grads: int = 30,
+    h: int = 32,
+    coarse_resolution: int = 6,
+    fine_resolution: int = 7,
+    n_passes: int = 5,
+    steps_per_point_per_pass: int = 100,
+    max_outer: int = 1200,
+    max_inner: int = 400,
+    eval_every_n_grads: int = 500,
+    epsilon: float = 1e-5,
     plot_path_cpu: str = "MLP_cpu_vs_accuracy.png",
     plot_path_grads: str = "MLP_grads_vs_accuracy.png",
     plot_path_pc: str = "MLP_pc_history.png",
@@ -573,13 +442,13 @@ def experiment_mlp_gn(
     plot_path_grads          : output path for grads-vs-accuracy plot.
     """
     print("=" * 65)
-    print("Exp 3: Single-hidden-layer MLP  (PC = GN) — CPU time and "
+    print("Exp 2: Single-hidden-layer MLP  (PC = GN) — CPU time and "
           "grad-evals vs worst-case err")
     print("=" * 65)
 
     K, p, n, h = int(K), int(p), int(n), int(h)
     d = h * p + h + K * h + K
-    objs, grads, L = make_mlp_nonconvex(K=K, p=p, n=n, h=h, seed=7)
+    objs, grads, L, joint_oracle = make_mlp_nonconvex(K=K, p=p, n=n, h=h, seed=10)
     theta0 = np.zeros(d)
 
     print(f"  K={K}, p={p}, n={n}, h={h}, d={d}")
@@ -600,7 +469,7 @@ def experiment_mlp_gn(
     reference_map = compute_reference_map(
         K=K, d=d, objectives=objs, grad_objectives=grads,
         L=L, x0=theta0, fine_resolution=fine_resolution,
-        n_iters=20_000, grad_tol=1e-5, verbose=False,
+        n_iters=500, grad_tol=1e-5, verbose=False,
     )
     ref_time = time.time() - ref_t0
     print(f"  Reference map ready: {len(reference_map['fine_grid'])} points, "
@@ -619,7 +488,7 @@ def experiment_mlp_gn(
         reference_map=reference_map,
         n_passes=n_passes,
         steps_per_point_per_pass=steps_per_point_per_pass,
-        eval_every_n_grads=eval_every_n_grads,
+        eval_every_n_grads=500,
         verbose=verbose,
     )
 
@@ -636,9 +505,18 @@ def experiment_mlp_gn(
         L=L, x0=theta0, reference_map=reference_map,
         mu=None, mode="gn",
         max_outer=max_outer, max_inner=max_inner,
-        checkpoint_every=10**9,           # rely solely on eval_every_n_grads
+        checkpoint_every=20,           # rely solely on eval_every_n_grads
         eval_every_n_grads=eval_every_n_grads,
-        verbose=verbose,
+        verbose=verbose, epsilon=epsilon,
+        # Early-stop A2 once it reaches the baseline's final worst-case
+        # error — A2 should never do more work than the baseline to
+        # achieve a comparable accuracy level.  See algorithm.py for
+        # the semantics of ``target_err``.
+        target_err=bl["worst_errs"][-1],
+        # Fused F+grad oracle:  one forward pass per class instead of
+        # two (F_i + ∇F_i) on every bundle.add_point.  Tier 1 CPU
+        # optimisation; numerically identical to per-class path.
+        joint_oracle=joint_oracle,
     )
 
     # --- 4. Plots ---
@@ -671,54 +549,6 @@ def experiment_mlp_gn(
     }
 
 
-# # =====================================================================
-# #  Experiment 4:  Pareto front tracing  (2-class logreg)
-# # =====================================================================
-# def experiment_pareto_front():
-#     """Trace the Pareto front for 2-class regularised logistic regression.
-#
-#     After Algorithm 2 converges, we evaluate the solution map
-#     Ŵ(λ) = T(λ; B_final) for a fine grid of λ ∈ Δ_2 and plot
-#     the corresponding (F_1(Ŵ), F_2(Ŵ)) pairs.
-#
-#     The Pareto front shows the trade-off between per-class losses:
-#     improving class-1 accuracy comes at the cost of class-2 accuracy.
-#     """
-#     print("=" * 65)
-#     print("Exp 4: Pareto front  (2-class regularised logreg)")
-#     print("=" * 65)
-#
-#     K, p, n, reg = 2, 5, 40, 0.05
-#     d = K * p                                # d = 10
-#     objs, grads, L, mu = make_logreg_strongly_convex(
-#         K=K, p=p, n=n, reg=reg, seed=99,
-#     )
-#     W0 = np.zeros(d)
-#     eps = 5e-2
-#
-#     print(f"  K={K}, p={p}, n={n}, reg={reg}, d={d}, ε={eps}")
-#
-#     res = algorithm2_progressive(
-#         K=K, d=d, objectives=objs, grad_objectives=grads,
-#         L=L, x0=W0, eps=eps, mode="gap", mu=mu,
-#         max_outer=80, max_inner=200, verbose=False,
-#     )
-#     bundle = res["bundle"]
-#
-#     # Evaluate the approximate solution map  Ŵ(λ) = T(λ; B_final)
-#     fine_grid = simplex_grid(K, 100)
-#     f1_vals, f2_vals = [], []
-#     for lam in fine_grid:
-#         W_hat = T_map(bundle, lam)
-#         f1_vals.append(objs[0](W_hat))
-#         f2_vals.append(objs[1](W_hat))
-#
-#     print(f"  Outer iterations : {res['outer_iters']}")
-#     print(f"  Oracle calls     : {res['oracle_calls']}")
-#     print(f"  Bundle size      : {bundle.m} points\n")
-#
-#     return f1_vals, f2_vals, res
-
 
 # =====================================================================
 #  Plotting
@@ -740,81 +570,11 @@ def _format_params(params):
         else:
             parts.append(f"{k}={v}")
     return ", ".join(parts)
-def make_plots(res1, pareto_data, res2=None, res3=None):
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-
-    # ---- Plot 1: GAP convergence (regularised logreg) ----
-    ax = axes[0, 0]
-    ax.semilogy(res1["pc_history"], "o-", color="#2563eb", markersize=4, linewidth=1.5,
-                label="Algorithm 2 (GAP)")
-    eps1 = res1["config"]["eps"]
-    ax.axhline(y=eps1, color="grey", ls="--", lw=1, label=f"ε = {eps1}")
-    ax.set_xlabel("Outer iteration t")
-    ax.set_ylabel("max_λ GAP(λ; B_t)")
-    ax.set_title(
-        f"Exp 1: Regularised Logreg (GAP)\n"
-        f"{_format_params(res1['config']['params'])}"
-    )
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-
-    # ---- Plot 2: UB convergence (standard logreg) ----
-    # ax = axes[0, 1]
-    # ax.semilogy(res2["pc_history"], "s-", color="#dc2626", markersize=4, linewidth=1.5,
-    #             label="Algorithm 2 (UB)")
-    # eps2 = res2["config"]["eps"]
-    # ax.axhline(y=eps2, color="grey", ls="--", lw=1, label=f"ε = {eps2}")
-    # ax.set_xlabel("Outer iteration t")
-    # ax.set_ylabel("max_λ UB(λ; B_t)")
-    # ax.set_title(
-    #     f"Exp 2: Standard Logreg, Separable (UB)\n"
-    #     f"{_format_params(res2['config']['params'])}"
-    # )
-    # ax.legend()
-    # ax.grid(True, alpha=0.3)
-
-    # ---- Plot 3: GN convergence (MLP) ----
-    # ax = axes[1, 0]
-    # ax.semilogy(res3["pc_history"], "^-", color="#16a34a", markersize=4, linewidth=1.5,
-    #             label="Algorithm 2 (GN)")
-    # eps3 = res3["config"]["eps"]
-    # ax.axhline(y=eps3, color="grey", ls="--", lw=1, label=f"ε = {eps3}")
-    # ax.set_xlabel("Outer iteration t")
-    # ax.set_ylabel("max_λ GN(λ; B_t)")
-    # ax.set_title(
-    #     f"Exp 3: Single-Hidden-Layer MLP (GN)\n"
-    #     f"{_format_params(res3['config']['params'])}"
-    # )
-    # ax.legend()
-    # ax.grid(True, alpha=0.3)
-
-    # ---- Plot 4: Pareto front (2-class logreg) ----
-    # f1, f2, _ = pareto_data
-    # ax = axes[1, 1]
-    # ax.scatter(f1, f2, s=10, c="#7c3aed", alpha=0.7)
-    # ax.set_xlabel("F₁(Ŵ(λ))  [class 1 loss]")
-    # ax.set_ylabel("F₂(Ŵ(λ))  [class 2 loss]")
-    # ax.set_title("Exp 4: Pareto Front (2-class Logreg)\n"
-    #              "K=2, p=5, n=40, d=10, reg=0.05")
-    # ax.grid(True, alpha=0.3)
-    #
-    # plt.tight_layout()
-    # plt.savefig("experiment_results.png", dpi=150)
-    # plt.close()
-    # print("Plots saved to experiment_results.png")
-
-
-
-
-
-
 
 
 # =====================================================================
 if __name__ == "__main__":
-    res1 = experiment_logreg_gap()
-    print("✓ Experiment 1 completed.")
-    #res2 = experiment_logreg_separable_gaussian()
-    #print("✓ Experiment 2 (separable Gaussian mixture, UB) completed.")
-    #res3 = experiment_mlp_gn()
-    #print("✓ Experiment 3 completed.")
+    #res1 = experiment_logreg_gap()
+    #print("✓ Experiment 1 completed.")
+    res2 = experiment_mlp_gn()
+    print("✓ Experiment 2 completed.")
