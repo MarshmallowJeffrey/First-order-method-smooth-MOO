@@ -85,7 +85,7 @@ def _plot_cpu_vs_accuracy(
     # This visualises the accuracy floor the baseline achieves at its
     # full budget — a fixed target that both algorithms can be measured
     # against.  Drawn first so the algorithm curves render on top.
-    err_tol = 5e-2
+    err_tol = 3e-3
     ax.axhline(
         y=err_tol,
         color="#059669", linestyle="--", linewidth=1.5,
@@ -148,7 +148,7 @@ def _plot_grads_vs_accuracy(
 
     # Horizontal reference line at the baseline's final worst-case error
     # — the accuracy floor the baseline achieves at its full budget.
-    err_tol = 5e-2
+    err_tol = 3e-3
     ax.axhline(
         y=err_tol,
         color="#059669", linestyle="--", linewidth=1.5,
@@ -240,11 +240,11 @@ def _plot_pc_history(
 # =====================================================================
 def experiment_logreg_gap(
     verbose: bool = True,
-    coarse_resolution: int = 10,
+    coarse_resolution: int = 18,
     fine_resolution: int = 20,
-    n_passes: int = 3,
+    n_passes: int = 10,
     steps_per_point_per_pass: int = 20,
-    max_outer: int = 3500,
+    max_outer: int = 1200,
     max_inner: int = 100,
     eval_every_n_grads: int = 500,
     plot_path_cpu: str = "logreg_cpu_vs_accuracy.png",
@@ -277,9 +277,9 @@ def experiment_logreg_gap(
           "vs worst-case err")
     print("=" * 65)
 
-    K, p, n, reg = 5, 10, 30, 10
+    K, p, n, reg = 5, 100, 400, 1
     d = K * p
-    objs, grads, L, mu, joint_oracle = make_logreg_strongly_convex(K=K, p=p, n=n, reg=reg, seed=43,)
+    objs, grads, L, mu, joint_oracle = make_logreg_strongly_convex(K=K, p=p, n=n, reg=reg, seed=42,)
     W0 = np.zeros(d)
 
     print(f"  K={K}, p={p}, n={n}, reg={reg}, d={d}")
@@ -310,7 +310,7 @@ def experiment_logreg_gap(
         reference_map=reference_map,
         n_passes=n_passes,
         steps_per_point_per_pass=steps_per_point_per_pass,
-        eval_every_n_grads=eval_every_n_grads,
+        eval_every_n_grads=None,
         mu=mu,
         verbose=verbose,
     )
@@ -324,9 +324,9 @@ def experiment_logreg_gap(
         L=L, x0=W0, reference_map=reference_map,
         mu=mu, mode="gap",
         max_outer=max_outer, max_inner=max_inner,
-        checkpoint_every=20,           # rely solely on eval_every_n_grads
+        checkpoint_every=20,
         eval_every_n_grads=eval_every_n_grads,
-        verbose=verbose, epsilon=1e-6,
+        verbose=verbose, epsilon=1e-5,
         # Early-stop A2 once it reaches the baseline's final worst-case
         # error — A2 should never do more work than the baseline to
         # achieve a comparable accuracy level.  See algorithm.py for
@@ -373,13 +373,13 @@ def experiment_logreg_gap(
 # =====================================================================
 def experiment_mlp_gn(
     verbose: bool = True,
-    K: int = 3,
+    K: int = 6,
     p: int = 10,
     n: int = 50,
-    h: int = 32,
+    h: int = 16,
     coarse_resolution: int = 6,
     fine_resolution: int = 7,
-    n_passes: int = 5,
+    n_passes: int = 20,
     steps_per_point_per_pass: int = 100,
     max_outer: int = 1200,
     max_inner: int = 400,
@@ -505,7 +505,7 @@ def experiment_mlp_gn(
         L=L, x0=theta0, reference_map=reference_map,
         mu=None, mode="gn",
         max_outer=max_outer, max_inner=max_inner,
-        checkpoint_every=20,           # rely solely on eval_every_n_grads
+        checkpoint_every=20,
         eval_every_n_grads=eval_every_n_grads,
         verbose=verbose, epsilon=epsilon,
         # Early-stop A2 once it reaches the baseline's final worst-case
@@ -574,7 +574,7 @@ def _format_params(params):
 
 # =====================================================================
 if __name__ == "__main__":
-    #res1 = experiment_logreg_gap()
-    #print("✓ Experiment 1 completed.")
-    res2 = experiment_mlp_gn()
-    print("✓ Experiment 2 completed.")
+    res1 = experiment_logreg_gap()
+    print("✓ Experiment 1 completed.")
+    #res2 = experiment_mlp_gn()
+    #print("✓ Experiment 2 completed.")
