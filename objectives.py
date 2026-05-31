@@ -166,7 +166,8 @@ def _sample_planted_data(
     classes are unlikely for balanced K but are handled by the callers
     via an n_i ≥ 1 guard.
     """
-    W_true = rng.uniform(-w_true_scale, w_true_scale, size=(K, p))
+    #W_true = rng.uniform(-w_true_scale, w_true_scale, size=(K, p))
+    W_true = rng.randn(K, p)
     X = rng.randn(n, p)
     true_logits = X @ W_true.T                   # (n, K)
     true_probs = _softmax(true_logits)           # (n, K)
@@ -813,7 +814,7 @@ def make_mlp_nonconvex(
 
     # ---- estimate smoothness constants L_i ----
     # Sample random parameter pairs and measure gradient Lipschitz ratio.
-    n_probes = 20
+    n_probes = 40
     L_arr = np.zeros(K)
     for i in range(K):
         max_ratio = 0.0
