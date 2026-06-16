@@ -249,16 +249,38 @@ def worst_case_suboptimality_baseline(
     reference_map: Dict,
     objectives: List[Callable],
     K: int,
+    grad_objectives: Optional[List[Callable]] = None,
+    metric: str = "gap",
 ) -> float:
-    """Worst-case function-value suboptimality of the rounded baseline map.
+    """Worst-case quality of the rounded baseline map over the fine grid.
 
-        err := sup_{λ ∈ G_fine}  [F_λ(x̂_baseline(λ)) − F*_λ]
+    The baseline map is  x̂_baseline(λ) = coarse_solutions[argmin_g ‖λ − λ^(g)‖_1].
+    Two worst-case measures, selected by ``metric`` (must match the measure
+    used for the A2/A4 curve so the comparison is apples-to-apples):
 
-    where  x̂_baseline(λ) = coarse_solutions[argmin_g ‖λ − λ^(g)‖_1].
+    * ``metric="gap"`` (default):
+          err = sup_{λ ∈ G_fine} [ F_λ(x̂_baseline(λ)) − F*_λ ].
+    * ``metric="gradnorm"`` (for non-convex problems, e.g. the MLP):
+          err = sup_{λ ∈ G_fine} ‖∇F_λ(x̂_baseline(λ))‖²,
+      which does not reference ``F*``.  Requires ``grad_objectives``.
     """
     fine_grid = reference_map["fine_grid"]
-    F_star = reference_map["F_star"]
     worst = -np.inf
+    if metric == "gradnorm":
+        if grad_objectives is None:
+            raise ValueError("metric='gradnorm' requires grad_objectives")
+        for i, lam in enumerate(fine_grid):
+            g_star = _nearest_coarse_index(lam, coarse_grid)
+            x_hat = coarse_solutions[g_star]
+            g = np.zeros_like(x_hat, dtype=np.float64)
+            for k in range(K):
+                g = g + lam[k] * grad_objectives[k](x_hat)
+            gn = float(np.dot(g, g))
+            if gn > worst:
+                worst = gn
+        return worst
+
+    F_star = reference_map["F_star"]
     for i, lam in enumerate(fine_grid):
         g_star = _nearest_coarse_index(lam, coarse_grid)
         x_hat = coarse_solutions[g_star]
@@ -285,6 +307,7 @@ def uniform_discretisation_progressive(
     steps_per_point_per_pass: int = 20,
     eval_every_n_grads: Optional[int] = None,
     mu: Optional[np.ndarray] = None,
+    metric: str = "gap",
     verbose: bool = False,
 ) -> Dict:
     """Run the baseline in "progressive" mode, with periodic checkpoints.
@@ -388,7 +411,9 @@ def uniform_discretisation_progressive(
         nonlocal checkpoint_overhead
         cpu_times.append(time.time() - t_start - checkpoint_overhead)
         ck_t0 = time.time()
-        err = worst_case_suboptimality_baseline(coarse_grid, solutions, reference_map, objectives, K,)
+        err = worst_case_suboptimality_baseline(
+            coarse_grid, solutions, reference_map, objectives, K,
+            grad_objectives=grad_objectives, metric=metric)
         checkpoint_overhead += time.time() - ck_t0
         worst_errs.append(err)
         total_iters_history.append(total_iters)
