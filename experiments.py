@@ -77,8 +77,11 @@ def experiment_mlp_gn_coverage(
     K: int = 3, p: int = 10, n: int = 20, h: int = 8, seed: int = 10,
     coarse_resolution: int = 26,
     n_passes: int = 15, steps_per_point_per_pass: int = 50,
-    eval_every_n_grads: int = 600, checkpoint_every: int = 3,
-    max_outer: int = 1000, max_inner: int = 25,
+    eval_every_n_grads: int = 5000, checkpoint_every: int = 3,
+    max_outer: int = 1000, max_inner: Optional[int] = None,
+    lambda_max_starts: int = 256,
+    lambda_selector: str = "sample",
+    lambda_random_starts: int = 512,
     run_baseline: bool = True, run_adaptive: bool = True,
     out_path: str = "mlp.png",
 ) -> Dict:
@@ -87,6 +90,8 @@ def experiment_mlp_gn_coverage(
     print("Coverage experiment — MLP (non-convex), metric = GN*")
     print("=" * 68)
     d = h * p + h + K * h + K
+    if max_inner is None:
+        max_inner = 50 if K == 4 else 25
     objs, grads, L, joint = make_mlp_nonconvex(K=K, p=p, n=n, h=h, seed=seed)
     x0 = np.zeros(d)
     print(f"  K={K}, p={p}, n={n}, h={h}, d={d}  |  L={np.round(L,3)} ")
@@ -112,6 +117,9 @@ def experiment_mlp_gn_coverage(
             mode="gn", max_outer=max_outer, max_inner=max_inner,
             eval_every_n_grads=eval_every_n_grads,
             target_cov=target_cov,
+            lambda_max_starts=lambda_max_starts,
+            lambda_selector=lambda_selector,
+            lambda_random_starts=lambda_random_starts,
             joint_oracle=joint, verbose=verbose)
 
     path = _plot_coverage(

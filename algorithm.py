@@ -345,6 +345,35 @@ def _maximise_GN(bundle: Bundle, prev_lam: Optional[np.ndarray] = None,
     return float(-best_val), best_lam
 
 
+def _maximise_GN_sampled(
+    bundle: Bundle,
+    prev_lam: Optional[np.ndarray] = None,
+    *,
+    n_random: int = 2048,
+    seed: int = 0,
+) -> Tuple[float, np.ndarray]:
+    """Fast approximate GN maximiser using vectorised simplex samples.
+
+    This is intended as a CPU-cheaper outer-loop selector for exploratory
+    MLP runs.  Metric checkpoints still use ``pc_star``'s stronger evaluator,
+    so the plotted GN* remains comparable.
+    """
+    if bundle.mu is not None:
+        return _maximise_GN(bundle, prev_lam=prev_lam)
+
+    K = bundle.K
+    _, Jmat = _bundle_arrays(bundle)
+    starts = _gn_multistart_set(K, prev_lam, max_starts=2 * K + 2)
+    lam_blocks = [np.asarray(starts, dtype=float)]
+    if n_random and n_random > 0:
+        rng = np.random.RandomState(seed)
+        lam_blocks.append(rng.dirichlet(np.ones(K), size=n_random))
+    lam_s = np.vstack(lam_blocks)
+    vals = _gn_over_samples(Jmat, lam_s)
+    best = int(np.argmax(vals))
+    return float(vals[best]), lam_s[best].copy()
+
+
 # =====================================================================
 #  Adaptive inner loop (BundleUpdate with max_steps)
 # =====================================================================
@@ -524,6 +553,9 @@ def algorithm_adaptive(
     epsilon: Optional[float] = None,
     eval_every_n_grads: Optional[int] = None,
     target_cov: Optional[float] = None,
+    lambda_max_starts: int = 256,
+    lambda_selector: str = "optimize",
+    lambda_random_starts: int = 2048,
     prune_inner: bool = True,
     joint_oracle: Optional[Callable] = None,
     verbose: bool = False,
@@ -589,7 +621,17 @@ def algorithm_adaptive(
     eps_inner = None if epsilon is None else epsilon / 3.0
 
     for outer in range(1, max_outer + 1):
-        pc_val, lam = _maximise_GN(bundle, prev_lam=prev_lam)
+        if lambda_selector == "sample":
+            pc_val, lam = _maximise_GN_sampled(
+                bundle,
+                prev_lam=prev_lam,
+                n_random=lambda_random_starts,
+                seed=outer,
+            )
+        elif lambda_selector == "optimize":
+            pc_val, lam = _maximise_GN(bundle, prev_lam=prev_lam, max_starts=lambda_max_starts)
+        else:
+            raise ValueError("lambda_selector must be 'optimize' or 'sample'.")
         prev_lam = lam
         pc_history.append(pc_val)
         lambda_history.append(lam.copy())
