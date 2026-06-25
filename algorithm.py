@@ -21,16 +21,15 @@ except ModuleNotFoundError:
     _HAS_IPOPT = False
 import warnings
 
-from bundle import Bundle, UB, GAP, GN, LB, T_map
+from bundle import Bundle, GN, T_map
 
 
 # =====================================================================
 #  Vectorised bundle helpers (CPU-optimisation, no semantic change)
 # =====================================================================
 # These helpers replace the per-bundle-point Python `for i in range(m)`
-# loops in UB / LB_2 / T_map with single batched numpy operations.
-# Mathematically they reproduce bundle.UB, bundle._LB_2 and bundle.T_map
-# exactly; only the implementation differs.
+# loops in T_map with single batched numpy operations.
+# Mathematically they reproduce bundle.T_map exactly; only the implementation differs.
 # ---------------------------------------------------------------------
 def _bundle_arrays(bundle: Bundle) -> Tuple[np.ndarray, np.ndarray]:
     """Stack ``bundle.fvals`` / ``bundle.grads`` as contiguous arrays.
@@ -46,8 +45,7 @@ def _bundle_arrays(bundle: Bundle) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def _gn_value_and_jac_batched(Fmat: np.ndarray, Jmat: np.ndarray,
-                              L: np.ndarray, mu: Optional[np.ndarray],
-                              lam: np.ndarray
+                              L: np.ndarray, lam: np.ndarray
                               ) -> Tuple[float, np.ndarray, int]:
     """Batched evaluation and analytical λ-gradient of  GN(λ; B)  (Eq. 17).
 
@@ -80,17 +78,8 @@ def _gn_value_and_jac_batched(Fmat: np.ndarray, Jmat: np.ndarray,
     # ∇_λ ‖J_i*^T λ‖²  =  2 J_i* (J_i*^T λ)  =  2 J_i* g_i*    ∈  R^K
     grad_min_norm = 2.0 * (Jmat[i_star] @ g_istar)     # (K,)
 
-    if mu is not None:
-        mul = float(lam @ mu)
-        Ll = float(lam @ L)
-        scale = 0.5 * (1.0 / mul - 1.0 / Ll)
-        # ∇_λ scale  =  -µ / (2 µλ²)  +  L / (2 Lλ²)
-        grad_scale = -0.5 * mu / (mul * mul) + 0.5 * L / (Ll * Ll)
-        gn_value = scale * gnorm_sq_istar
-        gn_jac = scale * grad_min_norm + gnorm_sq_istar * grad_scale
-    else:
-        gn_value = gnorm_sq_istar
-        gn_jac = grad_min_norm
+    gn_value = gnorm_sq_istar
+    gn_jac = grad_min_norm
     return gn_value, gn_jac, i_star
 
 
@@ -276,14 +265,13 @@ def _maximise_GN(bundle: Bundle, prev_lam: Optional[np.ndarray] = None,
     K = bundle.K
     Fmat, Jmat = _bundle_arrays(bundle)
     L_arr = bundle.L
-    mu_arr = bundle.mu
 
     def neg_gn(lam):
-        v, _, _ = _gn_value_and_jac_batched(Fmat, Jmat, L_arr, mu_arr, lam)
+        v, _, _ = _gn_value_and_jac_batched(Fmat, Jmat, L_arr, lam)
         return -v
 
     def neg_gn_jac(lam):
-        _, j, _ = _gn_value_and_jac_batched(Fmat, Jmat, L_arr, mu_arr, lam)
+        _, j, _ = _gn_value_and_jac_batched(Fmat, Jmat, L_arr, lam)
         return -j
 
     con_eq = {"type": "eq",
@@ -358,8 +346,6 @@ def _maximise_GN_sampled(
     MLP runs.  Metric checkpoints still use ``pc_star``'s stronger evaluator,
     so the plotted GN* remains comparable.
     """
-    if bundle.mu is not None:
-        return _maximise_GN(bundle, prev_lam=prev_lam)
 
     K = bundle.K
     _, Jmat = _bundle_arrays(bundle)
@@ -435,7 +421,6 @@ def _bundle_update_adaptive(
     K = bundle.K
     d = bundle.d
     L_arr = bundle.L
-    mu_arr = bundle.mu
 
     # ------------------------------------------------------------------
     # CPU optimisation:  maintain Fbuf/Jbuf/Pbuf as pre-allocated buffers
@@ -493,20 +478,13 @@ def _bundle_update_adaptive(
             # avoiding a redundant ``_bundle_arrays(bundle)`` call inside
             # ``pc_fn``.  We use the batched evaluator that matches the
             # mode set up by ``algorithm_adaptive``:
-            #   * mu is None       → GN-mode (only mode that supports no-µ).
-            #   * mu is not None   → fall back to ``pc_fn`` which respects
-            #                        the caller's mode choice (gap vs gn).
-            #
+
             # In the no-mu branch we call ``_gn_value_and_jac_batched``
             # directly on the live buffer slices, avoiding the
             # ``_bundle_arrays(bundle)`` rebuild inside the gn-mode
             # pc_fn closure.  We discard the analytical Jacobian (unused
             # for the inner-loop scalar comparison).
-            if mu_arr is None:
-                pc_val, _, _ = _gn_value_and_jac_batched(
-                    Fbuf[:active + 1], Jbuf[:active + 1], L_arr, mu_arr, lam)
-            else:
-                pc_val = pc_fn(bundle, lam)
+            pc_val = pc_fn(bundle, lam)
             if pc_val <= eps_inner:
                 break
 
@@ -546,7 +524,6 @@ def algorithm_adaptive(
     L: np.ndarray,
     x0: np.ndarray,
     *,
-    mu: Optional[np.ndarray] = None,
     mode: str = "gn",
     max_outer: int = 120,
     max_inner: int = 25,
@@ -574,8 +551,7 @@ def algorithm_adaptive(
         raise ValueError("algorithm_adaptive currently supports mode='gn' for the MLP coverage experiment.")
 
     L_arr = np.asarray(L, dtype=float)
-    mu_arr = None if mu is None else np.asarray(mu, dtype=float)
-    bundle = Bundle(K=K, d=d, L=L_arr, mu=mu_arr)
+    bundle = Bundle(K=K, d=d, L=L_arr)
 
     # Checkpoint 0 starts from the initial bundle but does not count its
     # oracle evaluation as iterative work, matching the baseline's setup.
@@ -636,7 +612,7 @@ def algorithm_adaptive(
         pc_history.append(pc_val)
         lambda_history.append(lam.copy())
 
-        if epsilon is not None and pc_val <= epsilon:
+        if epsilon is not None and pc_val <= 2 * epsilon / 3:
             _checkpoint(f"outer {outer}/{max_outer}")
             break
 
@@ -753,7 +729,7 @@ def pc_star(bundle: Bundle, mode: str,
 # (the outer-loop PC* value) would otherwise shadow the function above.
 _pc_star_metric = pc_star
 def bundle_from_points(points: np.ndarray, K: int, d: int,
-                       L: np.ndarray, mu: Optional[np.ndarray],
+                       L: np.ndarray,
                        objectives: List[Callable],
                        grad_objectives: List[Callable],
                        joint_oracle: Optional[Callable] = None) -> Bundle:
@@ -765,7 +741,7 @@ def bundle_from_points(points: np.ndarray, K: int, d: int,
     that ``pc_star`` can score it.  The oracle calls here are *metric
     evaluation* (measurement), not algorithm work.
     """
-    B = Bundle(K=K, d=d, L=np.asarray(L, dtype=float), mu=(None if mu is None else np.asarray(mu, dtype=float)))
+    B = Bundle(K=K, d=d, L=np.asarray(L, dtype=float))
     pts = np.atleast_2d(np.asarray(points, dtype=float))
     for row in pts:
         B.add_point(row, objectives, grad_objectives, joint_oracle=joint_oracle)
