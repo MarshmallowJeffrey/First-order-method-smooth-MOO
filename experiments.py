@@ -68,8 +68,8 @@ def _plot_coverage(bl: Optional[Dict], a2: Optional[Dict], mode: str, title: str
 
 def experiment_mlp_gn_coverage(
     verbose: bool = True,
-    K: int = 3, p: int = 10, n: int = 20, h: int = 8, seed: int = 10,
-    coarse_resolution: int = 26,
+    K: int = 5, p: int = 10, n: int = 20, h: int = 8, seed: int = 10,
+    coarse_resolution: int = 9,
     n_passes: int = 15, steps_per_point_per_pass: int = 50,
     eval_every_n_grads: int = 5000, checkpoint_every: int = 3,
     max_outer: int = 1000, max_inner: Optional[int] = None,
