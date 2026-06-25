@@ -48,9 +48,6 @@ def _plot_coverage(bl: Optional[Dict], a2: Optional[Dict], mode: str, title: str
 
     ax_t.set_xlabel("CPU time (s)")
     ax_t.set_ylabel(ylabel)
-    ax_t.set_xscale("symlog", linthresh=1.0)
-    ax_t.set_xticks([0, 1, 10])
-    ax_t.set_xticklabels(["0", "1", "10"])
     ax_t.set_yscale("log")
     ax_t.set_title("worst-case squared gradient norm vs CPU time" if mode == "gn" else "worst-case function suboptimality vs CPU time")
     ax_t.grid(True, which="both", alpha=0.25)
@@ -58,9 +55,6 @@ def _plot_coverage(bl: Optional[Dict], a2: Optional[Dict], mode: str, title: str
 
     ax_g.set_xlabel("total gradient evaluations")
     ax_g.set_ylabel(ylabel)
-    ax_g.set_xscale("symlog", linthresh=1_000)
-    ax_g.set_xticks([0, 1_000, 10_000, 100_000, 1_000_000])
-    ax_g.set_xticklabels(["0", "1e3", "1e4", "1e5", "1e6"])
     ax_g.set_yscale("log")
     ax_g.set_title("worst-case squared gradient norm vs gradient evals" if mode == "gn" else "worst-case function suboptimality vs gradient evals")
     ax_g.grid(True, which="both", alpha=0.25)
@@ -68,7 +62,7 @@ def _plot_coverage(bl: Optional[Dict], a2: Optional[Dict], mode: str, title: str
 
     fig.suptitle(title, fontsize=12)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
-    fig.savefig(out_path, dpi=150)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return out_path
 

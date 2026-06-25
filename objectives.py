@@ -104,6 +104,131 @@ def _sample_planted_data(
 
 
 # ====================================================================
+# Regularised multi-class logistic regression (strongly convex)
+# ====================================================================
+def make_logreg_strongly_convex(
+    K: int = 5,
+    p: int = 4,
+    n: int = 60,
+    reg: float = 0.1,
+    seed: int = 42,
+    w_true_scale: float = 1.0,
+) -> Tuple[List[Callable], List[Callable], np.ndarray, np.ndarray, Callable]:
+    """Create K per-class softmax logistic-regression objectives.
+
+    The i-th objective is the class-i cross entropy plus
+    ``(reg / 2) * ||W||^2``. The L2 term makes each objective
+    ``reg``-strongly convex.
+    """
+    rng = np.random.RandomState(seed)
+    d = K * p
+
+    X, labels, _W_true = _sample_planted_data(
+        K=K, p=p, n=n, rng=rng, w_true_scale=w_true_scale,
+    )
+
+    class_idx = [np.where(labels == i)[0] for i in range(K)]
+    n_i = np.array([max(len(idx), 1) for idx in class_idx], dtype=float)
+
+    X_op_norm_sq = np.linalg.norm(X, ord=2) ** 2
+    L_arr = np.array([X_op_norm_sq / (4.0 * n_i[i]) + reg for i in range(K)])
+    mu_arr = np.full(K, reg)
+
+    def _F_i(W_flat: np.ndarray, i: int) -> float:
+        W = W_flat.reshape(K, p)
+        idx = class_idx[i]
+        X_i = X[idx]
+
+        logits_i = X_i @ W.T
+        lse_i = _logsumexp(logits_i)
+        losses = -logits_i[:, i] + lse_i
+        avg_loss = losses.sum() / n_i[i]
+
+        return float(avg_loss + 0.5 * reg * np.dot(W_flat, W_flat))
+
+    def _grad_F_i(W_flat: np.ndarray, i: int) -> np.ndarray:
+        W = W_flat.reshape(K, p)
+        idx = class_idx[i]
+        X_i = X[idx]
+
+        logits_i = X_i @ W.T
+        probs_i = _softmax(logits_i)
+
+        grad_W = (probs_i.T @ X_i) / n_i[i]
+        grad_W[i] -= X_i.sum(axis=0) / n_i[i]
+
+        return grad_W.ravel() + reg * W_flat
+
+    def _F_and_grad_F_i(W_flat: np.ndarray, i: int) -> Tuple[float, np.ndarray]:
+        W = W_flat.reshape(K, p)
+        idx = class_idx[i]
+        X_i = X[idx]
+        ni = n_i[i]
+
+        logits_i = X_i @ W.T
+        z_max = logits_i.max(axis=-1, keepdims=True)
+        exp_shifted = np.exp(logits_i - z_max)
+        sum_exp = exp_shifted.sum(axis=-1, keepdims=True)
+        lse_i = (z_max + np.log(sum_exp)).squeeze(-1)
+        probs_i = exp_shifted / sum_exp
+
+        losses = -logits_i[:, i] + lse_i
+        loss = float(losses.sum() / ni + 0.5 * reg * np.dot(W_flat, W_flat))
+
+        grad_W = (probs_i.T @ X_i) / ni
+        grad_W[i] -= X_i.sum(axis=0) / ni
+        grad = grad_W.ravel() + reg * W_flat
+
+        return loss, grad
+
+    def _joint_oracle(W_flat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        fv = np.empty(K, dtype=np.float64)
+        gv = np.empty((K, d), dtype=np.float64)
+        for i in range(K):
+            fv[i], gv[i] = _F_and_grad_F_i(W_flat, i)
+        return fv, gv
+
+    def _joint_oracle_fused(W_flat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        W = W_flat.reshape(K, p)
+        logits_all = X @ W.T
+
+        z_max = logits_all.max(axis=-1, keepdims=True)
+        exp_shifted = np.exp(logits_all - z_max)
+        sum_exp = exp_shifted.sum(axis=-1, keepdims=True)
+        lse_all = (z_max + np.log(sum_exp)).squeeze(-1)
+        probs_all = exp_shifted / sum_exp
+
+        reg_term = 0.5 * reg * np.dot(W_flat, W_flat)
+        reg_grad = reg * W_flat
+
+        fv = np.empty(K, dtype=np.float64)
+        gv = np.empty((K, d), dtype=np.float64)
+        for i in range(K):
+            idx = class_idx[i]
+            X_i = X[idx]
+            logits_i = logits_all[idx]
+            lse_i = lse_all[idx]
+            probs_i = probs_all[idx]
+            ni = n_i[i]
+
+            losses = -logits_i[:, i] + lse_i
+            fv[i] = float(losses.sum() / ni + reg_term)
+
+            grad_W = (probs_i.T @ X_i) / ni
+            grad_W[i] -= X_i.sum(axis=0) / ni
+            gv[i] = grad_W.ravel() + reg_grad
+
+        return fv, gv
+
+    objectives = [lambda W, i=i: _F_i(W, i) for i in range(K)]
+    grad_objectives = [lambda W, i=i: _grad_F_i(W, i) for i in range(K)]
+    joint_oracle = _joint_oracle
+    joint_oracle.fused = _joint_oracle_fused
+
+    return objectives, grad_objectives, L_arr, mu_arr, joint_oracle
+
+
+# ====================================================================
 # Single-hidden-layer neural network  (generic non-convex)
 # ====================================================================
 def make_mlp_nonconvex(
