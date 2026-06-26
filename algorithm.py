@@ -16,7 +16,7 @@ from scipy.optimize import minimize as sp_minimize
 try:
     from cyipopt import minimize_ipopt as _ipopt_minimize
     _HAS_IPOPT = True
-except ModuleNotFoundError:
+except (ModuleNotFoundError, ImportError):
     _ipopt_minimize = None
     _HAS_IPOPT = False
 import warnings
@@ -266,13 +266,19 @@ def _maximise_GN(bundle: Bundle, prev_lam: Optional[np.ndarray] = None,
     Fmat, Jmat = _bundle_arrays(bundle)
     L_arr = bundle.L
 
+    _cache = [None, None, None]  # [key, neg_val, neg_jac]
+
     def neg_gn(lam):
-        v, _, _ = _gn_value_and_jac_batched(Fmat, Jmat, L_arr, lam)
-        return -v
+        lam_a = np.asarray(lam, dtype=float)
+        key = lam_a.tobytes()
+        if _cache[0] != key:
+            v, j, _ = _gn_value_and_jac_batched(Fmat, Jmat, L_arr, lam_a)
+            _cache[0] = key; _cache[1] = -float(v); _cache[2] = -j
+        return _cache[1]
 
     def neg_gn_jac(lam):
-        _, j, _ = _gn_value_and_jac_batched(Fmat, Jmat, L_arr, lam)
-        return -j
+        neg_gn(lam)
+        return _cache[2]
 
     con_eq = {"type": "eq",
               "fun": lambda l: float(np.sum(l) - 1.0),
@@ -308,8 +314,8 @@ def _maximise_GN(bundle: Bundle, prev_lam: Optional[np.ndarray] = None,
                     options={
                         "print_level": 0,
                         "sb": "yes",                    # suppress IPOPT banner
-                        "tol": 1e-8,
-                        "max_iter": 100,
+                        "tol": 1e-6,
+                        "max_iter": 200,
                         "hessian_approximation": "limited-memory",
                     },
                 )

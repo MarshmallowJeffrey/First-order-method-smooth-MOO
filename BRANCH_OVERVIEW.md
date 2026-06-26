@@ -64,11 +64,40 @@ The existing MLP objective factory remains available as:
 make_mlp_nonconvex(...)
 ```
 
+### `algorithm.py`
+
+Three fixes to the IPOPT backend in `_maximise_GN`:
+
+**Fix 1 — Eliminate double computation of `_gn_value_and_jac_batched`**
+
+`neg_gn` and `neg_gn_jac` were defined as independent closures, each calling
+`_gn_value_and_jac_batched` separately. Because cyipopt invokes `fun` and `jac`
+as two distinct calls per iteration, the batched einsum over the bundle was
+executed twice per IPOPT step. A shared last-call cache was added so that when
+IPOPT calls `neg_gn_jac(lam)` immediately after `neg_gn(lam)`, the second call
+is a cache hit and no recomputation occurs.
+
+**Fix 2 — Relax IPOPT convergence tolerance for the non-smooth GN objective**
+
+`GN(λ) = min_i ‖J_i^T λ‖²` is a pointwise minimum of quadratics and is
+non-differentiable on the index-switching manifold (where two minimisers tie).
+The Danskin gradient supplied to IPOPT is only a true gradient at smooth points;
+at non-smooth points it is a subgradient. IPOPT's KKT residual check uses the
+supplied gradient as if it were exact, so at non-smooth points the residual may
+never fall below a tight tolerance and IPOPT terminates by hitting `max_iter`
+rather than by converging. The tolerance was relaxed from `1e-8` to `1e-6` and
+`max_iter` was raised from `100` to `200` so that solves near smooth points
+terminate normally while solves near non-smooth points are given more room
+before the safety cap fires.
+
+---
+
 The staged files should mainly be:
 
 - `Mlp_Compare.ipynb`
 - the new result PNG files listed above,
 - `experiments.py`
 - `objectives.py`
+- `algorithm.py`
 - this overview file.
 
