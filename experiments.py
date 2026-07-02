@@ -68,7 +68,9 @@ def _plot_coverage(bl: Optional[Dict], a2: Optional[Dict], mode: str, title: str
 
 def experiment_mlp_gn_coverage(
     verbose: bool = True,
-    K: int = 5, p: int = 10, n: int = 20, h: int = 8, seed: int = 10,
+    K: int = 5, p: int = 10, n: int = 20, seed: int = 10,
+    h: Optional[int] = None, # 1-layer shorthand; kept for backward compat
+    hidden_sizes = None,                  # e.g. [16, 16] for two hidden layers
     coarse_resolution: int = 9,
     n_passes: int = 15, steps_per_point_per_pass: int = 50,
     eval_every_n_grads: int = 5000, checkpoint_every: int = 3,
@@ -83,12 +85,23 @@ def experiment_mlp_gn_coverage(
     print("=" * 68)
     print("Coverage experiment — MLP (non-convex), metric = GN*")
     print("=" * 68)
-    d = h * p + h + K * h + K
+    # Resolve hidden_sizes from either kwarg (backward-compat with h=...)
+    if hidden_sizes is None:
+        hidden_sizes = [h] if h is not None else [8]
+    elif h is not None:
+        raise ValueError("Pass either `h` or `hidden_sizes`, not both.")
+    # d = total parameter count of the MLP  p -> h1 -> ... -> hL -> K
+    prev, d = p, 0
+    for hi in hidden_sizes:
+        d += prev * hi + hi
+        prev = hi
+    d += prev * K + K
     if max_inner is None:
         max_inner = 50 if K == 4 else 25
-    objs, grads, L, joint = make_mlp_nonconvex(K=K, p=p, n=n, h=h, seed=seed)
+    objs, grads, L, joint = make_mlp_nonconvex(
+        K=K, p=p, n=n, hidden_sizes=hidden_sizes, seed=seed)
     x0 = np.zeros(d)
-    print(f"  K={K}, p={p}, n={n}, h={h}, d={d}  |  L={np.round(L,3)} ")
+    print(f"  K={K}, p={p}, n={n}, hidden_sizes={hidden_sizes}, d={d}  |  L={np.round(L,3)} ")
 
     bl = None
     if run_baseline:
@@ -118,7 +131,7 @@ def experiment_mlp_gn_coverage(
 
     path = _plot_coverage(
         bl, a2, mode="gn",
-        title="MLP with parameters: K={}, p={}, n={}, h={}, d={}".format(K,p,n,h,d),
+        title="MLP with parameters: K={}, p={}, n={}, hidden_sizes={}, d={}".format(K,p,n,hidden_sizes,d),
         out_path=out_path)
     if bl is not None:
         print(f"\n  BL  final GN* = {bl['cov_history'][-1]:.4e}  "
@@ -131,4 +144,10 @@ def experiment_mlp_gn_coverage(
 
 
 if __name__ == "__main__":
-    experiment_mlp_gn_coverage()
+    #experiment_mlp_gn_coverage()
+
+    #1 hidden layer — already done, plot saved as mlp.png. Uncomment to reproduce.
+    #experiment_mlp_gn_coverage(hidden_sizes=[8], out_path="mlp_L8.png")
+
+    # 2 hidden layers — first multi-layer experiment. Expect baseline to take
+    experiment_mlp_gn_coverage(hidden_sizes=[16, 16], out_path="mlp_L16x16.png")
