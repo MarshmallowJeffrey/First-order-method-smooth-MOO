@@ -1,0 +1,49 @@
+[
+  {
+    "case": "K2_p8_n40_h8_seed10",
+    "seed": 10,
+    "K": 2,
+    "p": 8,
+    "n": 40,
+    "hidden_sizes": [
+      8
+    ],
+    "d": 90,
+    "oracle_ms": 2.7862089991685934,
+    "problem_setup_time": 0.045350250002229586,
+    "target_gn": 1.087459510002477,
+    "adaptive_final_gn": 1.1787101741607477,
+    "adaptive_reached_target": false,
+    "baseline_time": 0.005877017974853516,
+    "adaptive_time": 0.010034799575805664,
+    "baseline_grad_evals": 4,
+    "adaptive_grad_evals": 2,
+    "time_ratio_baseline_over_adaptive": null,
+    "grad_ratio_baseline_over_adaptive": null,
+    "curve_plot": "/Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/complex_mlp_crossover/quick/curves/K2_p8_n40_h8_seed10.png"
+  },
+  {
+    "case": "K2_p8_n40_h12x12_seed10",
+    "seed": 10,
+    "K": 2,
+    "p": 8,
+    "n": 40,
+    "hidden_sizes": [
+      12,
+      12
+    ],
+    "d": 290,
+    "oracle_ms": 0.8857909997459501,
+    "problem_setup_time": 0.0024286250009026844,
+    "target_gn": 4.564396879514073,
+    "adaptive_final_gn": 1.6828122954891085,
+    "adaptive_reached_target": true,
+    "baseline_time": 0.0017499923706054688,
+    "adaptive_time": 0.008260726928710938,
+    "baseline_grad_evals": 4,
+    "adaptive_grad_evals": 2,
+    "time_ratio_baseline_over_adaptive": 0.21184483952897715,
+    "grad_ratio_baseline_over_adaptive": 2.0,
+    "curve_plot": "/Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/complex_mlp_crossover/quick/curves/K2_p8_n40_h12x12_seed10.png"
+  }
+]
