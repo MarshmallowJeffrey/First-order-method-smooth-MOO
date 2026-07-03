@@ -3,6 +3,16 @@ The uniform-discretisation baseline performance plots
     non-convex   (MLP)    :  GN*(B)  = sup_{lambda in Delta_K} min_{x_i\in B_m} ||grad F_lambda(x_i)||^2
 """
 
+import os
+
+# PyTorch bundles its own libomp.dylib; cyipopt (imported lazily by
+# algorithm.py) pulls in Homebrew's IPOPT -> OpenBLAS -> Homebrew's
+# libomp.dylib. Loading both copies of the OpenMP runtime into the same
+# process aborts with "OMP: Error #15" on macOS, regardless of import
+# order. Setting this before torch/cyipopt are imported works around it.
+# See https://openmp.llvm.org for the (unsupported) caveats of this flag.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
 from pathlib import Path
 import time
 from typing import Dict, List, Optional, Sequence
