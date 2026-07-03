@@ -381,7 +381,19 @@ def experiment_mlp_gn_coverage(
     #   max_outer          = 1000   (up to 1000 adaptive outer iterations)
     #   lambda_max_starts  = 256    (up to 256 IPOPT multi-starts per outer)
     # Restore those values for the full paper-scale comparison.
-    eval_every_n_grads: int = 500,
+    #
+    # eval_every_n_grads was first dropped to 500 (10x denser) to kill the
+    # long silent gaps between prints, but every checkpoint re-evaluates the
+    # GN* coverage metric via pc_star -> _maximise_GN, which always runs its
+    # own hardcoded 256 IPOPT multi-starts (independent of lambda_max_starts
+    # above -- that one only controls the outer loop's own lambda pick, not
+    # this checkpoint metric). Checkpointing 10x more often therefore paid
+    # that ~256-start solve 10x more often, which outweighed the speedups
+    # below and made total wall-clock time worse, not better. 2000 is a
+    # middle ground: checkpoints ~2.5x more often than the original 5000
+    # (still much less silent) while only paying the checkpoint overhead
+    # ~2.5x as often instead of 10x.
+    eval_every_n_grads: int = 2000,
     max_outer: int = 150, max_inner: Optional[int] = None,
     lambda_max_starts: int = 64,
     # Original default: prune_inner = False (keeps every inner-loop
