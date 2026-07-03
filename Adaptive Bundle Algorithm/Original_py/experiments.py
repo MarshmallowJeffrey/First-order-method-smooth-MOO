@@ -374,11 +374,21 @@ def experiment_mlp_gn_coverage(
     h: Optional[int] = None, seed: int = 10,
     init_seed: Optional[int] = None,
     coarse_resolution: int = 9,
-    n_passes: int = 15, steps_per_point_per_pass: int = 50,
-    eval_every_n_grads: int = 5000,
-    max_outer: int = 1000, max_inner: Optional[int] = None,
-    lambda_max_starts: int = 256,
-    prune_inner: bool = False,
+    n_passes: int = 4, steps_per_point_per_pass: int = 50,
+    # NOTE: the three defaults below were reduced for faster local test runs
+    # with denser progress printing. Original (paper-scale) values:
+    #   eval_every_n_grads = 5000   (checkpoint/print every 5000 grad evals)
+    #   max_outer          = 1000   (up to 1000 adaptive outer iterations)
+    #   lambda_max_starts  = 256    (up to 256 IPOPT multi-starts per outer)
+    # Restore those values for the full paper-scale comparison.
+    eval_every_n_grads: int = 500,
+    max_outer: int = 150, max_inner: Optional[int] = None,
+    lambda_max_starts: int = 64,
+    # Original default: prune_inner = False (keeps every inner-loop
+    # candidate; see algorithm.py's algorithm_adaptive docstring). True
+    # keeps the bundle from growing every outer iteration, which is what
+    # made later outer iterations progressively slower.
+    prune_inner: bool = True,
     run_baseline: bool = True, run_adaptive: bool = True,
     out_path: Optional[str] = None,
     hidden_sizes: Optional[Sequence[int]] = None,
@@ -557,7 +567,9 @@ def experiment_mlp_plateau_comparison(
     max_outer: int = 10000,
     max_inner: int = 25,
     lambda_max_starts: int = 256,
-    prune_inner: bool = False,
+    # Original default: prune_inner = False. See algorithm.py's
+    # algorithm_adaptive docstring for the tradeoff.
+    prune_inner: bool = True,
     plateau_window: int = 5,
     plateau_relative_improvement_tol: float = 0.05,
     plateau_consecutive_windows: int = 2,

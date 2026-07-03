@@ -505,7 +505,7 @@ def algorithm_adaptive(
     lambda_solver: str = "ipopt",
     require_ipopt: bool = False,
     max_grad_evals: Optional[int] = None,
-    prune_inner: bool = False,
+    prune_inner: bool = True,
     joint_oracle: Optional[Callable] = None,
     verbose: bool = False,
 ) -> Dict:
@@ -518,11 +518,15 @@ def algorithm_adaptive(
     CPU time spent on checkpoint metric evaluation is excluded from the
     reported CPU axis, matching the baseline accounting.
 
-    ``prune_inner=False`` is the default in every mode, so every inner-loop
-    candidate is retained in the bundle as required by the full BundleUpdate
-    used in Algorithm 2.  Explicit ``prune_inner=True`` remains available as
-    a runtime heuristic, but forfeits the full-bundle proof condition in
-    epsilon mode.
+    ``prune_inner=True`` is now the default: after each inner loop, only the
+    candidate with the smallest ||grad F_lambda|| is kept in the bundle and
+    the rest are popped back out (they still count toward grad_evals). This
+    keeps the bundle from growing by ``max_inner`` every outer iteration
+    (which otherwise makes each GN maximisation progressively more
+    expensive) at the cost of forfeiting the full-bundle proof condition
+    used by Algorithm 2's epsilon-mode convergence guarantee. Pass
+    ``prune_inner=False`` to restore the original behaviour where every
+    inner-loop candidate is retained.
     """
     if (
         not isinstance(max_inner, (int, np.integer))
