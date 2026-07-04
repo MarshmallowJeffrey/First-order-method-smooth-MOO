@@ -83,9 +83,9 @@ def _sample_planted_data(
     ----------------------
     With X ~ N(0, 1) and W_true ~ U[-1, 1], the true logits have
     std ≈ sqrt(p/3)  per coordinate, so the softmax outputs are moderately
-    peaked.  Class counts will be close to, but not exactly, n/K.  Empty
-    classes are unlikely for balanced K but are handled by the callers
-    via an n_i ≥ 1 guard.
+    peaked. Class counts will be close to, but not exactly, n/K. The
+    per-class MOO objectives require every class to be represented, so label
+    draws are conditioned on all K classes occurring.
     """
     #W_true = rng.uniform(-w_true_scale, w_true_scale, size=(K, p))
     W_true = rng.randn(K, p)
@@ -97,8 +97,17 @@ def _sample_planted_data(
     # For each row j, draw u_j ~ U(0, 1) and pick the smallest class
     # index i such that cumprob[j, i] ≥ u_j.
     cumprob = np.cumsum(true_probs, axis=1)      # (n, K)
-    u = rng.uniform(size=(n, 1))                 # (n, 1)
-    labels = (u < cumprob).argmax(axis=1)        # (n,)
+    if n < K:
+        raise ValueError("n must be at least K so every class can occur.")
+    for _ in range(10_000):
+        u = rng.uniform(size=(n, 1))             # (n, 1)
+        labels = (u < cumprob).argmax(axis=1)    # (n,)
+        if np.unique(labels).size == K:
+            break
+    else:
+        raise RuntimeError(
+            "Could not sample a dataset containing every class."
+        )
     #print('labels:',labels)
     return X, labels, W_true
 
@@ -113,6 +122,9 @@ def make_mlp_nonconvex(
     h: int = 8,
     seed: int = 7,
     w_true_scale: float = 1.0,
+    activation: str = "relu",
+    smoothness_probes: int = 40,
+    smoothness_safety_factor: float = 2.0,
 ) -> Tuple[List[Callable], List[Callable], np.ndarray, Callable]:
     """Create K per-class cross-entropy objectives for a 1-hidden-layer MLP.
 
@@ -186,6 +198,27 @@ def make_mlp_nonconvex(
     """
     rng = np.random.RandomState(seed)
     d = h * p + h + K * h + K     # total parameter count
+    if activation not in {"relu", "softplus"}:
+        raise ValueError("activation must be 'relu' or 'softplus'.")
+    if smoothness_probes <= 0:
+        raise ValueError("smoothness_probes must be positive.")
+    if smoothness_safety_factor <= 0.0:
+        raise ValueError("smoothness_safety_factor must be positive.")
+
+    def _activate(values: np.ndarray) -> np.ndarray:
+        if activation == "relu":
+            return np.maximum(values, 0.0)
+        return np.logaddexp(0.0, values)
+
+    def _activation_derivative(values: np.ndarray) -> np.ndarray:
+        if activation == "relu":
+            return (values > 0.0).astype(float)
+        derivative = np.empty_like(values)
+        positive = values >= 0.0
+        derivative[positive] = 1.0 / (1.0 + np.exp(-values[positive]))
+        exp_values = np.exp(values[~positive])
+        derivative[~positive] = exp_values / (1.0 + exp_values)
+        return derivative
 
     # ---- planted-model data generation ----
     X, labels, _W_true = _sample_planted_data(
@@ -225,7 +258,7 @@ def make_mlp_nonconvex(
         """
         W1, b1, W2, b2 = _unpack(theta)
         pre_A = X_batch @ W1.T + b1              # (n_batch, h)
-        A = np.maximum(pre_A, 0.0)                # ReLU
+        A = _activate(pre_A)
         Z = A @ W2.T + b2                         # (n_batch, K)
         return A, Z, pre_A, W1, b1, W2, b2
 
@@ -290,10 +323,10 @@ def make_mlp_nonconvex(
         dW2 = (dZ.T @ A_i) / ni                    # (K, h)
         db2 = dZ.sum(axis=0) / ni                  # (K,)
 
-        # Backprop through ReLU to hidden layer
+        # Backprop through the hidden activation.
         dA = dZ @ W2                                # (n_i, h)
-        relu_mask = (pre_A_i > 0).astype(float)    # (n_i, h)
-        dH = dA * relu_mask                         # (n_i, h)
+        activation_grad = _activation_derivative(pre_A_i)
+        dH = dA * activation_grad                    # (n_i, h)
 
         # Gradients w.r.t. W_1, b_1
         dW1 = (dH.T @ X_i) / ni                    # (h, p)
@@ -341,8 +374,8 @@ def make_mlp_nonconvex(
         dW2 = (dZ.T @ A_i) / ni                    # (K, h)
         db2 = dZ.sum(axis=0) / ni                  # (K,)
         dA = dZ @ W2                                # (n_i, h)
-        relu_mask = (pre_A_i > 0).astype(float)    # (n_i, h)
-        dH = dA * relu_mask                         # (n_i, h)
+        activation_grad = _activation_derivative(pre_A_i)
+        dH = dA * activation_grad                    # (n_i, h)
         dW1 = (dH.T @ X_i) / ni                    # (h, p)
         db1 = dH.sum(axis=0) / ni                  # (h,)
         grad = np.concatenate([dW1.ravel(), db1, dW2.ravel(), db2])
@@ -408,7 +441,7 @@ def make_mlp_nonconvex(
 
         # ---- single forward pass on FULL X ----
         pre_A_all = X @ W1.T + b1                       # (n_total, h)
-        A_all = np.maximum(pre_A_all, 0.0)              # (n_total, h)
+        A_all = _activate(pre_A_all)                    # (n_total, h)
         Z_all = A_all @ W2.T + b2                       # (n_total, K)
 
         # ---- shared row-max + exp + softmax + logsumexp on FULL Z ----
@@ -449,8 +482,8 @@ def make_mlp_nonconvex(
             dW2 = (dZ.T @ A_i) / ni                      # (K, h)
             db2 = dZ.sum(axis=0) / ni                    # (K,)
             dA = dZ @ W2                                 # (n_i, h)
-            relu_mask = (pre_A_i > 0).astype(float)      # (n_i, h)
-            dH = dA * relu_mask                          # (n_i, h)
+            activation_grad = _activation_derivative(pre_A_i)
+            dH = dA * activation_grad                    # (n_i, h)
             dW1 = (dH.T @ X_i) / ni                      # (h, p)
             db1 = dH.sum(axis=0) / ni                    # (h,)
             gv[i] = np.concatenate([dW1.ravel(), db1, dW2.ravel(), db2])
@@ -470,7 +503,7 @@ def make_mlp_nonconvex(
 
     # ---- estimate smoothness constants L_i ----
     # Sample random parameter pairs and measure gradient Lipschitz ratio.
-    n_probes = 40
+    n_probes = smoothness_probes
     L_arr = np.zeros(K)
     for i in range(K):
         max_ratio = 0.0
@@ -483,6 +516,6 @@ def make_mlp_nonconvex(
             diff_t = np.linalg.norm(t1 - t2)
             if diff_t > 1e-12:
                 max_ratio = max(max_ratio, diff_g / diff_t)
-        L_arr[i] = max_ratio * 2.0    # safety factor of 2
+        L_arr[i] = max_ratio * smoothness_safety_factor
 
     return objectives, grad_objectives, L_arr, joint_oracle

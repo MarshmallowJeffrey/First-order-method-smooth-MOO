@@ -438,34 +438,31 @@ def _bundle_update_adaptive(
     mu_arr = bundle.mu
 
     # ------------------------------------------------------------------
-    # CPU optimisation:  maintain Fbuf/Jbuf/Pbuf as pre-allocated buffers
-    # covering the base bundle plus up to ``max_steps`` new candidates.
-    # This avoids the O((m + s)·K·d) rebuild that
-    # ``_bundle_arrays(bundle)`` + ``np.asarray(bundle.points)`` would
-    # otherwise pay on EVERY T-map step.  After ``bundle.add_point``,
-    # we assign the new row into the next slot of the buffer (an
-    # O(K·d) write) and slice the buffer to the active region for
-    # ``_T_map_batched``.
-    #
-    # We also avoid calling ``pc_fn(bundle, lam)`` for the inner
-    # convergence check when ``pc_fn`` would internally rebuild Jbuf
-    # a second time.  The closures in ``algorithm_adaptive`` for
-    # both 'gap' and 'gn' modes call ``_bundle_arrays(bundle)`` again,
-    # so we bypass that overhead by inlining a mode-specific check
-    # against the cached ``Jbuf[:active+1]`` slice.  This requires
-    # peeking at the bundle's properties (whether mu exists) to know
-    # which check to inline.  When ``mu is None`` we use the GN
-    # criterion (since 'gap' requires mu, the no-mu case must be
-    # 'gn'); when mu is present we still go through ``pc_fn`` to
-    # preserve the gap/gn distinction without misclassifying.
+    # At fixed lambda, each stored point's scalarized value, gradient and
+    # T-map score remain unchanged. Cache them once and append one row per
+    # candidate. This is mathematically identical to calling
+    # ``_T_map_batched`` on the growing bundle at every step, but avoids
+    # repeatedly recomputing all previous rows.
     cap = base_m + max_steps
-    Fbuf = np.empty((cap, K), dtype=np.float64)
-    Jbuf = np.empty((cap, K, d), dtype=np.float64)
     Pbuf = np.empty((cap, d), dtype=np.float64)
-    if base_m > 0:
-        Fbuf[:base_m] = np.asarray(bundle.fvals)
-        Jbuf[:base_m] = np.asarray(bundle.grads)
-        Pbuf[:base_m] = np.asarray(bundle.points)
+    grad_lam_buf = np.empty((cap, d), dtype=np.float64)
+    t_scores = np.empty(cap, dtype=np.float64)
+
+    Fmat = np.asarray(bundle.fvals)
+    Jmat = np.asarray(bundle.grads)
+    Pbuf[:base_m] = np.asarray(bundle.points)
+    Ll = float(lam @ L_arr)
+    grad_lam_buf[:base_m] = np.einsum("mkd,k->md", Jmat, lam)
+    base_f_lam = Fmat @ lam
+    base_gnorms = np.einsum(
+        "md,md->m",
+        grad_lam_buf[:base_m],
+        grad_lam_buf[:base_m],
+    )
+    t_scores[:base_m] = base_f_lam - 0.5 * base_gnorms / Ll
+    best_idx = int(np.argmin(t_scores[:base_m]))
+    best_score = float(t_scores[best_idx])
+    min_gnorm_sq = float(base_gnorms.min())
 
     # ------------------------------------------------------------------
     # Generate the candidate chain on the real bundle.  Each T_map call
@@ -474,37 +471,32 @@ def _bundle_update_adaptive(
     # ------------------------------------------------------------------
     for s in range(max_steps):
         active = base_m + s
-        # Slice views (no copy) into the live portion of the buffers.
-        Fmat = Fbuf[:active]
-        Jmat = Jbuf[:active]
-        points_arr = Pbuf[:active]
-
-        x_new = _T_map_batched(Fmat, Jmat, points_arr, L_arr, lam)
+        x_new = (
+            Pbuf[best_idx]
+            - (1.0 / Ll) * grad_lam_buf[best_idx]
+        )
         bundle.add_point(x_new, objectives, grad_objectives, joint_oracle=joint_oracle)
         steps_taken += 1
 
-        # Append the just-evaluated row into the buffer — O(K·d) write.
-        Fbuf[active] = bundle.fvals[-1]
-        Jbuf[active] = bundle.grads[-1]
         Pbuf[active] = bundle.points[-1]
+        new_fvals = np.asarray(bundle.fvals[-1])
+        new_grads = np.asarray(bundle.grads[-1])
+        new_grad_lam = new_grads.T @ lam
+        grad_lam_buf[active] = new_grad_lam
+        new_gnorm_sq = float(new_grad_lam @ new_grad_lam)
+        new_score = float(new_fvals @ lam) - 0.5 * new_gnorm_sq / Ll
+        t_scores[active] = new_score
+
+        # np.argmin keeps the earliest index on a tie. Updating only for a
+        # strict improvement preserves that tie-breaking behavior exactly.
+        if new_score < best_score:
+            best_idx = active
+            best_score = new_score
+        min_gnorm_sq = min(min_gnorm_sq, new_gnorm_sq)
 
         if eps_inner is not None:
-            # Inline the PC check against the up-to-date Jbuf slice,
-            # avoiding a redundant ``_bundle_arrays(bundle)`` call inside
-            # ``pc_fn``.  We use the batched evaluator that matches the
-            # mode set up by ``algorithm_adaptive``:
-            #   * mu is None       → GN-mode (only mode that supports no-µ).
-            #   * mu is not None   → fall back to ``pc_fn`` which respects
-            #                        the caller's mode choice (gap vs gn).
-            #
-            # In the no-mu branch we call ``_gn_value_and_jac_batched``
-            # directly on the live buffer slices, avoiding the
-            # ``_bundle_arrays(bundle)`` rebuild inside the gn-mode
-            # pc_fn closure.  We discard the analytical Jacobian (unused
-            # for the inner-loop scalar comparison).
             if mu_arr is None:
-                pc_val, _, _ = _gn_value_and_jac_batched(
-                    Fbuf[:active + 1], Jbuf[:active + 1], L_arr, mu_arr, lam)
+                pc_val = min_gnorm_sq
             else:
                 pc_val = pc_fn(bundle, lam)
             if pc_val <= eps_inner:
@@ -591,16 +583,21 @@ def algorithm_adaptive(
 
     total_iters = 0
     grad_evals_at_last_ckpt = 0
-    prev_lam: Optional[np.ndarray] = None
+    outer_prev_lam: Optional[np.ndarray] = None
+    metric_prev_lam: Optional[np.ndarray] = None
     checkpoint_overhead = 0.0
     t_start = time.time()
 
     def _checkpoint(label: str) -> None:
-        nonlocal checkpoint_overhead, prev_lam
+        nonlocal checkpoint_overhead, metric_prev_lam
         cpu_times.append(time.time() - t_start - checkpoint_overhead)
         ck_t0 = time.time()
-        cov, cov_lam = _pc_star_metric(bundle, mode, prev_lam=prev_lam)
-        prev_lam = cov_lam
+        cov, cov_lam = _pc_star_metric(
+            bundle,
+            mode,
+            prev_lam=metric_prev_lam,
+        )
+        metric_prev_lam = cov_lam
         cov_history.append(cov)
         checkpoint_overhead += time.time() - ck_t0
         total_iters_history.append(total_iters)
@@ -624,15 +621,19 @@ def algorithm_adaptive(
         if lambda_selector == "sample":
             pc_val, lam = _maximise_GN_sampled(
                 bundle,
-                prev_lam=prev_lam,
+                prev_lam=outer_prev_lam,
                 n_random=lambda_random_starts,
                 seed=outer,
             )
         elif lambda_selector == "optimize":
-            pc_val, lam = _maximise_GN(bundle, prev_lam=prev_lam, max_starts=lambda_max_starts)
+            pc_val, lam = _maximise_GN(
+                bundle,
+                prev_lam=outer_prev_lam,
+                max_starts=lambda_max_starts,
+            )
         else:
             raise ValueError("lambda_selector must be 'optimize' or 'sample'.")
-        prev_lam = lam
+        outer_prev_lam = lam
         pc_history.append(pc_val)
         lambda_history.append(lam.copy())
 

@@ -160,6 +160,7 @@ def uniform_discretisation(
     mu: Optional[np.ndarray] = None,
     metric: str = "gap",
     coverage_mode: Optional[str] = None,
+    target_cov: Optional[float] = None,
     joint_oracle: Optional[Callable] = None,
     verbose: bool = False,
 ) -> Dict:
@@ -259,6 +260,8 @@ def uniform_discretisation(
     # don't leak into the iterative-work measurement.  See the matching
     # comment in algorithm.py:algorithm_adaptive.
     checkpoint_overhead = 0.0
+    target_reached = False
+
     def _checkpoint(label: str) -> None:
         nonlocal checkpoint_overhead
         cpu_times.append(time.time() - t_start - checkpoint_overhead)
@@ -344,16 +347,47 @@ def uniform_discretisation(
             solutions[g_idx] = x
             x_prev = x
 
-        # Decide whether to checkpoint at this pass boundary.
-        cur_grad_evals = total_iters * K
-        do_ckpt = (
-            eval_every_n_grads is None
-            or (cur_grad_evals - grad_evals_at_last_ckpt) >= eval_every_n_grads
-            or pass_idx == n_passes
-        )
-        if do_ckpt:
+            # Record progress at the next completed grid point after the
+            # requested gradient budget. Measurement is excluded from CPU
+            # time and does not alter the iterate or warm-start order.
+            cur_grad_evals = total_iters * K
+            if (
+                eval_every_n_grads is not None
+                and cur_grad_evals - grad_evals_at_last_ckpt
+                >= eval_every_n_grads
+            ):
+                _checkpoint(
+                    f"pass {pass_idx}/{n_passes}, grid {g_idx + 1}/{N}"
+                )
+                grad_evals_at_last_ckpt = cur_grad_evals
+                if (
+                    target_cov is not None
+                    and coverage_mode is not None
+                    and cov_history[-1] <= target_cov
+                ):
+                    target_reached = True
+                    break
+
+        # With no requested cadence, retain the original pass-boundary
+        # behavior. Always record the final state, without duplicating a
+        # checkpoint already taken at the last grid point.
+        if target_reached:
+            break
+        if eval_every_n_grads is None:
             _checkpoint(f"pass {pass_idx}/{n_passes}")
-            grad_evals_at_last_ckpt = cur_grad_evals
+            grad_evals_at_last_ckpt = total_iters * K
+        elif (
+            pass_idx == n_passes
+            and total_iters_history[-1] != total_iters
+        ):
+            _checkpoint(f"pass {pass_idx}/{n_passes}")
+            grad_evals_at_last_ckpt = total_iters * K
+        if (
+            target_cov is not None
+            and coverage_mode is not None
+            and cov_history[-1] <= target_cov
+        ):
+            break
 
     return {
         "coarse_grid": coarse_grid,
