@@ -1,5 +1,5 @@
 """
-algorithm.py  –  Adaptive Algorithm (Algorithm 6)
+algorithm.py  –  Adaptive Algorithm (Algorithm 2 in the current paper draft)
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def _gn_value_batched(Jmat: np.ndarray, lam: np.ndarray) -> float:
 def _gn_value_and_jac_batched(
     Jmat: np.ndarray, lam: np.ndarray
 ) -> Tuple[float, np.ndarray, int]:
-    """Batched evaluation and analytical λ-gradient of  GN(λ; B)  (Eq. 17).
+    """Batched evaluation and analytical λ-gradient of  GN(λ; B).
 
     GN(λ) = min_i ‖J_i^T λ‖².
 
@@ -98,8 +98,8 @@ def _gn_value_and_jac_batched(
 
 
 def _T_map_batched(Fmat: np.ndarray, Jmat: np.ndarray, points_arr: np.ndarray,
-                   L: np.ndarray, lam: np.ndarray) -> np.ndarray:
-    """Vectorised T-map evaluation for one weight vector (Eq. 13).
+                   L: np.ndarray, lam: np.ndarray) -> Tuple[np.ndarray, float]:
+    """Vectorised T-map evaluation for one weight vector (Eq. 10).
 
     Computes
         i*  = argmin_i { F_λ(x_i) − 1/(2 Lλ) ‖∇F_λ(x_i)‖² }
@@ -111,6 +111,13 @@ def _T_map_batched(Fmat: np.ndarray, Jmat: np.ndarray, points_arr: np.ndarray,
     Fmat, Jmat   : as in ``_bundle_arrays``.
     points_arr   : (m, d) array, points_arr[i] = x_i (= np.asarray(bundle.points))
     L, lam       : K-vectors.
+
+    Returns
+    -------
+    x_new  : the T-map iterate.
+    u_star : the descent-lemma prediction  u_{i*} = F_λ(x_{i*}) − ‖∇F_λ(x_{i*})‖²/(2 Lλ).
+             When Lλ is a valid smoothness constant, F_λ(x_new) ≤ u_star must
+             hold; a violation certifies that L is locally underestimated.
     """
     Ll = float(lam @ L)
     F_lam = Fmat @ lam
@@ -118,7 +125,8 @@ def _T_map_batched(Fmat: np.ndarray, Jmat: np.ndarray, points_arr: np.ndarray,
     gnorm_sq = np.einsum('id,id->i', grad_lam, grad_lam) # (m,)
     u_vals = F_lam - 0.5 * gnorm_sq / Ll
     i_star = int(np.argmin(u_vals))
-    return points_arr[i_star] - (1.0 / Ll) * grad_lam[i_star]
+    x_new = points_arr[i_star] - (1.0 / Ll) * grad_lam[i_star]
+    return x_new, float(u_vals[i_star])
 
 
 
@@ -303,14 +311,30 @@ def _maximise_GN(bundle: Bundle, prev_lam: Optional[np.ndarray] = None,
             RuntimeWarning, stacklevel=2,
         )
 
+    def _project_simplex(lam_vec: np.ndarray) -> np.ndarray:
+        """Clip to λ ≥ 0 and renormalise to Σλ = 1 (centroid on degenerate input).
+
+        GN is homogeneous of degree 2 in λ, so every candidate must be scored
+        at its feasible projection: otherwise a solver iterate violating the
+        sum-to-one constraint reports a value inflated by (Σλ)² and can win
+        the multi-start selection while the final renormalisation silently
+        changes the point the value was computed at.
+        """
+        lam_vec = np.maximum(np.asarray(lam_vec, dtype=float), 0.0)
+        s = float(lam_vec.sum())
+        if not np.isfinite(s) or s <= 0.0:
+            return np.full(K, 1.0 / K)
+        return lam_vec / s
+
     best_val = np.inf            # minimum of neg_gn == -(max GN)
-    best_lam = starts[0]
+    best_lam = _project_simplex(starts[0])
     for lam0 in starts:
+        lam0 = _project_simplex(lam0)
         # Score the start point itself first so a failed / early-terminated
         # solve never loses ground (keeps the result monotone in the starts).
         v0 = neg_gn(lam0)
         if v0 < best_val:
-            best_val, best_lam = float(v0), np.asarray(lam0, dtype=float)
+            best_val, best_lam = float(v0), lam0
 
         try:
             if use_ipopt:
@@ -340,13 +364,15 @@ def _maximise_GN(bundle: Bundle, prev_lam: Optional[np.ndarray] = None,
             )
             continue
 
-        if np.isfinite(res.fun) and res.fun < best_val:
-            best_val = float(res.fun)
-            best_lam = np.asarray(res.x, dtype=float).copy()
+        # Score the solve's answer at its feasible projection, never at the
+        # raw (possibly constraint-violating) solver iterate, so the returned
+        # (value, λ) pair is always internally consistent.
+        lam_res = _project_simplex(res.x)
+        v_res = neg_gn(lam_res)
+        if np.isfinite(v_res) and v_res < best_val:
+            best_val = float(v_res)
+            best_lam = lam_res
 
-    best_lam = np.maximum(best_lam, 0.0)
-    s = best_lam.sum()
-    best_lam = best_lam / s if s > 0 else np.full(K, 1.0 / K)
     return float(-best_val), best_lam
 
 
@@ -362,7 +388,8 @@ def _bundle_update_adaptive(
     eps_inner: Optional[float] = None,
     prune: bool = False,
     joint_oracle: Optional[Callable] = None,
-) -> int:
+    L_scale: float = 1.0,
+) -> Tuple[int, float, Optional[bool]]:
     """Inner-loop BundleUpdate at fixed λ.
 
     Two stopping modes
@@ -373,7 +400,7 @@ def _bundle_update_adaptive(
       original fixed-budget inner loop.
 
     * ``eps_inner=ε/3`` (Algorithm 2 from the paper):  the convergence
-      proof (Appendix B.1) requires the bundle update to drive
+      proof (Appendix A.1) requires the bundle update to drive
       ``GN(λ_t; B_{t+1}) ≤ ε/3`` at the active λ_t before the outer
       loop advances.  In this mode we add T_map iterates one at a time
       and recompute the active-λ GN after each addition; the inner loop
@@ -387,9 +414,10 @@ def _bundle_update_adaptive(
     observation that the other candidates contribute negligibly once
     the active index is well-served.  We expose this as ``prune``:
 
-    * ``prune=True`` — the runtime-efficient §7 heuristic.
+    * ``prune=True`` — the runtime-efficient heuristic from the paper's
+      implementation note.
     * ``prune=False`` (default) — keep every committed candidate; faithful to
-      the proof in Appendix B.1 which assumes BundleUpdate appends
+      the proof in Appendix A.1 which assumes BundleUpdate appends
       every T_map iterate.
 
     Implementation note (CPU optimisation, no semantic change)
@@ -400,16 +428,33 @@ def _bundle_update_adaptive(
     the losers at the end, avoiding O(m·K·d) bundle copying per outer.
     The T_map call uses the vectorised ``_T_map_batched`` helper.
 
+    Descent-lemma safeguard (adaptive L)
+    ------------------------------------
+    The T-map's selection rule and step size are only valid when ``bundle.L``
+    upper-bounds the true smoothness constants along the iterates.  If it does
+    not (mis-derived analytic constant, probe-based estimate on a testbed with
+    no finite global L), the method can enter an exact cycle that appends the
+    same point forever, or diverge until the oracle overflows — with no
+    diagnostic.  Since both sides of the descent-lemma inequality
+    ``F_λ(x_new) ≤ u_{i*}`` are already computed each step, we check it for
+    free and double ``L_scale`` on violation, in the spirit of the paper's
+    Eq. 22 online L re-estimation.  The scale only ever grows, so all descent
+    guarantees are preserved once it is large enough.
+
     Returns
     -------
-    Number of T_map iterations actually executed.  Equals ``max_steps``
-    when no stopping rule fires within the safety cap; smaller otherwise.
+    steps_taken : number of T_map iterations actually executed.  Equals
+        ``max_steps`` when no stopping rule fires within the safety cap.
+    L_scale : the (possibly increased) smoothness-scale multiplier.
+    target_met : ``None`` when ``eps_inner is None``; otherwise whether
+        ``GN(λ; B) ≤ eps_inner`` was reached before the safety cap.
     """
     base_m = bundle.m
     steps_taken = 0
     K = bundle.K
     d = bundle.d
     L_arr = bundle.L
+    target_met: Optional[bool] = None if eps_inner is None else False
 
     # ------------------------------------------------------------------
     # CPU optimisation:  maintain Fbuf/Jbuf/Pbuf as pre-allocated buffers
@@ -445,7 +490,7 @@ def _bundle_update_adaptive(
         Jmat = Jbuf[:active]
         points_arr = Pbuf[:active]
 
-        x_new = _T_map_batched(Fmat, Jmat, points_arr, L_arr, lam)
+        x_new, u_star = _T_map_batched(Fmat, Jmat, points_arr, L_arr * L_scale, lam)
         bundle.add_point(x_new, objectives, grad_objectives, joint_oracle=joint_oracle)
         steps_taken += 1
 
@@ -454,10 +499,21 @@ def _bundle_update_adaptive(
         Jbuf[active] = bundle.grads[-1]
         Pbuf[active] = bundle.points[-1]
 
+        # Descent-lemma safeguard: with a valid L_λ the new point must satisfy
+        # F_λ(x_new) ≤ u_star.  A violation proves the scaled L is still too
+        # small along this trajectory; double the scale so subsequent steps
+        # (this inner loop and all later ones) use the larger constant.  The
+        # violating point stays in the bundle — its oracle evaluation is paid
+        # for and, under a valid L, a bad point is never re-selected.
+        F_lam_new = float(Fbuf[active] @ lam)
+        if F_lam_new > u_star + 1e-10 * (1.0 + abs(u_star)):
+            L_scale *= 2.0
+
         if eps_inner is not None:
             # Include the newly-added row at index ``active``.
             pc_val = _gn_value_batched(Jbuf[:active + 1], lam)
             if pc_val <= eps_inner:
+                target_met = True
                 break
 
     # ------------------------------------------------------------------
@@ -482,7 +538,7 @@ def _bundle_update_adaptive(
         bundle.fvals.append(win_fv)
         bundle.grads.append(win_gv)
 
-    return steps_taken
+    return steps_taken, L_scale, target_met
 
 
 # =====================================================================
@@ -638,6 +694,13 @@ def algorithm_adaptive(
 
     eps_inner = None if epsilon is None else epsilon / 3.0
 
+    # Descent-lemma safeguard state (see _bundle_update_adaptive): a scalar
+    # multiplier on the supplied L, monotone nondecreasing across the run.
+    L_scale = 1.0
+    safeguard_warned = False
+    inner_cap_hits = 0
+    inner_cap_warned = False
+
     for outer in range(1, max_outer + 1):
         inner_step_cap = max_inner
         if max_grad_evals is not None:
@@ -660,7 +723,7 @@ def algorithm_adaptive(
             _checkpoint(f"outer {outer}/{max_outer}")
             break
 
-        steps = _bundle_update_adaptive(
+        steps, new_L_scale, target_met = _bundle_update_adaptive(
             bundle=bundle,
             lam=lam,
             objectives=objectives,
@@ -669,7 +732,42 @@ def algorithm_adaptive(
             eps_inner=eps_inner,
             prune=effective_prune_inner,
             joint_oracle=joint_oracle,
+            L_scale=L_scale,
         )
+        if new_L_scale > L_scale:
+            if not safeguard_warned:
+                warnings.warn(
+                    "Descent-lemma check failed: the supplied smoothness "
+                    "constants L underestimate the objectives' curvature "
+                    "along the iterates. The step sizes are being reduced "
+                    "adaptively (L scaled up); the run continues, but the "
+                    "supplied L should not be trusted for theory constants.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                safeguard_warned = True
+            L_scale = new_L_scale
+            if L_scale > 2.0 ** 60:
+                raise RuntimeError(
+                    "Descent-lemma safeguard scaled L by more than 2^60 and "
+                    "the objectives still violate the smoothness model; they "
+                    "do not appear to be L-smooth along the iterates "
+                    "(e.g. non-smooth activations or exploding curvature). "
+                    "The bundle method's assumptions do not hold here."
+                )
+        if target_met is False:
+            inner_cap_hits += 1
+            if not inner_cap_warned:
+                warnings.warn(
+                    "epsilon mode: an inner loop exhausted its step cap "
+                    "(max_inner / gradient budget) before reaching the eps/3 "
+                    "target at the active lambda. The Algorithm 2 termination "
+                    "argument does not apply to such iterations; raise "
+                    "max_inner if a certified run is intended.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                inner_cap_warned = True
         inner_steps_history.append(steps)
         total_iters += steps
 
@@ -707,6 +805,8 @@ def algorithm_adaptive(
         "max_grad_evals": max_grad_evals,
         "max_outer": max_outer,
         "max_inner": max_inner,
+        "L_scale_final": L_scale,
+        "inner_cap_hits": inner_cap_hits,
     }
 
 
@@ -734,7 +834,10 @@ def pc_star(bundle: Bundle, prev_lam: Optional[np.ndarray] = None
 
     GN*(B)  = max_{lambda} min_i ||grad F_lambda(x_i)||^2   (non-convex)
 
-    Metric evaluation uses the same gradient-based multi-start maximisation as
-    the adaptive outer loop.
+    Metric evaluation deliberately uses a fixed-strength maximiser (IPOPT when
+    available, 256 multi-starts) regardless of the run's ``lambda_solver`` /
+    ``lambda_max_starts`` configuration, so that it is a comparable yardstick
+    across methods and configurations.  Note the value is a heuristic lower
+    bound on the true (NP-hard) maximum, not a certificate.
     """
     return _maximise_GN(bundle, prev_lam=prev_lam)

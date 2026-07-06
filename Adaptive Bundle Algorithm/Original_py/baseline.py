@@ -54,9 +54,47 @@ def _uniform_simplex_grid(K: int, resolution: int) -> np.ndarray:
     return np.asarray(points, dtype=float) / resolution
 
 
+def _snake_compositions(s: int, m: int, forward: bool = True) -> List[List[int]]:
+    """Enumerate compositions of ``s`` into ``m`` parts so consecutive ones
+    differ by exactly one +1/−1 coordinate pair (ℓ₁ distance 2).
+
+    Construction: iterate the first coordinate ``a`` upward, recursing on the
+    remaining ``m−1`` parts and reversing direction on alternate blocks
+    (boustrophedon).  By induction the forward enumeration starts at
+    (0, …, 0, s) and ends at (s, 0, …, 0), which makes adjacent blocks meet at
+    tails differing by exactly 1 in the first tail coordinate.
+    """
+    if m == 1:
+        return [[s]]
+    out: List[List[int]] = []
+    for a in range(s + 1):
+        block = _snake_compositions(s - a, m - 1, forward=(a % 2 == 0))
+        out.extend([a] + tail for tail in block)
+    return out if forward else out[::-1]
+
+
 def _sort_grid_for_warmstart(grid: np.ndarray) -> np.ndarray:
-    """Lex sort: consecutive points are ℓ₁-close (≤ 2/resolution apart)."""
-    order = np.lexsort(grid[:, ::-1].T)
+    """Snake (boustrophedon) order: consecutive points are ℓ₁-close
+    (≤ 2/resolution apart), matching the enumeration guarantee the paper's
+    Algorithm 1 warm-start relies on.
+
+    The previous plain lexicographic sort satisfied this only for K = 2: for
+    K ≥ 3 every lexicographic "carry" boundary jumps up to the full simplex
+    diameter (ℓ₁ = 2), seeding the chained warm start from a nearly opposite
+    trade-off weight at a sizable fraction of grid transitions.
+    """
+    K = grid.shape[1]
+    if K == 1:
+        return grid
+    # Recover the integer resolution r from the grid spacing: the grid is
+    # exactly {c / r : c a composition of r into K parts}.
+    r = int(round(1.0 / np.min(grid[grid > 0]))) if np.any(grid > 0) else 1
+    order_keys = {
+        tuple(comp): i
+        for i, comp in enumerate(_snake_compositions(r, K))
+    }
+    counts = np.rint(grid * r).astype(int)
+    order = np.argsort([order_keys[tuple(row)] for row in counts])
     return grid[order]
 
 
@@ -122,9 +160,10 @@ def uniform_discretisation(
     ------------------
     By default (``eval_every_n_grads=None``) we checkpoint after every
     pass, matching the previous behaviour.  Setting
-    ``eval_every_n_grads = M`` instead causes a checkpoint at the next
-    pass-boundary after every M cumulative gradient-oracle evaluations
-    (where one scalarised solver step costs K gradient oracle calls).
+    ``eval_every_n_grads = M`` instead causes a checkpoint as soon as at
+    least M additional gradient-oracle evaluations have been used, including
+    in the middle of a pass (one scalarised solver step costs K gradient
+    oracle calls).
 
     One "pass" = one full sweep across all grid points with M_pp steps
     per point = |G_r| · M_pp scalarised iterations = |G_r| · M_pp · K
@@ -135,7 +174,7 @@ def uniform_discretisation(
     resolution                : coarse grid resolution  r.
     n_passes                  : total number of passes to run.
     steps_per_point_per_pass  : solver steps taken at each grid point per pass.
-    eval_every_n_grads        : if set, checkpoint at the next pass boundary after every M gradient evals.
+    eval_every_n_grads        : if set, checkpoint every M gradient evals, including mid-pass.
     max_grad_evals            : optional hard budget on cumulative gradient evaluations.
 
     Returns
@@ -155,6 +194,18 @@ def uniform_discretisation(
     L_arr, x0_arr = validate_problem_inputs(
         K, d, L, x0_arr, objectives, grad_objectives
     )
+    if (
+        eval_every_n_grads is not None
+        and (
+            not isinstance(eval_every_n_grads, (int, np.integer))
+            or isinstance(eval_every_n_grads, (bool, np.bool_))
+            or eval_every_n_grads < 1
+        )
+    ):
+        raise ValueError(
+            "eval_every_n_grads must be a positive integer or None; "
+            f"got {eval_every_n_grads!r}."
+        )
     if max_grad_evals is not None and max_grad_evals < K:
         raise ValueError(
             f"max_grad_evals must be at least K={K}; got {max_grad_evals}."
@@ -264,9 +315,28 @@ def uniform_discretisation(
                     g_lam = lam @ np.vstack(grad_rows)
                 x = x - (1.0 / Ll) * g_lam
                 total_iters += 1
+
+                # When gradient-based checkpointing is requested, record the
+                # current state immediately rather than waiting for a full
+                # simplex-grid pass.  Store the in-progress grid solution so
+                # the checkpoint includes the step that triggered it.
+                cur_grad_evals = total_iters * K
+                if (
+                    eval_every_n_grads is not None
+                    and (
+                        cur_grad_evals - grad_evals_at_last_ckpt
+                    ) >= eval_every_n_grads
+                ):
+                    solutions[g_idx] = x
+                    _checkpoint(
+                        f"pass {pass_idx}/{n_passes}, "
+                        f"point {g_idx + 1}/{N}"
+                    )
+                    grad_evals_at_last_ckpt = cur_grad_evals
+
                 if (
                     max_grad_evals is not None
-                    and total_iters * K >= max_grad_evals
+                    and cur_grad_evals >= max_grad_evals
                 ):
                     budget_exhausted = True
                     break
@@ -276,13 +346,13 @@ def uniform_discretisation(
             if budget_exhausted:
                 break
 
-        # Decide whether to checkpoint at this pass boundary.
+        # With the default cadence, every pass boundary is a checkpoint.  For
+        # gradient-based cadence, mid-pass checkpoints were already recorded;
+        # only add a boundary checkpoint for the final state when needed.
         cur_grad_evals = total_iters * K
-        do_ckpt = (
-            eval_every_n_grads is None
-            or (cur_grad_evals - grad_evals_at_last_ckpt) >= eval_every_n_grads
-            or pass_idx == n_passes
-            or budget_exhausted
+        final_state = pass_idx == n_passes or budget_exhausted
+        do_ckpt = eval_every_n_grads is None or (
+            final_state and cur_grad_evals != grad_evals_at_last_ckpt
         )
         if do_ckpt:
             _checkpoint(f"pass {pass_idx}/{n_passes}")

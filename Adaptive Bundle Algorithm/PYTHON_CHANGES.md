@@ -114,3 +114,105 @@ Date: July 1, 2026
 - The fused oracle, standard oracle, and fused-fallback paths were tested.
 - Input validation, empty-class resampling, joint-oracle output shapes, and the basic plateau-detection behavior were tested.
 - The complete three-method plateau experiment has not been run because the local `cyipopt` binary currently fails to load. Strict IPOPT validation was confirmed to raise a clear error instead of falling back and mislabeling the result as IPOPT.
+
+---
+
+# Soundness fixes — July 4, 2026
+
+A full audit (paper-vs-code fidelity, math soundness, line-level bug hunt, and
+executable adversarial tests) confirmed the core method is implemented
+faithfully, but found failure modes that the following changes fix. The public
+APIs (`algorithm_adaptive`, `uniform_discretisation`, `pc_star`) are unchanged
+except for two new keys in `algorithm_adaptive`'s result dict.
+
+## `algorithm.py`
+
+### Descent-lemma safeguard (adaptive L rescaling)
+
+- **Problem (reproduced):** the T-map trusted the supplied smoothness
+  constants `L` unconditionally. When `L` underestimates the true curvature —
+  as with the repo's own (previously mis-derived) logistic-regression
+  constants, or the probe-based estimates on ReLU MLPs where no finite global
+  L exists — the method entered an exact no-progress cycle (the same point
+  appended to the bundle hundreds of times, e.g. 375 duplicates in one run,
+  GN* frozen for the entire budget) or diverged to an uncaught
+  `OverflowError`/`ValueError`. This is the mechanism behind the frozen
+  adaptive curves in the `mlp_crossover_h*` and `run_plateau8` notebook runs.
+- **Fix:** `_T_map_batched` now also returns the descent-lemma prediction
+  `u_star`; after each oracle evaluation the inner loop checks
+  `F_lambda(x_new) <= u_star` (both sides were already computed — the check is
+  free) and doubles a monotone `L_scale` multiplier on violation, in the
+  spirit of the paper's Eq. 22 online L re-estimation. A `RuntimeWarning` is
+  emitted on first trigger; a `RuntimeError` is raised if the scale exceeds
+  2^60 (objectives demonstrably not L-smooth). The result dict gains
+  `L_scale_final`.
+- **Verified:** the previously stalling configurations now converge (wrong-L
+  2-cycle → GN* 0.0; 3x-understated L → 1.5e-05 with no crash; the
+  theory-faithful `prune_inner=False` logistic-regression run passes its old
+  6.7e-04 stall floor, reaching 4.8e-05).
+
+### `_maximise_GN` feasibility consistency
+
+- **Problem:** local-solve outputs were scored at the raw solver iterate and
+  only the final winner was renormalised, so (a) an infeasible iterate could
+  win on a value inflated by `(sum lambda)^2` (GN is degree-2 homogeneous),
+  and (b) the returned value did not correspond to the returned lambda.
+- **Fix:** every candidate (start point or solver output) is projected onto
+  the simplex and scored at the projection. The returned `(value, lambda)`
+  pair is now always internally consistent; the monotone-in-starts guarantee
+  is preserved.
+
+### Epsilon-mode honesty
+
+- The inner loop reports whether the `eps/3` target was actually met;
+  `algorithm_adaptive` warns once when the `max_inner`/budget cap binds first
+  (the Algorithm 2 termination argument does not apply to such iterations) and
+  records `inner_cap_hits` in the result dict.
+
+### Documentation corrections
+
+- Stale draft references fixed (Algorithm 6 → Algorithm 2, Eq. 13 → Eq. 10,
+  Appendix B.1 → A.1, removed Eq. 17).
+- `pc_star`'s docstring no longer claims it uses "the same" maximiser as the
+  outer loop; it documents the deliberate fixed-strength yardstick design and
+  that the value is a heuristic lower bound on an NP-hard maximum, not a
+  certificate.
+
+## `baseline.py`
+
+- **Problem (measured):** `_sort_grid_for_warmstart` used a plain
+  lexicographic sort, whose "carry" boundaries jump up to the full simplex
+  diameter (l1 = 2.0) for K >= 3 — at the default coverage config (K=6, r=9),
+  494 of 2001 consecutive grid transitions violated the documented `<= 2/r`
+  bound, silently degrading the chained warm start the paper's Algorithm 1
+  enumeration guarantees.
+- **Fix:** boustrophedon (snake) composition enumeration
+  (`_snake_compositions`), which provably keeps consecutive grid points
+  within l1 <= 2/r. Verified exhaustively for K = 2..7, r in {1,2,3,5,9,10}:
+  worst consecutive jump now exactly 2/r, and the ordering is a permutation of
+  the original grid.
+
+## `objectives_numpy.py`
+
+- **Problem (proved and measured):** `make_logreg_strongly_convex` set
+  `L_i = ||X||^2 / (4 n_i) + reg`. The 1/4 factor is the binary-sigmoid
+  Hessian bound; the multiclass-softmax bound is 1/2, and the correct data
+  matrix is the class-i submatrix. At seed=0, K=2, p=6, n=40 the true Hessian
+  max-eigenvalue exceeded the claimed constant by 22%, invalidating the
+  1/L_lambda step size (this is the constant that triggered the reproduced
+  stall above).
+- **Fix:** `L_i = ||X_i||^2 / (2 n_i) + reg`. Verified against numerical
+  Hessians (max eig(H)/L now 0.94 < 1 over probe points).
+
+## Verification (July 4)
+
+- `verify_fixes.py` (session scratchpad): 10/10 checks pass, covering the
+  wrong-L cycle, wrong-L divergence, the logistic-regression stall floor, the
+  epsilon-stop on a healthy problem, `(value, lambda)` consistency of
+  `_maximise_GN` under both IPOPT and SLSQP, and the snake-ordering adjacency
+  contract.
+- Known limitations that remain by design: the outer GN maximisation is still
+  a multi-start local heuristic (the exact problem is NP-hard), so GN* and the
+  epsilon certificate remain heuristic lower bounds; and the epsilon
+  certificate machinery is still unused by the experiment drivers, which run
+  the budget-driven mode.

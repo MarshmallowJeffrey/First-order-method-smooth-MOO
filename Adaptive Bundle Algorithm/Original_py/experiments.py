@@ -370,10 +370,10 @@ def _plateau_for_result(
 
 def experiment_mlp_gn_coverage(
     verbose: bool = True,
-    K: int = 5, p: int = 10, n: int = 20,
+    K: int = 6, p: int = 10, n: int = 40,
     h: Optional[int] = None, seed: int = 10,
     init_seed: Optional[int] = None,
-    coarse_resolution: int = 9,
+    coarse_resolution: int =9,
     n_passes: int = 4, steps_per_point_per_pass: int = 50,
     # NOTE: the three defaults below were reduced for faster local test runs
     # with denser progress printing. Original (paper-scale) values:

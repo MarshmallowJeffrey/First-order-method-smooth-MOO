@@ -146,8 +146,17 @@ def make_logreg_strongly_convex(
     class_idx = [np.where(labels == i)[0] for i in range(K)]
     n_i = np.array([len(idx) for idx in class_idx], dtype=float)
 
-    X_op_norm_sq = np.linalg.norm(X, ord=2) ** 2
-    L_arr = np.array([X_op_norm_sq / (4.0 * n_i[i]) + reg for i in range(K)])
+    # Smoothness of the class-i data term: its Hessian w.r.t. W is
+    #   (1/n_i) * sum_{j in class i} (diag(p_j) - p_j p_j^T) kron x_j x_j^T,
+    # and lambda_max(diag(p) - p p^T) <= 1/2 for the softmax (the 1/4 bound
+    # holds only for the binary-sigmoid parameterisation), taken over the
+    # class-i submatrix X_i (not the full X).  Hence
+    #   L_i = ||X_i||_2^2 / (2 n_i) + reg
+    # is a valid upper bound on the gradient-Lipschitz constant of F_i.
+    L_arr = np.array([
+        np.linalg.norm(X[class_idx[i]], ord=2) ** 2 / (2.0 * n_i[i]) + reg
+        for i in range(K)
+    ])
     mu_arr = np.full(K, reg)
 
     def _F_i(W_flat: np.ndarray, i: int) -> float:
