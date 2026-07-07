@@ -1,12 +1,17 @@
 # Experiments: definitions, design, results, and trends
 
-Date: July 6, 2026.
+Date: July 6, 2026; extended July 7 (K=6 budget study folded into §5.1;
+figure-reading guide §8, curve-behaviour explanations §9, and the
+most-influential-parameters verdict §6.5 added).
 Code state: soundness fixes of July 4 (`Note/Jul_5_note.md`) plus the
 paper-conformance fixes of July 6 (`Note/Jul_6_note.md`). All results below
 were produced by `Original_py/run_experiments.py` on this code state; every
 earlier figure in the repository history predates these fixes and was
 produced by code with a confirmed frozen-loop defect, so none of it is
 comparable or citable.
+
+A Chinese version of this document is kept at `EXPERIMENTS_ZH.md`; when
+one file changes, change the other to match.
 
 ---
 
@@ -161,8 +166,12 @@ budgets; a plateau ratio that *shrinks* as K grows; a CPU ratio that
 
 One problem instance per configuration: planted linear-softmax data
 (paper Section 5.1.1; W* entries now U[−1,1] per the July 6 fix), K
-per-class cross-entropy objectives of a ReLU MLP, shared He initial point,
-shared probe-based smoothness estimates, shared fused oracle. Both methods
+per-class cross-entropy objectives of an MLP, shared He initial point,
+shared probe-based smoothness estimates, shared fused oracle. The hidden
+activation is a parameter; every benchmark run in this document uses
+`tanh` (smooth, so the paper's L-smoothness assumption holds; the earlier
+ReLU runs violated it and are archived as diagnostics only — see
+`Note/Jul_6_note.md` §3b). Both methods
 run under the same total gradient budget `max_grad_evals`; neither stops
 on a quality target. At checkpoints (every ~1/25 of budget for plateau,
 ~1/13 for crossover) we record (cumulative gradient evaluations, CPU time
@@ -227,16 +236,19 @@ scalarised iterations (~200 outer rounds).
 ```
 output/
   plateau/
-    K{3,4,5,6}_p6_n30_h4_r6_B30000/
+    K{3,4,5,6}_p6_n30_h4_tanh_r6_B30000/
       gn_vs_grad_evals.png   # GN* vs total gradient evaluations (log y)
       gn_vs_cpu_time.png     # GN* vs CPU time (log y)
       summary.json           # all curves + plateaus + ratios + parameters
       README.md              # parameters, rationale, per-config analysis
+    K6_p6_n30_h4_tanh_r6_B90000/    # K=6 budget study (same 4 files)
+    K6_p6_n30_h4_tanh_r6_B240000/   # K=6 budget study (same 4 files)
+    K6_budget_study.png      # combined best-so-far curves, 3 budgets
     plateau_ratio_vs_K.png   # the sweep's trend plot
-    sweep_index.json
+    sweep_index.json         # the 4 main-sweep configs (B30000 only)
     README.md                # cross-configuration analysis (this sweep)
   crossover/
-    d*_h{16x16,...,128x128}_n50000_B2000/   (same 4 files each)
+    d*_h{16x16,...,128x128}_tanh_n50000_B2000/   (same 4 files each)
     crossover_ratio_vs_d.png # the sweep's trend plot
     sweep_index.json
     README.md
@@ -245,7 +257,8 @@ output/
 Every configuration directory is self-contained: the two comparison plots
 the user asked for, the raw curves, the exact parameters, why those
 parameters, health flags (`L_scale_final`, `inner_cap_hits`, runtime
-warnings), and the analysis.
+warnings), and the analysis. Section 8 explains every visual element of
+the plots; Section 9 explains the non-obvious behaviours visible in them.
 
 ---
 
@@ -460,6 +473,38 @@ changes CPU cost per unit of work, **Q** = changes achievable quality.
   floor), `K`/`d` (problem difficulty), `max_inner` (exploit-vs-search
   balance), L quality (step sizes).
 
+### 6.5 Which parameters matter most, per experiment
+
+**Plateau experiment: `max_grad_evals` (the budget), with `resolution` r
+second.** The K=6 budget study is the proof: holding every other
+parameter fixed and moving only the budget flipped the conclusion from
+"adaptive loses 4x" (30k) to "adaptive wins 3.1x" (240k). The budget
+decides whether the adaptive method's advantage is *visible at all*,
+because the break-even budget grows with K (§5.1). `resolution` is second
+because it sets the baseline's structural floor — the level the whole
+plateau story is measured against; changing r moves that floor (more
+nodes = lower floor but slower to reach). `K` itself is the swept
+variable, i.e. the problem difficulty being studied, not a tuning choice.
+
+**Crossover experiment: the per-oracle cost n·d, controlled by `n` and
+`hidden_sizes`.** `n = 50,000` is the single most consequential choice in
+the whole sweep: it makes one gradient evaluation expensive, which is
+what moves the equal-time crossover into the observable range (the
+plateau sweep's n = 30 shows the opposite regime: baseline wins CPU at
+every K). `hidden_sizes` (hence d) is the swept variable that drives the
+ratio from parity to ~101x. A close third is the *quality of the probe
+estimate of L*, which degrades as width grows: it does not change the
+adaptive method's fate (the safeguard rescales L; `L_scale_final` 4→16
+across the sweep) but it progressively cripples the baseline, whose
+fixed-step GD has no safeguard (§9.2). That asymmetry is part of why the
+measured ratios grow as fast as they do with d.
+
+**Parameters that deliberately matter little:** `eval_every_n_grads`
+(measurement cadence only), `lambda_max_starts` (CPU of the λ-search, not
+the gradient axis), `prune_inner` (CPU via bundle size; weak quality
+effect). These were held at values where they do not shape the
+conclusions, and §5's health flags confirm they did not.
+
 ---
 
 ## 7. Honest-reporting notes
@@ -482,3 +527,193 @@ changes CPU cost per unit of work, **Q** = changes achievable quality.
 - Runs made before July 4/6 fixes are archived at
   `/Users/shirch/vscode101/.venv/ledger-artifacts/pre_fix_outputs_archive/`
   and are not comparable with anything in `output/`.
+
+---
+
+## 8. How to read the figures — every visual element
+
+### 8.1 The per-configuration plots (`gn_vs_grad_evals.png`, `gn_vs_cpu_time.png`)
+
+Both plots show the same two runs against different x-axes. All elements
+are drawn by `experiments._plot_plateau_pair`.
+
+- **The two solid curves** are the RAW GN\* measurement at each
+  checkpoint — *not* the monotone best-so-far curve. Red squares =
+  baseline (legend shows its grid resolution r); purple triangles =
+  adaptive method. Because the measurement is raw, a curve can go UP
+  between checkpoints; Section 9 explains when and why that genuinely
+  happens. (Summary tables and ratios in this document always use
+  best-so-far values, which never go up.)
+- **The y-axis is always log-scale.** GN\* spans orders of magnitude, and
+  equal vertical distances mean equal *factors*, not equal differences.
+  The vertical gap between the two curves at any x is the quality ratio
+  at that budget.
+- **The round dot ("plateau onset")** marks the first checkpoint at which
+  the plateau detector fired for that method: from there on, the
+  best-so-far curve improved by less than 5% over each of two consecutive
+  5-checkpoint windows (4 for crossover) AND over the whole remaining
+  tail. No dot = no plateau detected = the method was still improving
+  when the budget ran out.
+- **The horizontal dashed line ("plateau = X")** is the detected plateau
+  level: the *median of the best-so-far curve from the onset to the end*.
+  It is drawn only for a method whose plateau was found, in that method's
+  colour. Important consequence of using best-so-far: the dashed line can
+  sit at or below the lowest point the raw curve ever reached, so the raw
+  curve may spend most of its time visibly ABOVE its own plateau line
+  (extreme case: the 128x128 crossover run, §9.3). The line answers "what
+  level did the method's best result settle at", not "where does the raw
+  curve run".
+- **CPU-time plots only — the x-axis is log-scale.** The two methods'
+  total times differ by a factor of 30–100 (the adaptive method's
+  λ-search is real work), and on a linear axis the baseline's entire
+  curve would be crushed against the left margin.
+- **CPU-time plots only — the grey dotted VERTICAL line ("equal budget
+  reached: T")** stands at the shorter method's total time (here always
+  the baseline's). At that abscissa both methods have consumed the same
+  wall-clock time, so **the vertical gap between the two curves at this
+  dotted line is the equal-time quality comparison** — the fair
+  wall-clock verdict. Everything to the right of the line is the adaptive
+  method continuing to spend time the baseline never used (their shared
+  gradient budgets are equal; their time budgets are not).
+- **CPU-time plots only — the shared starting point.** Both methods start
+  from the same initial point with the same metric value, at t = 0. A log
+  axis cannot draw t = 0, so this shared checkpoint is plotted at a
+  pseudo-abscissa equal to one third of the first real measurement time,
+  and both curves are drawn from it. The first visible segment of each
+  curve (from that shared marker to the curve's first real checkpoint) is
+  therefore a connector for readability, not a measured trajectory.
+- **Why the adaptive curve often looks like a staircase** (flat stretches
+  separated by drops): GN\* is a worst-case-over-λ quantity. Work that
+  improves quality at weights *other than* the current worst one does not
+  move the maximum until the worst weight itself is served; when the
+  method finally fixes the worst region, the metric drops in one step.
+  Checkpoint spacing adds to the effect (improvements between checkpoints
+  appear all at once).
+
+### 8.2 The trend plots
+
+- `plateau/plateau_ratio_vs_K.png` — final-quality ratio
+  (baseline ÷ adaptive, best-so-far, log y) against K at the FIXED 30k
+  budget, with a horizontal line at ratio = 1. Read it together with the
+  §5.1 caveat: the apparent crossing below 1 at K=6 is a budget artefact,
+  resolved by the budget study.
+- `plateau/K6_budget_study.png` — unlike the per-configuration plots,
+  this one draws BEST-SO-FAR (monotone) curves: the three adaptive runs
+  (30k/90k/240k budgets, overlapping trajectories) against the 240k
+  baseline, with a horizontal dashed line at the baseline's grid floor
+  3.63e-03. It shows the baseline flatlining from ~56k gradients and the
+  adaptive method crossing the floor at ~105k.
+- `crossover/crossover_ratio_vs_d.png` — the two headline ratios
+  (equal-time and equal-gradient quality ratios, log y) against parameter
+  count d, horizontal line at 1. Both rise monotonically.
+
+---
+
+## 9. Behaviours visible in the curves, and their causes
+
+Three phenomena the figures show that are worth understanding rather than
+glossing over. None of them is a defect in the algorithms or the harness;
+all three follow from *what is being measured*.
+
+### 9.1 Why a raw baseline curve can RISE (e.g. the K=5 tail)
+
+In the K=5 plateau figure the baseline reaches its best level
+(4.04e-02) at ~4,800 gradients, and its raw curve then drifts UP to a
+stable ~5.2e-02 (+29%) for the rest of the run. Two mechanisms, one
+dominant here:
+
+1. **The baseline's measured point set moves under its feet (dominant).**
+   At each checkpoint the baseline's GN\* is computed over a SNAPSHOT of
+   the grid nodes' *current* iterates — one point per node, nothing kept
+   from earlier checkpoints (`baseline.py`, `bundle_from_points`). Every
+   node keeps taking gradient-descent steps on its OWN scalarisation
+   F_{λ_i}. A step that improves node i for its own weight λ_i can make
+   the *set* worse for an adversarial weight λ that lies BETWEEN grid
+   nodes — and GN\* takes the max over ALL λ, so the reported value
+   rises. Concretely at K=5: the floor is reached during the first
+   sweep, where warm-start chaining (each node initialised from its
+   neighbour) happens to leave the iterates spread out "between"
+   weights, covering intermediate λ well; the remaining ~4.7 passes then
+   pull each node tighter to its own λ_i optimum, and the coverage of
+   in-between weights degrades slightly. The elevated tail value is
+   STABLE (5.2130e-02 across many consecutive checkpoints), which is the
+   signature of a genuine geometric change, not measurement noise.
+   The adaptive method structurally cannot rise this way: its bundle only
+   ever GAINS points, and adding a point cannot increase the min over
+   points at any λ.
+2. **The metric itself is a heuristic maximisation (small wiggles, both
+   curves).** Each checkpoint's GN\* solves an NP-hard max over λ with
+   256 multistart IPOPT solves. A later checkpoint can simply FIND a
+   worse λ that an earlier search missed, so the reported value can rise
+   with no real change. This is the only rise mechanism available to the
+   adaptive curve, and correspondingly its up-moves are small and
+   transient (7 of 24 steps at K=5, versus 11 of 25 for the baseline).
+
+Reporting note: every table in this document uses best-so-far values,
+which are immune to both effects; the plots deliberately show the raw
+measurements so that these behaviours are visible rather than hidden.
+
+### 9.2 Why the baseline's fluctuation GROWS with width/depth (crossover)
+
+Compare the five crossover CPU plots: at 16x16 the red curve descends
+~70x from its start and its wiggles look minor; at 128x128 it descends
+only ~2.3x and the curve is essentially ALL wiggle (oscillating between
+~1.0 and ~2.9 around the level it reached in its first checkpoints).
+The relative size of single up-jumps is similar at every width (up to
+~90%); what changes is the amount of net descent underneath them:
+
+- first→last raw GN\*: 16x16: 1.56 → 0.0219 (~70x descent);
+  128x128: 2.74 → 1.19 (~2.3x).
+
+So the correct statement is not "the noise grows with d" but "the
+DESCENT shrinks with d, leaving only the noise". The cause of the
+vanishing descent is the baseline's fixed step size. Both methods
+receive the same probe-based estimates of the smoothness constants L,
+and that estimate degrades as the network widens (two-hidden-layer tanh
+networks of growing width have increasingly badly-probed curvature).
+Evidence from the same runs: the adaptive method's descent-lemma
+safeguard — which doubles its internal `L_scale` whenever the certified
+decrease fails — ended at L_scale = 4, 4, 8, 8, 16 across the five
+widths. The safeguard exists only in the adaptive method (the paper's
+Algorithm 1 prescribes none), so the baseline at 128x128 runs
+fixed-step GD with steps up to ~16x too long for the true curvature:
+its node iterates overshoot and oscillate instead of converging, and
+each of its 11 nodes only gets ~90 GD steps in total anyway
+(2,000 grads ÷ (2 objectives × 11 nodes × 5 steps/pass) ≈ 18 passes).
+An oscillating, non-converging set of nodes measured by a
+worst-case-over-λ metric produces exactly the high, ragged red curves
+the figures show at large d.
+
+This is the robustness asymmetry already flagged in §7: the adaptive
+method self-rescues from underestimated L, the baseline cannot. It is
+reported, not corrected, because the paper specifies the baseline
+without a safeguard. Note the asymmetry does not manufacture the
+headline result — the equal-GRADIENT ratios are already 61–333x at the
+widths where the baseline still descends fine (L_scale 4–8).
+
+### 9.3 The 128x128 CPU plot: the baseline never comes back under its own dashed line
+
+In `crossover/d19458_h128x128_tanh_n50000_B2000/gn_vs_cpu_time.png` the
+baseline's dashed plateau line sits at 9.274e-01, the raw red curve
+touches it exactly once (the onset dot at t≈15 s) and then oscillates
+between ~1.0 and ~2.9 ABOVE it for the entire remaining run. Why:
+
+- The plateau level is the median of the BEST-SO-FAR curve from onset.
+  The best-so-far curve latched the single dip to 0.927 at checkpoint 2
+  and never improved afterwards, so the median of its flat tail IS that
+  one dip value. The dashed line therefore marks "the best value the
+  baseline ever achieved, held for one checkpoint", not a level the
+  method sustains.
+- The raw curve never returns below the line because of §9.2: at this
+  width the baseline's steps are far too long for the true curvature,
+  its node iterates oscillate rather than converge, and the one dip was
+  a lucky transient of that oscillation.
+
+Two honest-reporting consequences, both favourable to the baseline: the
+reported "baseline final = 9.27e-01" credits it with its single best
+moment (the sustained raw level is ~1.2–2), and the 1,941x
+equal-gradient ratio is computed against that favourable reading. The
+adaptive curve on the same figure is below the baseline's line from its
+FIRST real checkpoint (t≈69 s, 160 gradients) onwards, and the vertical
+gap at the equal-budget line (t = 94.9 s) is the ~101x equal-time
+ratio of §5.2.

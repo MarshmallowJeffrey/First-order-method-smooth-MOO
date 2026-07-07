@@ -11,8 +11,10 @@ Public APIs unchanged except one new optional keyword (`activation`, §3b) with
 a backward-compatible default. No result-dictionary keys changed.
 
 Companion records: the July 4 soundness fixes are documented in
-`Note/Jul_5_note.md` and `PYTHON_CHANGES.md`; this note covers the *remaining*
-paper-vs-code differences found in a fresh July 6 review, after those fixes.
+`Note/Jul_5_note.md` and
+`Adaptive Bundle Algorithm/Python_Change.md/PYTHON_CHANGES.md`; this note
+covers the *remaining* paper-vs-code differences found in a fresh July 6
+review, after those fixes.
 
 ---
 
