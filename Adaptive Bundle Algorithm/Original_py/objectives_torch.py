@@ -43,12 +43,10 @@ def _sample_planted_data(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Sample (X, y, W_true) from the linear-softmax planted model.
 
-    W_true ~ N(0, 1)^{K x p}
+    W_true ~ Uniform[-w_true_scale, w_true_scale]^{K x p}   (paper §5.1.1: U[-1, 1])
     X      ~ N(0, I_p)^n
     y_j    ~ Categorical(softmax(W_true @ x_j))
 
-    ``w_true_scale`` is retained for API compatibility with the NumPy
-    implementation, whose current data generator also uses ``randn``.
     Sampling is repeated until every class appears at least once, because
     each class defines a separate optimisation objective.
     """
@@ -64,7 +62,7 @@ def _sample_planted_data(
 
     max_attempts = 1000
     for _ in range(max_attempts):
-        W_true = rng.randn(K, p)                              # match NumPy reference
+        W_true = rng.uniform(-w_true_scale, w_true_scale, size=(K, p))
         X = rng.randn(n, p)
         logits = X @ W_true.T                                 # (n, K)
         logits -= logits.max(axis=1, keepdims=True)           # numerical stability
@@ -88,17 +86,43 @@ def _sample_planted_data(
 # ====================================================================
 # Network builder
 # ====================================================================
-def _build_mlp(p: int, hidden_sizes: List[int], K: int) -> nn.Module:
-    """Build p -> h1 -> ... -> hL -> K with ReLU between hidden layers.
+_ACTIVATIONS = {
+    "relu": nn.ReLU,
+    "tanh": nn.Tanh,
+    "softplus": nn.Softplus,
+    "identity": nn.Identity,
+}
 
-    Matches the original when ``hidden_sizes=[h]`` (one hidden layer,
-    ReLU, then linear-to-K).
+
+def _build_mlp(p: int, hidden_sizes: List[int], K: int,
+               activation: str = "relu") -> nn.Module:
+    """Build p -> h1 -> ... -> hL -> K with the given hidden activation.
+
+    Matches the original when ``hidden_sizes=[h]`` and
+    ``activation="relu"`` (one hidden layer, ReLU, then linear-to-K).
+
+    Activation choice and the paper's assumptions: the paper's analysis
+    assumes every F_k has a Lipschitz gradient.  A ReLU network violates
+    this (the gradient jumps across every activation kink, so no finite
+    smoothness constant exists and the descent-lemma safeguard can be
+    forced into extreme step-size reductions), while smooth activations
+    ("tanh", "softplus") give C^inf objectives that satisfy the assumption
+    on bounded regions.  The paper's Section 5.1 names the activation as a
+    free choice ("e.g: identity, ReLU"); use "tanh" for experiments that
+    are meant to satisfy the theory.
     """
+    try:
+        act = _ACTIVATIONS[activation]
+    except KeyError:
+        raise ValueError(
+            f"activation must be one of {sorted(_ACTIVATIONS)}; "
+            f"got {activation!r}."
+        ) from None
     layers: List[nn.Module] = []
     prev = p
     for h in hidden_sizes:
         layers.append(nn.Linear(prev, h))
-        layers.append(nn.ReLU())
+        layers.append(act())
         prev = h
     layers.append(nn.Linear(prev, K))                          # final logits layer
     return nn.Sequential(*layers)
@@ -159,13 +183,16 @@ def make_mlp_nonconvex(
     seed: int = 7,
     w_true_scale: float = 1.0,
     n_probes: int = 40,
+    activation: str = "relu",
 ) -> Tuple[List[Callable], List[Callable], np.ndarray, Callable]:
     """Create K per-class cross-entropy objectives for a multi-layer MLP.
 
     Architecture
     ------------
     Input x_j in R^p
-      -> hidden layers with ReLU, widths given by ``hidden_sizes``
+      -> hidden layers with the chosen ``activation`` (default ReLU;
+         "tanh"/"softplus" give L-smooth objectives satisfying the
+         paper's assumptions — see ``_build_mlp``)
       -> output layer in R^K (logits z_j)
       -> softmax probabilities
 
@@ -210,7 +237,7 @@ def make_mlp_nonconvex(
     class_idx_np = [np.where(labels_np == i)[0] for i in range(K)]
 
     # ---- persistent torch objects (built once, reused every call) ----
-    net = _build_mlp(p, hidden_sizes, K)
+    net = _build_mlp(p, hidden_sizes, K, activation=activation)
     shapes, d = _param_shapes_and_total(net)
 
     # Pre-move data to torch. class_idx as long tensors for indexing.

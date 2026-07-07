@@ -2,7 +2,7 @@
 bundle.py  –  Core bundle data structure
 ==========================================================================
 
-This module implements the *bundle* B_m from Section 3 of the paper:
+This module implements the *bundle* B_m from Section 4 of the paper:
 
     B_m = { (x_i, F_1(x_i), ..., F_K(x_i), ∇F_1(x_i), ..., ∇F_K(x_i)) }_{i=1}^m
 
@@ -22,7 +22,9 @@ and we can immediately evaluate GN(λ; B_1).
 
 After adding x_2 = T(λ; B_1)  (one gradient descent step picking the best
 bundle point), each progress criterion is guaranteed to decrease or stay the
-same (Assumption 3.1, global monotonicity).
+same: GN is a min over a growing set (the global-monotonicity property the
+paper's Appendix A.1 proof relies on; its formal assumption is unnumbered
+in the current draft).
 """
 
 from __future__ import annotations

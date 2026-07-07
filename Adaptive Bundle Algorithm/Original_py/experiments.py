@@ -82,6 +82,8 @@ def _make_mlp_problem(
     hidden_sizes: Sequence[int],
     seed: int,
     n_probes: int = 40,
+    activation: str = "relu",
+    w_true_scale: float = 1.0,
 ):
     """Construct the canonical PyTorch MLP objective."""
     return make_mlp_nonconvex(
@@ -91,6 +93,8 @@ def _make_mlp_problem(
         hidden_sizes=list(hidden_sizes),
         seed=seed,
         n_probes=n_probes,
+        activation=activation,
+        w_true_scale=w_true_scale,
     )
 
 
@@ -183,8 +187,14 @@ def detect_plateau(
 
     Returns a dictionary containing ``found``, ``onset_index``,
     ``onset_grad_evals``, ``onset_cpu_time``, and ``plateau_level``.
-    ``plateau_level`` is the median raw GN* value from the detected onset to
-    the end of the run.
+    ``plateau_level`` is the median of the best-so-far GN* curve from the
+    detected onset to the end of the run — the same curve the detection
+    itself uses.  (It was previously the median of the raw, non-monotone
+    GN* values; raw values can drift upward after the onset — the
+    baseline's stored solutions genuinely move, and the reported GN* of
+    both methods carries multistart-solver noise — which inflated the
+    reported level relative to the quality the method had actually
+    achieved.)
     """
     cov = np.asarray(cov_history, dtype=float)
     grad_evals = np.asarray(grad_evals_history, dtype=int)
@@ -244,7 +254,7 @@ def detect_plateau(
             "onset_index": int(start),
             "onset_grad_evals": int(grad_evals[start]),
             "onset_cpu_time": float(times[start]),
-            "plateau_level": float(np.median(cov[start:])),
+            "plateau_level": float(np.median(best_so_far[start:])),
         }
 
     return not_found
@@ -309,9 +319,36 @@ def _plot_plateau_pair(
     x_label: str,
     title: str,
     out_path: str,
+    x_log: bool = False,
+    mark_equal_time: bool = False,
 ) -> str:
-    """Plot one pair of methods against a shared history variable."""
+    """Plot one pair of methods against a shared history variable.
+
+    ``x_log`` puts the shared axis on a log scale — needed for the CPU-time
+    plots, where the two methods' total times differ by orders of magnitude
+    and a linear axis crushes the faster method's whole curve into the left
+    margin.  A log axis cannot display x = 0, but the x = 0 checkpoint is
+    the two methods' SHARED starting value (the same initial point scored
+    by the same metric), so instead of dropping it we plot it at a pseudo-
+    abscissa left of the first real measurement, shared by both curves so
+    they visibly start from one point.
+
+    ``mark_equal_time`` draws a vertical line at the smaller of the two
+    methods' final x values: at that abscissa both methods have consumed
+    the same budget (time or gradients), so the vertical gap between the
+    curves there is the equal-budget quality comparison.
+    """
     output = unique_plot_path(out_path)
+
+    x0_pseudo = None
+    if x_log:
+        positive = [
+            float(v)
+            for res in (first_result, second_result)
+            for v in np.asarray(res[x_history_key], dtype=float)
+            if v > 0
+        ]
+        x0_pseudo = (min(positive) / 3.0) if positive else 1e-3
 
     fig, ax = plt.subplots(figsize=(7.2, 4.8))
     for result, plateau, label, style in (
@@ -321,14 +358,23 @@ def _plot_plateau_pair(
         x = np.asarray(result[x_history_key], dtype=float)
         y = np.asarray(result["cov_history"], dtype=float)
         y_plot = np.maximum(y, np.finfo(float).tiny)
+        if x_log:
+            x = np.where(x > 0, x, x0_pseudo)
         plot_style = {key: value for key, value in style.items() if key != "label"}
         ax.plot(x, y_plot, label=label, **plot_style)
 
         if plateau["found"]:
             onset = plateau["onset_index"]
+            x_full = np.asarray(result[x_history_key], dtype=float)
+            if x_log:
+                x_full = np.where(x_full > 0, x_full, x0_pseudo)
+            y_full = np.maximum(
+                np.asarray(result["cov_history"], dtype=float),
+                np.finfo(float).tiny,
+            )
             color = plot_style["color"]
             ax.scatter(
-                [x[onset]], [y_plot[onset]],
+                [x_full[onset]], [y_full[onset]],
                 color=color, edgecolor="black", linewidth=0.5,
                 s=65, zorder=5,
                 label=f"{label} plateau onset",
@@ -339,9 +385,22 @@ def _plot_plateau_pair(
                 label=f"{label} plateau = {plateau['plateau_level']:.3e}",
             )
 
+    if mark_equal_time:
+        x_eq = min(
+            float(np.asarray(first_result[x_history_key], dtype=float)[-1]),
+            float(np.asarray(second_result[x_history_key], dtype=float)[-1]),
+        )
+        if not (x_log and x_eq <= 0):
+            ax.axvline(
+                x_eq, color="dimgray", linestyle=":", linewidth=1.4,
+                label=f"equal budget reached: {x_eq:.3g}",
+            )
+
     ax.set_xlabel(x_label)
     ax.set_ylabel(r"$GN^*(\mathcal{B})$")
     ax.set_yscale("log")
+    if x_log:
+        ax.set_xscale("log")
     ax.set_title(title)
     ax.grid(True, which="both", alpha=0.25)
     ax.legend(frameon=False, fontsize=8)
@@ -411,6 +470,7 @@ def experiment_mlp_gn_coverage(
     require_ipopt: bool = False,
     l_n_probes: int = 40,
     oracle_benchmark_repeats: int = 0,
+    activation: str = "relu",
 ) -> Dict:
     """Non-convex MLP: GN* coverage, adaptive vs uniform.
 
@@ -448,6 +508,7 @@ def experiment_mlp_gn_coverage(
         hidden_sizes=resolved_hidden_sizes,
         seed=seed,
         n_probes=l_n_probes,
+        activation=activation,
     )
     problem_setup_time = time.perf_counter() - setup_start
     joint_oracle = prefer_fused_joint_oracle(joint)
@@ -587,6 +648,8 @@ def experiment_mlp_plateau_comparison(
     plateau_consecutive_windows: int = 2,
     output_dir: str = str(_DEFAULT_PLATEAU_DIR),
     hidden_sizes: Optional[Sequence[int]] = None,
+    activation: str = "relu",
+    w_true_scale: float = 1.0,
 ) -> Dict:
     """Compare baseline and strict-IPOPT adaptive plateaus.
 
@@ -594,6 +657,10 @@ def experiment_mlp_plateau_comparison(
     oracle, and gradient-evaluation budget.  Adaptive target-coverage stopping
     is disabled so each method can continue below the baseline's final level
     and expose its own plateau.
+
+    ``activation`` selects the hidden nonlinearity ("relu", "tanh",
+    "softplus", "identity").  Smooth activations satisfy the paper's
+    L-smoothness assumption; ReLU does not (see objectives_torch._build_mlp).
     """
     resolved_hidden_sizes = _resolve_hidden_sizes(h, hidden_sizes)
     # objectives_torch is imported at module load time, before algorithm.py
@@ -617,6 +684,8 @@ def experiment_mlp_plateau_comparison(
         n=n,
         hidden_sizes=resolved_hidden_sizes,
         seed=seed,
+        activation=activation,
+        w_true_scale=w_true_scale,
     )
     joint_oracle = prefer_fused_joint_oracle(joint)
     actual_init_seed = seed + 1 if init_seed is None else init_seed
@@ -630,8 +699,8 @@ def experiment_mlp_plateau_comparison(
     if verbose:
         print(
             f"  Shared problem: K={K}, p={p}, n={n}, "
-            f"hidden_sizes={resolved_hidden_sizes}, backend=torch, "
-            f"d={d}, "
+            f"hidden_sizes={resolved_hidden_sizes}, activation={activation}, "
+            f"backend=torch, d={d}, "
             f"max_grad_evals={max_grad_evals}, init_seed={actual_init_seed}"
         )
 
@@ -685,7 +754,7 @@ def experiment_mlp_plateau_comparison(
     problem_title = (
         "MLP plateau comparison "
         f"(K={K}, p={p}, n={n}, hidden_sizes={resolved_hidden_sizes}, "
-        "backend=torch)"
+        f"activation={activation}, backend=torch)"
     )
     gradient_plot = _plot_plateau_pair(
         baseline_result,
@@ -713,9 +782,11 @@ def experiment_mlp_plateau_comparison(
         "IPOPT Adaptive",
         _IPOPT_KW,
         x_history_key="cpu_times",
-        x_label="CPU time (s)",
+        x_label="CPU time (s, log scale)",
         title=f"{problem_title}: Baseline vs IPOPT Adaptive (CPU time)",
         out_path=str(output_root / "baseline_vs_ipopt_cpu_time.png"),
+        x_log=True,
+        mark_equal_time=True,
     )
     plots = {
         # Preserve the old result key for code that already reads it.
@@ -766,6 +837,7 @@ def experiment_mlp_plateau_comparison(
         "init_seed": actual_init_seed,
         "x0": x0.copy(),
         "hidden_sizes": resolved_hidden_sizes,
+        "activation": activation,
         "mlp_backend": "torch",
         "d": d,
     }

@@ -153,8 +153,10 @@ def uniform_discretisation(
     """Run the baseline in "progressive" mode, with periodic checkpoints.
 
     We construct a coarse grid G_r of Δ_K at resolution ``resolution``
-    and walk through it in warm-start order (lex sort).  Each pass
-    does ``steps_per_point_per_pass`` solver steps at every grid point.
+    and walk through it in snake (boustrophedon) warm-start order, so
+    consecutive grid points are ℓ₁-adjacent (≤ 2/r apart) as the paper's
+    Algorithm 1 enumeration requires.  Each pass does
+    ``steps_per_point_per_pass`` solver steps at every grid point.
 
     Checkpoint cadence
     ------------------

@@ -94,8 +94,7 @@ def _sample_planted_data(
 
     max_attempts = 1000
     for _ in range(max_attempts):
-        #W_true = rng.uniform(-w_true_scale, w_true_scale, size=(K, p))
-        W_true = rng.randn(K, p)
+        W_true = rng.uniform(-w_true_scale, w_true_scale, size=(K, p))
         X = rng.randn(n, p)
         true_logits = X @ W_true.T                   # (n, K)
         true_probs = _softmax(true_logits)           # (n, K)
