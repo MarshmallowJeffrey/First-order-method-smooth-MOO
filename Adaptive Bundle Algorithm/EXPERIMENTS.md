@@ -458,7 +458,10 @@ changes CPU cost per unit of work, **Q** = changes achievable quality.
   correctness. `L_scale_final` is recorded per run.
 - `epsilon` — None everywhere: budget mode (the paper's experimental
   protocol). ε-certificate mode exists in the code but is a separate,
-  unused pathway.
+  unused pathway. Since July 8 the baseline has the analogous optional
+  `node_tol` (per-node ‖∇F_{λ_i}‖² acceptance with per-visit entry checks
+  and all-nodes-served stopping; `Note/Jul_8_note.md`) — default off, and
+  no experiment in this document uses it.
 
 ### Complexity impact summary (time vs gradients)
 

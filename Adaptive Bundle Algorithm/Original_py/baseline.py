@@ -4,12 +4,29 @@ baseline.py  –  Uniform-discretisation baseline for smooth MOO
 
 Evaluation protocol
 -------------------
-- The baseline uses a coarser resolution r and runs warm-started gradient descent across the coarse grid
-  repeatedly.  The inner loop does NOT stop based on any per-point tolerance —
-  instead, after every M total gradient-descent iterations
-  (a "checkpoint"), we pause, evaluate the current worst-case error of
-  the rounded solution map, record (CPU time, err), and resume.
+- The baseline uses a coarser resolution r and runs warm-started gradient
+  descent across the coarse grid repeatedly.  There are two stopping modes:
 
+  * Budget mode (default, ``node_tol=None``): the inner loop does NOT stop
+    based on any per-point tolerance — every node is polished for a fixed
+    number of steps per pass until the pass schedule or the gradient budget
+    ``max_grad_evals`` runs out.  This is the paper's Algorithm 1
+    experimental protocol and the mode all benchmark sweeps use.
+
+  * Certification mode (``node_tol`` set): at each node visit, before any
+    step is taken, the gradient the first step would use anyway is checked;
+    a node with ‖∇F_{λ_i}(x)‖² ≤ node_tol is marked "served" and frozen
+    (later passes skip it, so the mark stays valid).  The run stops as soon
+    as every node is served — the cumulative gradient count at that moment
+    is the certification cost — or when ``max_grad_evals``, kept as a fuse,
+    is hit first, in which case the failure is reported honestly in the
+    result dictionary.  The check reuses the step gradient and never adds
+    oracle calls; the evaluation that triggers a mark is counted like any
+    other.
+
+- In both modes, after every M total gradient evaluations (a "checkpoint"),
+  we pause, evaluate the current worst-case error of the solution map,
+  record (CPU time, err), and resume.
 
 - The final comparison plot is CPU time (x-axis) vs worst-case
   function-value suboptimality (y-axis).
@@ -146,6 +163,7 @@ def uniform_discretisation(
     steps_per_point_per_pass: int = 20,
     eval_every_n_grads: Optional[int] = None,
     max_grad_evals: Optional[int] = None,
+    node_tol: Optional[float] = None,
     evaluate_coverage: bool = False,
     joint_oracle: Optional[Callable] = None,
     verbose: bool = False,
@@ -157,6 +175,24 @@ def uniform_discretisation(
     consecutive grid points are ℓ₁-adjacent (≤ 2/r apart) as the paper's
     Algorithm 1 enumeration requires.  Each pass does
     ``steps_per_point_per_pass`` solver steps at every grid point.
+
+    Certification mode (``node_tol`` set)
+    -------------------------------------
+    ``node_tol`` is the per-node acceptance level: a node whose own
+    weighting λ_i satisfies ‖∇F_{λ_i}(x)‖² ≤ node_tol counts as "served".
+    At every node visit the gradient the first step would consume anyway
+    is checked BEFORE stepping; a passing node is marked served, is not
+    moved, and is skipped by all later passes (so the mark stays valid).
+    The run ends when all nodes are served (certification success) or when
+    ``max_grad_evals`` — retained as a fuse — or the pass schedule runs out
+    first (certification failure, reported in the result dictionary).
+    Accounting follows the paper's protocol: the check reuses the step
+    gradient (never an extra oracle call) and the evaluation that triggers
+    a mark is counted like any other; on success a final checkpoint is
+    recorded as usual, so ``cov_history[-1]`` is the measured GN* of the
+    delivered point set at certification time (metric cost excluded from
+    both axes, as always).  With the default ``node_tol=None`` the
+    behaviour is exactly the pre-existing budget mode.
 
     Checkpoint cadence
     ------------------
@@ -178,6 +214,9 @@ def uniform_discretisation(
     steps_per_point_per_pass  : solver steps taken at each grid point per pass.
     eval_every_n_grads        : if set, checkpoint every M gradient evals, including mid-pass.
     max_grad_evals            : optional hard budget on cumulative gradient evaluations.
+                                In certification mode this is the fuse.
+    node_tol                  : optional per-node acceptance level on ‖∇F_{λ_i}‖²
+                                (certification mode, see above).  None = budget mode.
 
     Returns
     -------
@@ -185,9 +224,29 @@ def uniform_discretisation(
         "coarse_grid"             : (N, K) array of grid points.
         "final_solutions"         : (N, d) array of final solutions.
         "cpu_times"               : list of CPU times at each checkpoint (s).
+        "cov_history"             : measured GN* per checkpoint (only when
+                                    ``evaluate_coverage=True``).
         "total_iters_history"     : cumulative scalarised iters per ckpt.
         "grad_evals_history"      : cumulative gradient-oracle evals per ckpt (= total_iters * K).
         "resolution"              : grid resolution used.
+        "max_grad_evals"          : the budget/fuse that was in force.
+        "node_tol"                : the acceptance level used (None = budget mode).
+    and, describing certification (all None when ``node_tol`` is None):
+        "certified"               : True iff every node was served before the
+                                    fuse/pass schedule ran out.
+        "certified_grad_evals"    : cumulative gradient evaluations at the
+                                    moment the last node certified (the
+                                    certification cost); None on failure.
+        "node_served"             : list of N booleans, service status per node.
+        "node_grad_sq"            : list of N floats, last measured ‖∇F_{λ_i}‖²
+                                    per node.  For a served node this is the
+                                    certifying value at its frozen point (exact
+                                    from then on); for an unserved node it is
+                                    the gradient of its most recent step, i.e.
+                                    it lags that node's final position by one
+                                    step; NaN if the node was never visited.
+        "unserved_nodes"          : list of node indices not yet served
+                                    (empty on certification success).
     """
     x0_arr = np.asarray(x0, dtype=float)
     if x0_arr.ndim != 1 or x0_arr.size == 0:
@@ -212,6 +271,15 @@ def uniform_discretisation(
         raise ValueError(
             f"max_grad_evals must be at least K={K}; got {max_grad_evals}."
         )
+    if node_tol is not None and (
+        not isinstance(node_tol, (int, float, np.integer, np.floating))
+        or isinstance(node_tol, (bool, np.bool_))
+        or not np.isfinite(node_tol)
+        or node_tol <= 0.0
+    ):
+        raise ValueError(
+            f"node_tol must be a finite positive number or None; got {node_tol!r}."
+        )
 
     joint_oracle = prefer_fused_joint_oracle(joint_oracle)
     coarse_grid = _sort_grid_for_warmstart(_uniform_simplex_grid(K, resolution))
@@ -220,6 +288,15 @@ def uniform_discretisation(
     # Initialise all grid-point solutions to x0.
     solutions = np.tile(x0_arr, (N, 1))
 
+    # Certification-mode state.  ``node_grad_sq`` holds the most recently
+    # measured ‖∇F_{λ_i}‖² per node (NaN = never visited); it is only
+    # written in certification mode, where the squared norm of the step
+    # gradient is a free by-product (a dot product, never an oracle call).
+    certifying = node_tol is not None
+    node_served = np.zeros(N, dtype=bool)
+    node_grad_sq = np.full(N, np.nan)
+    certified_grad_evals: Optional[int] = None
+    all_served = False
 
     cpu_times: List[float] = []
     cov_history: List[float] = []
@@ -279,6 +356,12 @@ def uniform_discretisation(
         # point from its own stored solution.
         x_prev = solutions[0].copy()
         for g_idx in range(N):
+            if certifying and node_served[g_idx]:
+                # A served node is frozen: no oracle calls, no movement, so
+                # the mark stays valid.  Marks are only set during a visit,
+                # so this can never skip a node on the pass-1 warm-start
+                # chain (x_prev is not read on later passes).
+                continue
             lam = coarse_grid[g_idx]
             Ll = float(lam @ L_arr)
 
@@ -287,8 +370,9 @@ def uniform_discretisation(
             else:
                 x = solutions[g_idx].copy()
 
-            # Vanilla GD.
-            for _ in range(steps_per_point_per_pass):
+            # Vanilla GD, with the certification-mode acceptance check on
+            # each visit's first step gradient.
+            for step_idx in range(steps_per_point_per_pass):
                 if (
                     max_grad_evals is not None
                     and (total_iters + 1) * K > max_grad_evals
@@ -315,8 +399,23 @@ def uniform_discretisation(
                             )
                         grad_rows.append(grad_k)
                     g_lam = lam @ np.vstack(grad_rows)
-                x = x - (1.0 / Ll) * g_lam
+                certified_now = False
+                if certifying:
+                    node_grad_sq[g_idx] = float(g_lam @ g_lam)
+                    if step_idx == 0 and node_grad_sq[g_idx] <= node_tol:
+                        # Acceptance check, before stepping: the gradient
+                        # the first step would have consumed certifies this
+                        # node.  Mark it served and leave the point unmoved;
+                        # the evaluation was real oracle work and is counted
+                        # like any other.
+                        node_served[g_idx] = True
+                        certified_now = True
+                if not certified_now:
+                    x = x - (1.0 / Ll) * g_lam
                 total_iters += 1
+                if certified_now and bool(node_served.all()):
+                    certified_grad_evals = total_iters * K
+                    all_served = True
 
                 # When gradient-based checkpointing is requested, record the
                 # current state immediately rather than waiting for a full
@@ -336,31 +435,49 @@ def uniform_discretisation(
                     )
                     grad_evals_at_last_ckpt = cur_grad_evals
 
+                if all_served:
+                    break
                 if (
                     max_grad_evals is not None
                     and cur_grad_evals >= max_grad_evals
                 ):
                     budget_exhausted = True
                     break
+                if certified_now:
+                    # The visit is over: no steps are taken at a node that
+                    # certified on entry.
+                    break
 
             solutions[g_idx] = x
             x_prev = x
-            if budget_exhausted:
+            if budget_exhausted or all_served:
                 break
 
         # With the default cadence, every pass boundary is a checkpoint.  For
         # gradient-based cadence, mid-pass checkpoints were already recorded;
         # only add a boundary checkpoint for the final state when needed.
         cur_grad_evals = total_iters * K
-        final_state = pass_idx == n_passes or budget_exhausted
+        final_state = pass_idx == n_passes or budget_exhausted or all_served
         do_ckpt = eval_every_n_grads is None or (
             final_state and cur_grad_evals != grad_evals_at_last_ckpt
         )
         if do_ckpt:
             _checkpoint(f"pass {pass_idx}/{n_passes}")
             grad_evals_at_last_ckpt = cur_grad_evals
-        if budget_exhausted:
+        if budget_exhausted or all_served:
             break
+
+    if verbose and certifying:
+        if bool(node_served.all()):
+            print(
+                f"  Baseline certification: all {N} nodes served at "
+                f"grad_evals={certified_grad_evals}."
+            )
+        else:
+            print(
+                "  Baseline certification FAILED within the budget/schedule: "
+                f"{int(node_served.sum())}/{N} nodes served."
+            )
 
     return {
         "coarse_grid": coarse_grid,
@@ -371,4 +488,14 @@ def uniform_discretisation(
         "cov_history": cov_history,
         "resolution": resolution,
         "max_grad_evals": max_grad_evals,
+        "node_tol": node_tol,
+        "certified": bool(node_served.all()) if certifying else None,
+        "certified_grad_evals": certified_grad_evals,
+        "node_served": node_served.tolist() if certifying else None,
+        "node_grad_sq": node_grad_sq.tolist() if certifying else None,
+        "unserved_nodes": (
+            [int(i) for i in np.flatnonzero(~node_served)]
+            if certifying
+            else None
+        ),
     }

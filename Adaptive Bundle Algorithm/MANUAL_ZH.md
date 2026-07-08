@@ -50,7 +50,7 @@
 |---|---|
 | `algorithm.py` | 论文的**算法 2**(自适应束方法):外层循环、多起点最大—最小 λ 搜索(`_maximise_GN`,IPOPT,失败时退到 SLSQP)、T 映射内层步(式 10,批量化,最小下标破平局)、下降引理保护机制(自适应 `L_scale` 加倍并发 RuntimeWarning)、ε 模式,以及 GN\* 质量度量(`pc_star`,固定 256 起点的尺子)。 |
 | `bundle.py` | `Bundle` 容器:每个算过的点连同全部 K 个分目标梯度;可在任意 λ 处由存储组装 ∇F_λ。 |
-| `baseline.py` | 论文的**算法 1**(均匀离散化基线):分辨率 r 的单纯形网格、带热启动的蛇形顺序、每节点固定步长梯度下降、检查点,以及用同一 GN\* 度量给基线打分所用的快照束。 |
+| `baseline.py` | 论文的**算法 1**(均匀离散化基线):分辨率 r 的单纯形网格、带热启动的蛇形顺序、每节点固定步长梯度下降、检查点,以及用同一 GN\* 度量给基线打分所用的快照束。另有可选的认证模式(`node_tol`,默认关闭,当前所有实验均未使用):逐节点的 ‖∇F_{λ_i}‖² 验收检查,全部节点达标即停(见 `Note/Jul_8_note.md`)。 |
 | `objectives_torch.py` | MLP 测试台(PyTorch):植入式线性 softmax 数据(论文 §5.1.1,W* ~ U[−1,1])、K 个按类交叉熵目标、可选激活函数(`relu`/`tanh`/`softplus`/`identity`——基准用 `tanh`)、基于探针的光滑常数估计、融合式联合梯度调用。 |
 | `objectives_numpy.py` | NumPy 问题生成器,含只被验证脚本使用的强凸逻辑回归测试台(没有实验驱动用它)。 |
 | `experiments.py` | 实验驱动与分析:`experiment_mlp_plateau_comparison`(两个扫描都用的等预算一对一比较,**核心驱动**)、`experiment_mlp_gn_coverage`(遗留的到目标时间设计——不用于主要数字)、`detect_plateau`,以及全部绘图(`_plot_plateau_pair` 画出 `EXPERIMENTS.md` §8 描述的每个图元素)。 |
