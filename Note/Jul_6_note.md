@@ -148,19 +148,13 @@ unchanged — only the reported level.
 
 ## 3b. Selectable activation function — the testbed now can satisfy the paper's smoothness assumption
 
-**What changed.** `objectives_torch.make_mlp_nonconvex` (and the experiment
-drivers in `experiments.py`) accept `activation`: one of `"relu"` (default,
-backward compatible), `"tanh"`, `"softplus"`, `"identity"`. The experiment
-runner (`run_experiments.py`) runs its sweeps with `"tanh"`.
+**What changed.** `objectives_torch.make_mlp_nonconvex` (and the experiment drivers in `experiments.py`) accept `activation`: one of `"relu"` (default, backward compatible), `"tanh"`, `"softplus"`, `"identity"`. The experiment runner (`run_experiments.py`) runs its sweeps with `"tanh"`.
 
 **What the code did before.** The hidden activation was hard-coded ReLU.
 
 **Why this matters — an empirical finding, not just a conformance point.**
 The paper's entire analysis assumes each F_k has a Lipschitz gradient
-(L_k-smooth). A ReLU network violates this: the gradient jumps across every
-activation kink, so no finite smoothness constant exists (the July 5 note
-§1 flagged this). The first full equal-budget plateau sweep on the fixed
-code showed how bad the consequences are in practice:
+(L_k-smooth). A ReLU network violates this: the gradient jumps across every activation kink, so no finite smoothness constant exists (the July 5 note §1 flagged this). The first full equal-budget plateau sweep on the fixed code showed how bad the consequences are in practice:
 
 * At K=3 and K=4 the descent-lemma safeguard, hitting genuine kink
   violations, doubled the step-size divisor to `L_scale_final` = 2^24 and
@@ -180,17 +174,7 @@ code showed how bad the consequences are in practice:
 The fix follows the paper: Section 5.1 introduces the activation as a free
 choice ("Let σ be the activation function, e.g: identity, ReLU"), and the
 paper's assumptions require L-smoothness, which tanh/softplus satisfy on
-bounded regions (C-infinity, bounded second derivatives through the softmax
-head) and ReLU does not. Running the benchmark suite with `tanh` puts the
-experiments inside the theory's assumptions. Verified effect on the re-run
-sweep: `L_scale_final` drops from 2^24–2^25 to 2–16 (the safeguard's
-intended occasional-correction regime), the step-size collapse is gone,
-and the K=3 direction inverts back to a 52x adaptive advantage. One
-configuration (K=6) remains unfavourable to the adaptive method after the
-fix — that residue is a genuine instance-structure phenomenon, not a
-step-size artefact; it was investigated to closure with a seven-variant
-diagnosis matrix and is documented in `EXPERIMENTS.md` §5.1 and
-`output/plateau/README.md`.
+bounded regions (C-infinity, bounded second derivatives through the softmax head) and ReLU does not. Running the benchmark suite with `tanh` puts the experiments inside the theory's assumptions. Verified effect on the re-run sweep: `L_scale_final` drops from 2^24–2^25 to 2–16 (the safeguard's intended occasional-correction regime), the step-size collapse is gone, and the K=3 direction inverts back to a 52x adaptive advantage. One configuration (K=6) remains unfavourable to the adaptive method after the fix — that residue is a genuine instance-structure phenomenon, not a step-size artefact; it was investigated to closure with a seven-variant diagnosis matrix and is documented in `EXPERIMENTS.md` §5.1 and `output/plateau/README.md`.
 
 The ReLU sweep that exposed this is archived at
 `/Users/shirch/vscode101/.venv/ledger-artifacts/relu_sweep_archive/` as

@@ -467,7 +467,8 @@ def experiment_mlp_gn_coverage(
     baseline_max_grad_evals: Optional[int] = None,
     adaptive_max_grad_evals: Optional[int] = None,
     lambda_solver: str = "ipopt",
-    require_ipopt: bool = False,
+    # Default True (changed July 8, in step with algorithm.algorithm_adaptive).
+    require_ipopt: bool = True,
     l_n_probes: int = 40,
     oracle_benchmark_repeats: int = 0,
     activation: str = "relu",

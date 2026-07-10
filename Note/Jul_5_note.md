@@ -13,94 +13,42 @@ Public APIs unchanged, except two new keys in `algorithm_adaptive`'s result dict
 
 The bundle method uses the smoothness constants L in two places in the algorithm, not one:
 
-* **Step size.** For weighting λ, the scalarized objective F_λ = Σ λ_k F_k is L_λ-smooth with
-  L_λ = Σ λ_k L_k, and the T-map steps with size 1/L_λ.
-* **Point selection** — the bundle-specific part. The T-map scores every bundle point by
-  u_i = F_λ(x_i) − ‖∇F_λ(x_i)‖² / (2 L_λ) — the certified post-step value if you stepped from
-  x_i — and steps from the argmin, ties broken by lowest index (`algorithm.py:100-129`).
+* **Step size.** For weighting λ, the scalarized objective F_λ = Σ λ_k F_k is L_λ-smooth with L_λ = Σ λ_k L_k, and the T-map steps with size 1/L_λ.
+* **Point selection** — the bundle-specific part. The T-map scores every bundle point by u_i = F_λ(x_i) − ‖∇F_λ(x_i)‖² / (2 L_λ) — the certified post-step value if you stepped from x_i — and steps from the argmin, ties broken by lowest index (`algorithm.py:100-129`).
 
 L also enters the theory: the paper's inner-loop iteration bound is
 M_t ≤ ⌈3 · C_λ · L_λ / ε⌉ with C_λ ≥ 2·[F_λ(x₁) − F_λ*] (Corollary 4.1 + Appendix A.1).
 
-So L is not just a step size; it is the yardstick by which the algorithm predicts the future and
-chooses where to work.
+So L is not just a step size; it is the yardstick by which the algorithm predicts the future and chooses where to work.
 
-Crucially, the theory only needs L to be an **upper bound** on the true curvature. Overestimate it
-and you take smaller steps — slower, but every guarantee still holds. Underestimate it and the
-guaranteed-decrease formula becomes a lie the algorithm keeps believing.
+Crucially, the theory only needs L to be an **upper bound** on the true curvature. Overestimate it and you take smaller steps — slower, but every guarantee still holds. Underestimate it and the guaranteed-decrease formula becomes a lie the algorithm keeps believing.
 
 ### The frozen loop (the failure this fix removes)
 
-With L too small, the step 1/L_λ is too big, so the step can land **higher** than the promised
-value u*. Here is the vicious part: the selection rule ranks points by their promise, and an
-understated L inflates every promise. The new (bad) point's promise is **no better than the old
-anchor's — worse, or exactly tied, and ties break to the lowest index, i.e. the older point**
-(that tie-break is what locks the reproduced 2-cycle). So the next iteration re-selects the exact
-same anchor, takes the exact same step, and appends a byte-identical point to the bundle —
-forever. Each duplicate still costs K gradient evaluations (`algorithm.py:774`). Nothing errors,
-because nothing fails numerically; the run just silently burns its entire budget making no
-progress. One reproduced run had 375 copies of one point.
+With L too small, the step 1/L_λ is too big, so the step can land **higher** than the promised value u*. Here is the vicious part: the selection rule ranks points by their promise, and an understated L inflates every promise. The new (bad) point's promise is **no better than the old anchor's — worse, or exactly tied, and ties break to the lowest index, i.e. the older point** (that tie-break is what locks the reproduced 2-cycle). So the next iteration re-selects the exact same anchor, takes the exact same step, and appends a byte-identical point to the bundle — forever. Each duplicate still costs K gradient evaluations (`algorithm.py:774`). Nothing errors, because nothing fails numerically; the run just silently burns its entire budget making no progress. One reproduced run had 375 copies of one point.
 
-This is the mechanism that froze the flagship `mlp_crossover_h64x64/h80x80/h96x96` and
-`run_plateau8` notebook runs for hours at their first adaptive checkpoint (their output
-directories stayed empty), while the baseline stage of the same notebooks completed.
+This is the mechanism that froze the flagship `mlp_crossover_h64x64/h80x80/h96x96` and `run_plateau8` notebook runs for hours at their first adaptive checkpoint (their output directories stayed empty), while the baseline stage of the same notebooks completed.
 
 ### Where the wrong L came from (two separate causes in the MLP testbed)
 
-* **The quantity does not exist: ReLU.** A ReLU MLP's gradient is discontinuous across every
-  activation-kink hyperplane, so no finite global gradient-Lipschitz constant exists; any finite
-  estimate is an estimate of an infinite quantity, and it stays finite only because random probes
-  rarely straddle a kink at small separation. (In addition, the logits are bilinear in the
-  weights, so the Hessian grows with ‖θ‖ — global L-smoothness fails even ignoring kinks.)
-* **The probes measured the wrong region.** The code estimated L empirically: 40 random pairs of
-  nearby parameter vectors *per objective* (t1 = 0.5·randn(d), t2 = t1 + 0.1·randn(d)), take the
-  worst gradient-difference ratio, double it for safety (`objectives_torch.py:299-314`; same
-  scheme in the NumPy backend). Those probes live at a scale of ~0.5 per coordinate, while the
-  actual optimization starts at He initialization — per-layer std roughly 0.14–0.32 for the
-  crossover nets, ≈ 0.18 for the width-64 hidden layers, hidden biases 1e-2, output bias 0
-  (`experiments.py:123-163`) — and then wanders along its own trajectory. Measuring curvature
-  where the probes happened to land tells you little about curvature where the optimizer
-  actually walks.
+* **The quantity does not exist: ReLU.** A ReLU MLP's gradient is discontinuous across every activation-kink hyperplane, so no finite global gradient-Lipschitz constant exists; any finite estimate is an estimate of an infinite quantity, and it stays finite only because random probes rarely straddle a kink at small separation. (In addition, the logits are bilinear in the weights, so the Hessian grows with ‖θ‖ — global L-smoothness fails even ignoring kinks.)
+* **The probes measured the wrong region.** The code estimated L empirically: 40 random pairs of earby parameter vectors *per objective* (t1 = 0.5·randn(d), t2 = t1 + 0.1·randn(d)), take the worst gradient-difference ratio, double it for safety (`objectives_torch.py:299-314`; same scheme in the NumPy backend). Those probes live at a scale of ~0.5 per coordinate, while the actual optimization starts at He initialization — per-layer std roughly 0.14–0.32 for the crossover nets, ≈ 0.18 for the width-64 hidden layers, hidden biases 1e-2, output bias 0 (`experiments.py:123-163`) — and then wanders along its own trajectory. Measuring curvature where the probes happened to land tells you little about curvature where the optimizer actually walks.
 
-(A third instance — an analytically mis-derived constant in the logistic-regression testbed — is
-covered in §2.)
+(A third instance — an analytically mis-derived constant in the logistic-regression testbed — iscovered in §2.)
 
 ### The fix (in `algorithm.py`)
 
-* **A runtime safety check — the important one.** After every inner step, the code compares the
-  actual new value F_λ(x_new) against the promised value u*. Both numbers were already being
-  computed, so the check is free (`algorithm.py:509`, relative tolerance 1e-10·(1+|u*|)). If the
-  promise is broken, that is mathematical proof that L was too small, so the algorithm doubles a
-  global multiplier `L_scale` on L (halving future steps), issues a Python `RuntimeWarning` once,
-  and records the final multiplier in the results (`L_scale_final`). If it has to double past
-  2⁶⁰, it raises a `RuntimeError` with a clear message that the objectives simply are not
-  L-smooth along the iterates (`algorithm.py:737-757`).
-* **Fully deterministic and self-adjusting** — nothing random, nothing you pick. It starts at 1.
-  After each step: promise kept → leave it alone; promise broken → double it. It only ever
-  increases. So the final value is always a power of 2: the first one large enough that the
-  scaled L stopped being violated **along the actual trajectory**. "Settled at 2" decodes as:
-  exactly one violation occurred during that run — the probe estimate proved too small once, was
-  doubled, and 2× the probe was never contradicted again.
-* **It is a global multiplier** — one scalar multiplying the whole vector of K constants at once.
-  Conservative: if only one objective's constant was too low, everyone's steps shrink; still
-  valid, just slightly slower for the others.
-* **The violating point stays in the bundle.** Its oracle evaluation is already paid for, and
-  under a valid (rescaled) L a bad point is simply never re-selected.
+* **A runtime safety check — the important one.** After every inner step, the code compares the actual new value F_λ(x_new) against the promised value u*. Both numbers were already being computed, so the check is free (`algorithm.py:509`, relative tolerance 1e-10·(1+|u*|)). If the promise is broken, that is mathematical proof that L was too small, so the algorithm doubles a global multiplier `L_scale` on L (halving future steps), issues a Python `RuntimeWarning` once, and records the final multiplier in the results (`L_scale_final`). If it has to double past 2⁶⁰, it raises a `RuntimeError` with a clear message that the objectives simply are not L-smooth along the iterates (`algorithm.py:737-757`).
+* **Fully deterministic and self-adjusting** — nothing random, nothing you pick. It starts at 1. After each step: promise kept → leave it alone; promise broken → double it. It only ever increases. So the final value is always a power of 2: the first one large enough that the scaled L stopped being violated **along the actual trajectory**. "Settled at 2" decodes as: exactly one violation occurred during that run — the probe estimate proved too small once, was doubled, and 2× the probe was never contradicted again.
+* **It is a global multiplier** — one scalar multiplying the whole vector of K constants at once. Conservative: if only one objective's constant was too low, everyone's steps shrink; still valid, just slightly slower for the others.
+* **The violating point stays in the bundle.** Its oracle evaluation is already paid for, and under a valid (rescaled) L a bad point is simply never re-selected.
 * This is faithful to the paper, which itself sketches online L re-estimation (its Eq. 22) that
   was never implemented.
 
 ### Scope and suggestion
 
-* The safeguard protects the **adaptive method only**. The baseline's fixed-step 1/L_λ gradient
-  descent still trusts the supplied L with no check. It cannot freeze (it has no selection rule),
-  but under the same bad L its subproblem solves can silently take invalid steps — keep this in
-  mind when reading head-to-head comparisons on ReLU MLPs.
-* One honest caveat: on ReLU networks the warning will fire in essentially every run, because no
-  finite L exists — the safeguard adapts to the curvature along the actual trajectory, which is
-  the best any first-order method can do there. Smooth activations (tanh, GELU, softplus) in the
-  test problems remove the kink problem and restore C^∞ — but note that even then an MLP is not
-  *globally* gradient-Lipschitz (bilinear logits ⇒ the Hessian grows with ‖θ‖); smoothness then
-  holds on bounded regions, which is the standard regime for local analyses.
+* The safeguard protects the **adaptive method only**. The baseline's fixed-step 1/L_λ gradient descent still trusts the supplied L with no check. It cannot freeze (it has no selection rule), but under the same bad L its subproblem solves can silently take invalid steps — keep this in mind when reading head-to-head comparisons on ReLU MLPs.
+* One honest caveat: on ReLU networks the warning will fire in essentially every run, because no finite L exists — the safeguard adapts to the curvature along the actual trajectory, which is the best any first-order method can do there. Smooth activations (tanh, GELU, softplus) in the test problems remove the kink problem and restore C^∞ — but note that even then an MLP is not *globally* gradient-Lipschitz (bilinear logits ⇒ the Hessian grows with ‖θ‖); smoothness then holds on bounded regions, which is the standard regime for local analyses.
 
 ---
 
@@ -170,34 +118,19 @@ globally optimal (see §7).
 
 ### What the old code did
 
-It generated all the grid weightings and visited them in dictionary (lexicographic) order via
-`np.lexsort`, warm-starting each subproblem from the previous subproblem's solution. Its own
-docstring claimed consecutive points are ℓ₁-close (≤ 2/r apart).
+It generated all the grid weightings and visited them in dictionary (lexicographic) order via `np.lexsort`, warm-starting each subproblem from the previous subproblem's solution. Its own docstring claimed consecutive points are ℓ₁-close (≤ 2/r apart).
 
 ### What was wrong with that
 
-Dictionary order is fine for K = 2, but for K ≥ 3 it has "carry" moments — like counting
-099 → 100, where several digits change at once. At those moments the next λ is far from the
-previous one, so the warm start begins from a nearly opposite trade-off and is useless there.
-Two consequences:
+Dictionary order is fine for K = 2, but for K ≥ 3 it has "carry" moments — like counting 099 → 100, where several digits change at once. At those moments the next λ is far from the previous one, so the warm start begins from a nearly opposite trade-off and is useless there. Two consequences:
 
-* (a) it violates the ≤ 2/r consecutive-adjacency assumption behind the paper's cost analysis
-  for the baseline (Algorithm 1's enumeration guarantee) — an assumption the old code's own
-  docstring asserted;
-* (b) it wastes the baseline's work: at K = 6, r = 9, **494 of 2001 consecutive hops (~25%)
-  broke the ≤ 2/r bound**, with jump sizes ranging up to the simplex diameter ℓ₁ = 2.0 (only a
-  handful of the outermost carries hit the full 2.0; the rest are intermediate sizes). A baseline
-  that is accidentally weakened also makes the comparison against the adaptive method unfair.
+* (a) it violates the ≤ 2/r consecutive-adjacency assumption behind the paper's cost analysis for the baseline (Algorithm 1's enumeration guarantee) — an assumption the old code's own docstring asserted;
+* (b) it wastes the baseline's work: at K = 6, r = 9, **494 of 2001 consecutive hops (~25%) broke the ≤ 2/r bound**, with jump sizes ranging up to the simplex diameter ℓ₁ = 2.0 (only a handful of the outermost carries hit the full 2.0; the rest are intermediate sizes). A baseline that is accidentally weakened also makes the comparison against the adaptive method unfair.
 
 ### How the new code solves it
 
-`_snake_compositions` (`baseline.py:57`) builds an ordering that walks through all the integer
-splits moving exactly one unit at a time. The trick: it counts the first coordinate upward, and
-enumerates the remaining coordinates forward on even blocks and backward on odd blocks — back and
-forth, like plowing a field row by row — so that neighboring blocks meet at adjacent points.
-`_sort_grid_for_warmstart` (`baseline.py:76`) then reorders the existing grid to follow that
-path. Every hop is now exactly 2/r; this was checked exhaustively for every K from 2 to 7.
-Nothing else changed — same grid points, same solver, only the visiting order.
+`_snake_compositions` (`baseline.py:57`) builds an ordering that walks through all the integer splits moving exactly one unit at a time. The trick: it counts the first coordinate upward, and enumerates the remaining coordinates forward on even blocks and backward on odd blocks — back and forth, like plowing a field row by row — so that neighboring blocks meet at adjacent points.
+`_sort_grid_for_warmstart` (`baseline.py:76`) then reorders the existing grid to follow that path. Every hop is now exactly 2/r; this was checked exhaustively for every K from 2 to 7. Nothing else changed — same grid points, same solver, only the visiting order.
 
 ---
 

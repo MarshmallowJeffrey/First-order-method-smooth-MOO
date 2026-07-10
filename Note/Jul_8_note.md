@@ -123,3 +123,51 @@ and the function docstring (parameter + returned keys + semantics).
   during its steps is caught at its next visit's entry check (cost: K
   evaluations), which slightly overstates certification cost in exchange
   for zero extra oracle calls and unchanged step behaviour.
+
+## Addendum (July 8, evening): certified-mode Pareto-front comparison runner
+
+New file `Original_py/run_pareto_certified_without_256_checkpoints.py`
+(no existing file modified). It runs the K=2 96x96 crossover configuration
+in CERTIFIED mode on the without-256-checkpoints measurement track — one
+baseline run (eps 0.01, translated to `node_tol = eps/4` by an equal
+norm-budget split, the other half of the norm budget being the r-grid's
+between-node share h*D, h = 1/(2r); the exact all-lambda certificate
+(sqrt(node value) + h*||g1 - g2||)^2 is audited per node after the run) and
+two adaptive runs (eps 0.01 and 0.001, stopping at own-search value
+<= 2*eps/3), budget 2,000 kept as the fuse. It then extracts Pareto-front
+figures with NO re-optimisation: for each lambda=(t,1-t) on a 1,001-point
+sweep, each method delivers argmin over its point set of
+||grad F_lambda||^2 — stored bundle gradients/fvals for the adaptive
+method; one post-run joint-oracle call per grid node (presentation work)
+supplies the baseline's values/gradients and feeds the certificate audit.
+Outputs under `output/pareto_certified_without_256_checkpoints/`
+(README.md, pareto_data.json, two combo figures, three per-run
+summary.json). Smoke-tested end-to-end (`--smoke`) before the real runs;
+smoke folder deleted.
+
+Same-day follow-ups to the runner: (1) the combo figures switched to
+log-log axes with short in-axes legends and run outcomes in the title
+(the first linear version was dominated by the baseline's extreme
+nodes); (2) a `--resolution R` override was added for grid-density
+studies — it changes only the baseline's r and writes to a separate
+`..._r<R>` folder (adaptive runs are repeated identically so each folder
+is self-contained); used for the user-requested r=20 re-run. A Chinese
+findings write-up `FINDINGS_ZH.md` was added to the r=10 results folder.
+
+## Addendum (July 8, later): `require_ipopt` default flipped to True
+
+User-requested API change: `require_ipopt` now defaults to **True**
+(was False) in `algorithm.algorithm_adaptive`, its A/B copy
+`algorithm_without_256_checkpoints.algorithm_adaptive`, and the legacy
+driver `experiments.experiment_mlp_gn_coverage`. Effect: a machine
+without a working cyipopt/IPOPT install now fails loudly at run start
+instead of silently degrading the lambda-search to SLSQP; a run that
+explicitly chooses `lambda_solver="slsqp"` must now also pass
+`require_ipopt=False` to acknowledge the choice. No behaviour change for
+any benchmark path (they already passed `require_ipopt=True`
+explicitly). Ripple fix: the two deliberate SLSQP calls in
+`ledger-artifacts/verify_fixes.py` (T1/T2) now pass
+`require_ipopt=False`; suite re-run after the change — 10 passed,
+0 failed. `prefix_repro.py` runs the archived pre-fix module and is
+unaffected. Docs updated: `VARIABLES.md` / `VARIABLES_ZH.md`
+(default column).

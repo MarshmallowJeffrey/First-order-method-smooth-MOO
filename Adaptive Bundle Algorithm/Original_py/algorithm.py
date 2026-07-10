@@ -559,7 +559,11 @@ def algorithm_adaptive(
     target_cov: Optional[float] = None,
     lambda_max_starts: int = 256,
     lambda_solver: str = "ipopt",
-    require_ipopt: bool = False,
+    # Default True (changed July 8): a missing IPOPT install now fails
+    # loudly instead of silently degrading the lambda-search to SLSQP.
+    # An explicit lambda_solver="slsqp" run must also pass
+    # require_ipopt=False to acknowledge the choice.
+    require_ipopt: bool = True,
     max_grad_evals: Optional[int] = None,
     prune_inner: bool = True,
     joint_oracle: Optional[Callable] = None,
