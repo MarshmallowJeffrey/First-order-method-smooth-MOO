@@ -1,0 +1,343 @@
+2026-07-12 14:32:53
+14:32  up 10 days, 20:08, 2 users, load averages: 2.96 5.33 8.67
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     6291.
+Pages active:                                 222816.
+Pages inactive:                               220267.
+---
+2026-07-12 14:37:53
+14:37  up 10 days, 20:13, 2 users, load averages: 5.60 5.41 7.71
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     5335.
+Pages active:                                 201334.
+Pages inactive:                               188243.
+---
+2026-07-12 14:42:53
+14:42  up 10 days, 20:18, 2 users, load averages: 5.12 5.10 6.87
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     7110.
+Pages active:                                 232992.
+Pages inactive:                               232947.
+---
+2026-07-12 14:47:53
+14:47  up 10 days, 20:23, 2 users, load averages: 5.77 5.63 6.57
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     4403.
+Pages active:                                 213094.
+Pages inactive:                               211699.
+---
+2026-07-12 14:52:53
+14:52  up 10 days, 20:28, 2 users, load averages: 5.94 5.47 6.19
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     3935.
+Pages active:                                 175805.
+Pages inactive:                               173628.
+---
+2026-07-12 14:57:53
+14:57  up 10 days, 20:33, 2 users, load averages: 5.24 5.10 5.76
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     3914.
+Pages active:                                 175342.
+Pages inactive:                               172148.
+---
+2026-07-12 15:02:53
+15:02  up 10 days, 20:38, 2 users, load averages: 9.51 7.31 6.51
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     3728.
+Pages active:                                 201198.
+Pages inactive:                               199973.
+---
+2026-07-12 15:07:53
+15:07  up 10 days, 20:43, 2 users, load averages: 6.20 6.98 6.62
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     4639.
+Pages active:                                 180447.
+Pages inactive:                               179295.
+---
+2026-07-12 15:12:53
+15:12  up 10 days, 20:48, 2 users, load averages: 4.62 6.67 6.73
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     5192.
+Pages active:                                 173090.
+Pages inactive:                               169992.
+---
+2026-07-12 15:17:53
+15:17  up 10 days, 20:53, 2 users, load averages: 8.50 7.71 7.16
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     6143.
+Pages active:                                 187655.
+Pages inactive:                               186046.
+---
+2026-07-12 15:22:53
+15:22  up 10 days, 20:58, 2 users, load averages: 8.48 8.09 7.52
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     3644.
+Pages active:                                 222178.
+Pages inactive:                               217859.
+---
+2026-07-12 15:27:53
+15:27  up 10 days, 21:03, 2 users, load averages: 9.49 8.86 8.03
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     6842.
+Pages active:                                 201905.
+Pages inactive:                               198952.
+---
+2026-07-12 15:32:53
+15:32  up 10 days, 21:08, 2 users, load averages: 7.97 8.44 8.10
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     4597.
+Pages active:                                 240435.
+Pages inactive:                               236865.
+---
+2026-07-12 15:37:53
+15:37  up 10 days, 21:13, 2 users, load averages: 5.99 7.98 8.08
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     4130.
+Pages active:                                 211282.
+Pages inactive:                               210327.
+---
+2026-07-12 15:42:53
+15:42  up 10 days, 21:18, 2 users, load averages: 5.02 6.92 7.63
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     4858.
+Pages active:                                 198286.
+Pages inactive:                               196941.
+---
+2026-07-12 15:47:53
+15:47  up 10 days, 21:23, 2 users, load averages: 3.15 4.68 6.39
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    16297.
+Pages active:                                 194796.
+Pages inactive:                               193682.
+---
+2026-07-12 15:52:53
+15:52  up 10 days, 21:28, 2 users, load averages: 5.21 5.15 6.09
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    17357.
+Pages active:                                 193600.
+Pages inactive:                               191956.
+---
+2026-07-12 15:57:54
+15:57  up 10 days, 21:33, 2 users, load averages: 4.38 4.25 5.35
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     3919.
+Pages active:                                 198233.
+Pages inactive:                               196933.
+---
+2026-07-12 16:02:54
+16:02  up 10 days, 21:38, 2 users, load averages: 4.49 4.02 4.88
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    18264.
+Pages active:                                 188681.
+Pages inactive:                               187283.
+---
+2026-07-12 16:07:54
+16:07  up 10 days, 21:43, 2 users, load averages: 3.54 3.99 4.63
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     4024.
+Pages active:                                 195270.
+Pages inactive:                               194015.
+---
+2026-07-12 16:12:54
+16:12  up 10 days, 21:48, 2 users, load averages: 4.85 4.42 4.60
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     3758.
+Pages active:                                 247979.
+Pages inactive:                               242877.
+---
+2026-07-12 16:17:54
+16:17  up 10 days, 21:53, 2 users, load averages: 4.02 4.24 4.43
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    11241.
+Pages active:                                 205407.
+Pages inactive:                               204621.
+---
+2026-07-12 16:22:54
+16:22  up 10 days, 21:58, 2 users, load averages: 6.79 5.78 5.03
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    15619.
+Pages active:                                 190879.
+Pages inactive:                               188996.
+---
+2026-07-12 16:27:54
+16:27  up 10 days, 22:03, 2 users, load averages: 3.81 4.53 4.66
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     7806.
+Pages active:                                 200327.
+Pages inactive:                               191189.
+---
+2026-07-12 16:32:54
+16:32  up 10 days, 22:08, 2 users, load averages: 5.70 5.46 5.07
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    86231.
+Pages active:                                 133288.
+Pages inactive:                               129653.
+---
+2026-07-12 16:37:54
+16:37  up 10 days, 22:13, 2 users, load averages: 5.24 5.02 4.97
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    19849.
+Pages active:                                 203932.
+Pages inactive:                               201830.
+---
+2026-07-12 16:42:54
+16:42  up 10 days, 22:18, 2 users, load averages: 4.92 5.06 5.01
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     3995.
+Pages active:                                 260222.
+Pages inactive:                               258976.
+---
+2026-07-12 16:47:54
+16:47  up 10 days, 22:23, 2 users, load averages: 5.20 4.78 4.85
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                   103836.
+Pages active:                                 174216.
+Pages inactive:                               166553.
+---
+2026-07-12 16:52:54
+16:52  up 10 days, 22:28, 2 users, load averages: 5.29 4.96 4.90
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     9036.
+Pages active:                                 298169.
+Pages inactive:                               296371.
+---
+2026-07-12 16:57:54
+16:57  up 10 days, 22:33, 1 user, load averages: 4.65 5.17 5.01
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     8249.
+Pages active:                                 207475.
+Pages inactive:                               204926.
+---
+2026-07-12 17:06:23
+17:06  up 10 days, 22:42, 1 user, load averages: 3.57 4.44 4.73
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     3635.
+Pages active:                                 220567.
+Pages inactive:                               217306.
+---
+2026-07-12 17:11:23
+17:11  up 10 days, 22:47, 1 user, load averages: 3.51 4.00 4.46
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    17772.
+Pages active:                                 216918.
+Pages inactive:                               215796.
+---
+2026-07-12 17:16:23
+17:16  up 10 days, 22:52, 1 user, load averages: 4.27 3.90 4.24
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    10171.
+Pages active:                                 226265.
+Pages inactive:                               224255.
+---
+2026-07-12 17:21:24
+17:21  up 10 days, 22:57, 1 user, load averages: 3.27 3.61 4.00
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    13664.
+Pages active:                                 230662.
+Pages inactive:                               229188.
+---
+2026-07-12 17:26:24
+17:26  up 10 days, 23:02, 1 user, load averages: 3.69 3.62 3.88
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    15154.
+Pages active:                                 226656.
+Pages inactive:                               224559.
+---
+2026-07-12 17:31:24
+17:31  up 10 days, 23:07, 1 user, load averages: 3.86 3.69 3.82
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    16794.
+Pages active:                                 226293.
+Pages inactive:                               225391.
+---
+2026-07-12 17:36:24
+17:36  up 10 days, 23:12, 1 user, load averages: 4.18 3.68 3.74
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     3995.
+Pages active:                                 221440.
+Pages inactive:                               215129.
+---
+2026-07-12 17:41:24
+17:41  up 10 days, 23:17, 1 user, load averages: 3.39 3.48 3.62
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     4120.
+Pages active:                                 235661.
+Pages inactive:                               233893.
+---
+2026-07-12 17:46:24
+17:46  up 10 days, 23:22, 1 user, load averages: 4.67 3.94 3.76
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     5848.
+Pages active:                                 240748.
+Pages inactive:                               239067.
+---
+2026-07-12 17:51:24
+17:51  up 10 days, 23:27, 1 user, load averages: 3.61 3.61 3.65
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    18066.
+Pages active:                                 225455.
+Pages inactive:                               224301.
+---
+2026-07-12 17:56:24
+17:56  up 10 days, 23:32, 1 user, load averages: 3.83 3.90 3.78
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     3629.
+Pages active:                                 238125.
+Pages inactive:                               236971.
+---
+2026-07-12 18:01:24
+18:01  up 10 days, 23:37, 1 user, load averages: 5.83 4.29 3.94
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     4227.
+Pages active:                                 240752.
+Pages inactive:                               239876.
+---
+2026-07-12 18:06:24
+18:06  up 10 days, 23:42, 1 user, load averages: 4.10 3.97 3.86
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     8263.
+Pages active:                                 236036.
+Pages inactive:                               234557.
+---
+2026-07-12 18:11:24
+18:11  up 10 days, 23:47, 1 user, load averages: 4.18 4.25 4.02
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     3980.
+Pages active:                                 231772.
+Pages inactive:                               230528.
+---
+2026-07-12 18:16:24
+18:16  up 10 days, 23:52, 1 user, load averages: 3.45 3.77 3.86
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    17841.
+Pages active:                                 226736.
+Pages inactive:                               224892.
+---
+2026-07-12 18:21:24
+18:21  up 10 days, 23:57, 1 user, load averages: 3.33 3.54 3.73
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    18515.
+Pages active:                                 226767.
+Pages inactive:                               225815.
+---
+2026-07-12 18:26:24
+18:26  up 11 days, 2 mins, 1 user, load averages: 3.08 3.59 3.69
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     5235.
+Pages active:                                 232459.
+Pages inactive:                               229676.
+---
+2026-07-12 18:31:24
+18:31  up 11 days, 7 mins, 1 user, load averages: 3.94 3.58 3.63
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    11884.
+Pages active:                                 228954.
+Pages inactive:                               227611.
+---
+2026-07-12 18:36:24
+18:36  up 11 days, 12 mins, 1 user, load averages: 4.70 4.40 3.99
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     4113.
+Pages active:                                 298124.
+Pages inactive:                               293285.
+---

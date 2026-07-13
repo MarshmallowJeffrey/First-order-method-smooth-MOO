@@ -55,16 +55,35 @@ Pareto extraction (no re-optimisation anywhere)
   curves have identical semantics: "the point this method would hand you
   for weight lambda".
 
+Adaptive-pair figure and --replot-adaptive-pair (added July 11)
+---------------------------------------------------------------
+A third figure puts the TWO adaptive fronts (eps 0.01 and eps 0.001) on
+one figure with NO baseline — same axes, delivery rule and marker-colour
+semantics as the combo figures.  Full runs draw it alongside the combos;
+`--replot-adaptive-pair RUN_DIR` redraws it from a finished run's stored
+`pareto_data.json` WITHOUT re-running anything (no optimisation, nothing
+in RUN_DIR touched).  The reconstruction from the saved t-segments is
+exact for everything the figure uses (sel, per-point mean served t,
+F1/F2) and is audited in-process by a front_segments round-trip.
+Either way a copy lands in output/Pareto_front/, where the certified
+Pareto results are collected.
+
 Usage:
     python run_pareto_certified_without_256_checkpoints.py [--smoke]
+    python run_pareto_certified_without_256_checkpoints.py \
+        --replot-adaptive-pair \
+        "../output/Pareto_front/pareto_certified_without_256_checkpoints"
 
 Outputs (originals untouched):
     output/pareto_certified_without_256_checkpoints[_smoke]/
       README.md, pareto_data.json,
       pareto_front_combo1_bl0.01_a0.01.png,
       pareto_front_combo2_bl0.01_a0.001.png,
+      pareto_front_adaptive_eps0.01_vs_eps0.001.png,
       baseline_eps0.01/summary.json,
       adaptive_eps0.01/summary.json, adaptive_eps0.001/summary.json
+    output/Pareto_front/
+      pareto_front_adaptive_eps0.01_vs_eps0.001[_smoke|_r<R>].png
 """
 import argparse
 import json
@@ -90,6 +109,10 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_ROOT = HERE.parent / "output"
+# Collected certified-Pareto results live here; the adaptive-pair figure
+# (and nothing else from this script) is copied in alongside the runs.
+PARETO_FRONT_DIR = OUTPUT_ROOT / "Pareto_front"
+ADAPTIVE_PAIR_STEM = "pareto_front_adaptive_eps0.01_vs_eps0.001"
 
 EPS_BASELINE = 0.01
 EPS_ADAPTIVE = (0.01, 0.001)
@@ -214,6 +237,44 @@ def front_segments(ts, sel, fvals):
     return segments
 
 
+def packs_from_saved_fronts(fronts, labels):
+    """Rebuild the figure packs {ts, sel, fvals, label} from a saved
+    pareto_data.json — the exact inverse of front_segments for everything
+    the figures use.
+
+    front_segments compresses the uniform N_LAMBDA_SWEEP sweep into runs
+    of constant delivered point, so a segment [t_from, t_to] covers
+    round((t_to - t_from)*(N-1)) + 1 consecutive grid values; replaying
+    the segments in order reproduces sel exactly, hence also each
+    distinct point's mean served t (the marker colours).  fvals rows the
+    sweep never selected were not saved and stay NaN; the figures never
+    read them.  Each reconstruction is audited by a front_segments
+    round-trip (floats survive the JSON round-trip bit-exactly).
+    """
+    ts = np.linspace(0.0, 1.0, N_LAMBDA_SWEEP)
+    packs = {}
+    for name, segments in fronts.items():
+        sel = np.full(N_LAMBDA_SWEEP, -1, dtype=int)
+        fvals = np.full((1 + max(s["point_index"] for s in segments), 2),
+                        np.nan)
+        pos = 0
+        for seg in segments:
+            n_run = 1 + int(round((seg["t_to"] - seg["t_from"])
+                                  * (N_LAMBDA_SWEEP - 1)))
+            sel[pos:pos + n_run] = seg["point_index"]
+            fvals[seg["point_index"]] = (seg["F1"], seg["F2"])
+            pos += n_run
+        if pos != N_LAMBDA_SWEEP:
+            raise ValueError(f"{name}: segments cover {pos} of "
+                             f"{N_LAMBDA_SWEEP} sweep values")
+        if front_segments(ts, sel, fvals) != segments:
+            raise ValueError(f"{name}: reconstruction failed the "
+                             "front_segments round-trip audit")
+        packs[name] = {"ts": ts, "sel": sel, "fvals": fvals,
+                       "label": labels[name]}
+    return packs
+
+
 def baseline_certificate(coarse_grid, node_fvals, node_grads, resolution):
     """Exact post-run audit of the K=2 covering-bound certificate."""
     h = 1.0 / (2.0 * resolution)
@@ -247,18 +308,14 @@ def baseline_certificate(coarse_grid, node_fvals, node_grads, resolution):
 # ---------------------------------------------------------------------------
 #  Plot
 # ---------------------------------------------------------------------------
-def plot_combo(out_path, bl_pack, ad_pack, title, ad_short):
-    """Log-log Pareto figure: line = delivered point as t sweeps 0..1,
-    one marker per distinct delivered point coloured by the mean t it
-    serves; run outcomes go into the (multi-line) title, legend stays
-    short.  Log axes because the baseline's extreme nodes reach losses
-    orders of magnitude above the trade-off region."""
-    fig, ax = plt.subplots(figsize=(7.8, 6.2))
+def _draw_fronts(fig, ax, series):
+    """Shared grammar for every Pareto figure here: per method, line =
+    delivered point as t sweeps 0..1, one marker per distinct delivered
+    point coloured by the mean t it serves; log-log axes because the
+    losses span orders of magnitude.  series = (pack, colour, marker,
+    legend name) per curve."""
     cmap = plt.get_cmap("viridis")
-    for pack, color, marker, name in (
-        (bl_pack, "#d62728", "s", "baseline (Algorithm 1)"),
-        (ad_pack, "#9467bd", "^", f"adaptive (Algorithm 2), {ad_short}"),
-    ):
+    for pack, color, marker, name in series:
         ts, sel, fvals = pack["ts"], pack["sel"], pack["fvals"]
         ax.plot(fvals[sel, 0], fvals[sel, 1], color=color, lw=1.6,
                 alpha=0.85, label=name, zorder=3)
@@ -274,14 +331,58 @@ def plot_combo(out_path, bl_pack, ad_pack, title, ad_short):
     ax.set_yscale("log")
     ax.set_xlabel(r"$F_1(x^*_\lambda)$  (class-1 cross-entropy, log)")
     ax.set_ylabel(r"$F_2(x^*_\lambda)$  (class-2 cross-entropy, log)")
+    ax.grid(True, which="both", alpha=0.25)
+    ax.legend(frameon=False, fontsize=9, loc="upper right")
+
+
+def plot_combo(out_path, bl_pack, ad_pack, title, ad_short):
+    """Log-log Pareto figure, baseline vs ONE adaptive run; run outcomes
+    go into the (multi-line) title, legend stays short.  Log axes because
+    the baseline's extreme nodes reach losses orders of magnitude above
+    the trade-off region."""
+    fig, ax = plt.subplots(figsize=(7.8, 6.2))
+    _draw_fronts(fig, ax, (
+        (bl_pack, "#d62728", "s", "baseline (Algorithm 1)"),
+        (ad_pack, "#9467bd", "^", f"adaptive (Algorithm 2), {ad_short}"),
+    ))
     ax.set_title(
         f"{title}\nbaseline: {bl_pack['label']}\nadaptive: {ad_pack['label']}",
         fontsize=9.5)
-    ax.grid(True, which="both", alpha=0.25)
-    ax.legend(frameon=False, fontsize=9, loc="upper right")
     fig.tight_layout()
     fig.savefig(out_path, dpi=160, bbox_inches="tight")
     plt.close(fig)
+
+
+def plot_adaptive_pair(out_paths, ad_pack_01, ad_pack_001, title):
+    """The two adaptive fronts (eps 0.01 vs eps 0.001) on ONE figure, no
+    baseline — same axes, delivery rule and marker-colour semantics as
+    plot_combo, so all three figures read the same way; the runs are told
+    apart by line/edge colour and marker shape.  Saved to every path in
+    out_paths (the run folder and the collected output/Pareto_front/)."""
+    fig, ax = plt.subplots(figsize=(7.8, 6.2))
+    _draw_fronts(fig, ax, (
+        # denser eps=0.001 first, so the sparser eps=0.01 markers stay
+        # visible on top where the two fronts coincide
+        (ad_pack_001, "#1f77b4", "o", "adaptive (Algorithm 2), eps=0.001"),
+        (ad_pack_01, "#9467bd", "^", "adaptive (Algorithm 2), eps=0.01"),
+    ))
+    handles, names = ax.get_legend_handles_labels()
+    ax.legend(handles[::-1], names[::-1], frameon=False, fontsize=9,
+              loc="upper right")  # legend still lists eps=0.01 first
+    ax.set_title(
+        f"{title}\neps=0.01:  {ad_pack_01['label']}"
+        f"\neps=0.001: {ad_pack_001['label']}", fontsize=9.5)
+    fig.tight_layout()
+    for out_path in out_paths:
+        fig.savefig(out_path, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+
+
+def adaptive_pair_title(cfg):
+    hid = "x".join(str(h) for h in cfg["hidden_sizes"])
+    return (f"Pareto fronts, K={cfg['K']} {hid} (certified, self-reported "
+            f"track) — adaptive eps {EPS_ADAPTIVE[0]} vs eps "
+            f"{EPS_ADAPTIVE[1]}, no baseline")
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +398,30 @@ def main() -> None:
              "_r<R>, so existing results are never touched. Only the "
              "baseline uses r; the adaptive runs are re-run identically so "
              "the folder stays self-contained.")
+    parser.add_argument(
+        "--replot-adaptive-pair", metavar="RUN_DIR", default=None,
+        help="Redraw ONLY the adaptive eps0.01-vs-eps0.001 pair figure "
+             "from an existing run folder's pareto_data.json — no runs, "
+             "nothing in RUN_DIR touched; the figure goes to "
+             "output/Pareto_front/. --smoke/--resolution are ignored.")
     args = parser.parse_args()
+
+    if args.replot_adaptive_pair is not None:
+        run_dir = Path(args.replot_adaptive_pair)
+        data = json.loads((run_dir / "pareto_data.json")
+                          .read_text(encoding="utf-8"))
+        packs = packs_from_saved_fronts(data["fronts"], data["labels"])
+        # keep the source run's _smoke/_r<R> suffix in the copied name
+        run_suffix = run_dir.name.removeprefix(
+            "pareto_certified_without_256_checkpoints")
+        PARETO_FRONT_DIR.mkdir(parents=True, exist_ok=True)
+        out_path = PARETO_FRONT_DIR / f"{ADAPTIVE_PAIR_STEM}{run_suffix}.png"
+        plot_adaptive_pair([out_path],
+                           packs[f"adaptive_{EPS_ADAPTIVE[0]}"],
+                           packs[f"adaptive_{EPS_ADAPTIVE[1]}"],
+                           adaptive_pair_title(data["config"]))
+        print(f"replotted adaptive pair (no runs) -> {out_path}")
+        return
 
     cfg = problem_config(args.smoke)
     if args.resolution is not None:
@@ -402,6 +526,13 @@ def main() -> None:
                "Pareto fronts, K=2 96x96 (certified, self-reported track) — "
                f"combo 2: baseline eps {EPS_BASELINE} vs adaptive eps 0.001",
                "eps=0.001")
+    PARETO_FRONT_DIR.mkdir(parents=True, exist_ok=True)
+    plot_adaptive_pair(
+        [out_dir / f"{ADAPTIVE_PAIR_STEM}.png",
+         PARETO_FRONT_DIR / f"{ADAPTIVE_PAIR_STEM}{suffix}.png"],
+        packs[f"adaptive_{EPS_ADAPTIVE[0]}"],
+        packs[f"adaptive_{EPS_ADAPTIVE[1]}"],
+        adaptive_pair_title(cfg))
 
     # ---- data file ----
     data = {
@@ -464,6 +595,10 @@ docstring there is the full specification. Summary of what this folder is:
   ({N_LAMBDA_SWEEP} values); markers are the distinct delivered points,
   coloured by the mean t they serve. Lower-left is better (both losses
   smaller); a curve that lies below-left of the other dominates it.
+- `pareto_front_adaptive_eps0.01_vs_eps0.001.png` — the TWO adaptive
+  fronts on one figure, no baseline (same axes and delivery rule); a
+  copy also goes to `output/Pareto_front/`, where the certified Pareto
+  results are collected.
 - `pareto_data.json` — machine-readable fronts (t-segments per delivered
   point with F1/F2), the full node-by-node certificate audit, and labels.
 

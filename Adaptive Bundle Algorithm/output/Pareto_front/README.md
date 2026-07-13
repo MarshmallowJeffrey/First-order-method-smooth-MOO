@@ -9,6 +9,11 @@ Date: July 8, 2026 (runs), overview written July 10. Chinese version:
 - `pareto_certified_without_256_checkpoints_r20/` — the follow-up re-run
   with ONLY the baseline grid resolution raised to r=20 (its own
   `FINDINGS_ZH.md` records the prediction-vs-outcome check).
+- `pareto_front_adaptive_eps0.01_vs_eps0.001.png` — July 11 follow-up
+  figure: the TWO adaptive fronts (eps 0.01 vs eps 0.001) on one figure,
+  NO baseline; drawn from the main run's stored `pareto_data.json` (same
+  runs, nothing re-run) via the producer script's
+  `--replot-adaptive-pair` mode. Record: `Note/Jul_11_note.md`.
 
 Producer script: `Original_py/run_pareto_certified_without_256_checkpoints.py`
 (`--resolution 20` for the second run).

@@ -9,6 +9,11 @@
 - `pareto_certified_without_256_checkpoints_r20/`——复验运行,**只把
   基线网格分辨率提高到 r=20**(其 `FINDINGS_ZH.md` 记录了"预期
   对照实际"的核对)。
+- `pareto_front_adaptive_eps0.01_vs_eps0.001.png`——7 月 11 日补充图:
+  两条自适应前沿(eps 0.01 对 eps 0.001)画在同一张图上,**无基线**;
+  直接由主运行已存的 `pareto_data.json` 重画(同一批运行数据,没有
+  重跑任何东西),用生成脚本的 `--replot-adaptive-pair` 模式生成。
+  记录见 `Note/Jul_11_note.md`。
 
 生成脚本:`Original_py/run_pareto_certified_without_256_checkpoints.py`
 (第二次运行加 `--resolution 20`)。
