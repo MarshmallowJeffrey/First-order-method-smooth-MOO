@@ -273,18 +273,6 @@ def make_mlp_nonconvex(
         grads = torch.autograd.grad(loss, list(net.parameters()))
         return _flatten_grads(net, grads)
 
-    def _F_and_grad_F_i(theta: np.ndarray, i: int) -> Tuple[float, np.ndarray]:
-        """Return (F_i(theta), grad F_i(theta)) from a single forward pass."""
-        _load_theta_into_net(net, theta)
-        for param in net.parameters():
-            param.grad = None
-        X_i = X[class_idx[i]]
-        Z_i = net(X_i)
-        target = torch.full((X_i.shape[0],), i, dtype=torch.long)
-        loss = F.cross_entropy(Z_i, target, reduction="mean")
-        grads = torch.autograd.grad(loss, list(net.parameters()))
-        return float(loss.item()), _flatten_grads(net, grads)
-
     # =================================================================
     # Joint oracle: (fv (K,), gv (K, d)) in one shared forward pass
     # =================================================================

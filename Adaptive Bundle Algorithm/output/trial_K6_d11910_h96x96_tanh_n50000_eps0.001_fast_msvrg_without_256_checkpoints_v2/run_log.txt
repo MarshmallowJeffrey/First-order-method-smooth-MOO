@@ -1,0 +1,42 @@
+=== K=6 FAST trial: trial_K6_d11910_h96x96_tanh_n50000_eps0.001_fast_msvrg_without_256_checkpoints_v2 ===
+  Fast outer 0/150 | t=0.00s | bundle=1 | grad_equiv=0.0 | self-reported pc=nan
+  Fast outer 4/150 | t=11.21s | bundle=41 | grad_equiv=751.2 | self-reported pc=5.8570e+00
+  Fast outer 8/150 | t=27.49s | bundle=81 | grad_equiv=1502.4 | self-reported pc=3.1523e+00
+  Fast outer 12/150 | t=46.70s | bundle=121 | grad_equiv=2253.5 | self-reported pc=2.7009e+00
+  Fast outer 16/150 | t=66.64s | bundle=161 | grad_equiv=3004.7 | self-reported pc=2.5546e+00
+  Fast outer 20/150 | t=87.02s | bundle=201 | grad_equiv=3755.9 | self-reported pc=2.2908e+00
+  Fast outer 24/150 | t=111.30s | bundle=241 | grad_equiv=4507.1 | self-reported pc=1.5250e+00
+  Fast outer 28/150 | t=134.31s | bundle=281 | grad_equiv=5258.3 | self-reported pc=9.1701e-01
+  Fast outer 32/150 | t=157.97s | bundle=321 | grad_equiv=6009.4 | self-reported pc=6.3753e-01
+  Fast outer 36/150 | t=182.05s | bundle=361 | grad_equiv=6760.6 | self-reported pc=5.4408e-01
+  Fast outer 40/150 | t=206.87s | bundle=401 | grad_equiv=7511.8 | self-reported pc=4.6564e-01
+  Fast outer 44/150 | t=234.46s | bundle=441 | grad_equiv=8263.0 | self-reported pc=4.2025e-01
+  Fast outer 48/150 | t=260.51s | bundle=481 | grad_equiv=9014.2 | self-reported pc=4.3209e-01
+  Fast outer 52/150 | t=290.77s | bundle=521 | grad_equiv=9765.4 | self-reported pc=3.3748e-01
+  Fast outer 56/150 | t=321.80s | bundle=561 | grad_equiv=10516.5 | self-reported pc=3.2727e-01
+  Fast outer 60/150 | t=353.55s | bundle=601 | grad_equiv=11267.7 | self-reported pc=2.9496e-01
+  Fast outer 64/150 | t=387.43s | bundle=641 | grad_equiv=12018.9 | self-reported pc=2.8779e-01
+  Fast outer 68/150 | t=422.14s | bundle=681 | grad_equiv=12770.1 | self-reported pc=2.7447e-01
+  Fast outer 72/150 | t=456.26s | bundle=721 | grad_equiv=13521.3 | self-reported pc=2.7390e-01
+  Fast outer 76/150 | t=486.90s | bundle=761 | grad_equiv=14272.4 | self-reported pc=2.2835e-01
+  Fast outer 80/150 | t=520.85s | bundle=801 | grad_equiv=15023.6 | self-reported pc=2.2334e-01
+  Fast outer 84/150 | t=555.48s | bundle=841 | grad_equiv=15774.8 | self-reported pc=2.1277e-01
+  Fast outer 88/150 | t=590.71s | bundle=881 | grad_equiv=16526.0 | self-reported pc=1.9631e-01
+  Fast outer 92/150 | t=626.84s | bundle=921 | grad_equiv=17277.2 | self-reported pc=2.3389e-01
+  Fast outer 96/150 | t=661.09s | bundle=961 | grad_equiv=18028.3 | self-reported pc=1.9146e-01
+  Fast outer 100/150 | t=695.76s | bundle=1001 | grad_equiv=18779.5 | self-reported pc=2.0966e-01
+  Fast outer 104/150 | t=734.93s | bundle=1041 | grad_equiv=19530.7 | self-reported pc=2.2701e-01
+  Fast outer 108/150 | t=775.10s | bundle=1081 | grad_equiv=20281.9 | self-reported pc=1.9482e-01
+  Fast outer 112/150 | t=814.33s | bundle=1121 | grad_equiv=21033.1 | self-reported pc=1.7386e-01
+  Fast outer 116/150 | t=852.33s | bundle=1161 | grad_equiv=21784.2 | self-reported pc=1.8439e-01
+  Fast outer 120/150 | t=891.29s | bundle=1201 | grad_equiv=22535.4 | self-reported pc=1.6266e-01
+  Fast outer 124/150 | t=931.42s | bundle=1241 | grad_equiv=23286.6 | self-reported pc=1.5960e-01
+  Fast outer 128/150 | t=975.93s | bundle=1281 | grad_equiv=24037.8 | self-reported pc=1.9231e-01
+  Fast outer 132/150 | t=1018.66s | bundle=1321 | grad_equiv=24789.0 | self-reported pc=1.5455e-01
+  Fast outer 136/150 | t=1062.61s | bundle=1361 | grad_equiv=25540.1 | self-reported pc=1.5258e-01
+  Fast outer 140/150 | t=1107.35s | bundle=1401 | grad_equiv=26291.3 | self-reported pc=2.0526e-01
+  Fast outer 144/150 | t=1153.07s | bundle=1441 | grad_equiv=27042.5 | self-reported pc=2.0376e-01
+  Fast outer 148/150 | t=1199.01s | bundle=1481 | grad_equiv=27793.7 | self-reported pc=1.6306e-01
+  Fast outer 150/150 | t=1224.32s | bundle=1501 | grad_equiv=28169.3 | self-reported pc=1.8963e-01
+fast run finished in 1225.0s (stop=round_fuse, lambda-search 428.7s)
+DONE in 1227s -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/trial_K6_d11910_h96x96_tanh_n50000_eps0.001_fast_msvrg_without_256_checkpoints_v2
