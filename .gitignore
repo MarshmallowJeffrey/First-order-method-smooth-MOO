@@ -3,3 +3,13 @@
 __pycache__/
 *.py[cod]
 mlp_adaptive_smoke.png
+
+# Local experiment runtime artifacts
+Adaptive Bundle Algorithm/logs/
+Adaptive Bundle Algorithm/tmp/cheb_*/
+
+# Chebyshev experiment sweeps are generated artifacts. Keep only the curated
+# presentation figures/tables used for reporting.
+Adaptive Bundle Algorithm/output/chebyshev/*
+!Adaptive Bundle Algorithm/output/chebyshev/presentation_figures/
+!Adaptive Bundle Algorithm/output/chebyshev/presentation_figures/**
