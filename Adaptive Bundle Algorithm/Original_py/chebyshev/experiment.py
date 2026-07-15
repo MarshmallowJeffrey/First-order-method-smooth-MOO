@@ -48,6 +48,15 @@ from baseline import uniform_discretisation
 from bundle import prefer_fused_joint_oracle
 from chebyshev.weighted import chebyshev_adaptive
 
+try:
+    from algorithm_fast_without_256_checkpoints import algorithm_adaptive_fast
+    from objectives_torch_fast import make_mlp_nonconvex_fast
+    _FAST_BACKEND_IMPORT_ERROR = None
+except Exception as exc:  # pragma: no cover - optional backend
+    algorithm_adaptive_fast = None
+    make_mlp_nonconvex_fast = None
+    _FAST_BACKEND_IMPORT_ERROR = exc
+
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _OUTPUT_ROOT = _PROJECT_ROOT / "output" / "chebyshev"
@@ -79,14 +88,28 @@ def _result_curves(result: Dict) -> Dict:
         "cov_history": _json_ready(result["cov_history"]),
         "best_so_far": _json_ready(best_so_far(result["cov_history"])),
         "cpu_times": _json_ready(result["cpu_times"]),
-        "total_iters_history": _json_ready(result["total_iters_history"]),
+        "total_iters_history": _json_ready(
+            result.get("total_iters_history", result["grad_evals_history"])
+        ),
         "grad_evals_history": _json_ready(result["grad_evals_history"]),
     }
     for key in (
+        "adaptive_backend",
+        "plot_label",
         "resolution",
         "L_scale_final",
         "inner_cap_hits",
         "termination_reason",
+        "stop_reason",
+        "epsilon",
+        "lambda_search_seconds",
+        "grad_equiv_total",
+        "joint_calls",
+        "ifo_minibatch_total",
+        "lambda_tier_mode",
+        "segments_history",
+        "tier_history",
+        "prune_report",
         "line_search",
         "normalization_powers",
         "append_non_improving",
@@ -181,9 +204,10 @@ def _plot_three_way(
         times = np.asarray(result["cpu_times"], dtype=float)
         return np.where(times <= 0.0, _LOG_CPU_ZERO_FLOOR, times)
 
+    adaptive_label = adaptive.get("plot_label", "adaptive bundle")
     curves = [
         (baseline, f"uniform discretisation (r={baseline['resolution']})", _BL_KW),
-        (adaptive, "adaptive bundle", _A2_KW),
+        (adaptive, adaptive_label, _A2_KW),
         (chebyshev, "weighted Chebyshev", _CH_KW),
     ]
     for result, label, style in curves:
@@ -211,6 +235,48 @@ def _plot_three_way(
     fig.savefig(out_path, dpi=160, bbox_inches="tight")
     plt.close(fig)
     return str(out_path)
+
+
+def _make_mlp_problem_for_backend(
+    *,
+    adaptive_backend: str,
+    K: int,
+    p: int,
+    n: int,
+    hidden_sizes: Sequence[int],
+    seed: int,
+    activation: str,
+    fast_batch_size: int,
+    fast_sampler_seed: int,
+):
+    if adaptive_backend == "original":
+        objectives, gradients, L, joint = _make_mlp_problem(
+            K=K,
+            p=p,
+            n=n,
+            hidden_sizes=hidden_sizes,
+            seed=seed,
+            activation=activation,
+        )
+        return objectives, gradients, L, joint, None
+    if adaptive_backend == "fast":
+        if make_mlp_nonconvex_fast is None or algorithm_adaptive_fast is None:
+            raise RuntimeError(
+                "Fast adaptive backend is unavailable. Import error: "
+                f"{_FAST_BACKEND_IMPORT_ERROR}"
+            )
+        objectives, gradients, L, joint, stoch_oracle = make_mlp_nonconvex_fast(
+            K=K,
+            p=p,
+            n=n,
+            hidden_sizes=list(hidden_sizes),
+            seed=seed,
+            activation=activation,
+            batch_size=fast_batch_size,
+            sampler_seed=fast_sampler_seed,
+        )
+        return objectives, gradients, L, joint, stoch_oracle
+    raise ValueError("adaptive_backend must be 'original' or 'fast'.")
 
 
 def _chebyshev_kwargs(mode: str) -> Dict:
@@ -498,16 +564,30 @@ def experiment_mlp_chebyshev_comparison(
     cheb_L_scale: float = 1.0,
     cheb_gn_tolerance: Optional[float] = None,
     prune_inner: bool = True,
+    adaptive_backend: str = "original",
+    fast_epsilon: Optional[float] = 1e-3,
+    fast_batch_size: int = 1024,
+    fast_sampler_seed: int = 41,
+    fast_lambda_tier_mode: str = "strict",
+    fast_msvrg_step_c: float = 0.1,
+    fast_msvrg_momentum: float = 0.9,
+    fast_msvrg_epoch_len: Optional[int] = None,
+    fast_msvrg_max_segments: int = 10,
+    fast_msvrg_trigger_rho: float = 0.7,
+    fast_msvrg_trigger_consec: int = 2,
     plot_best: bool = True,
     output_dir: Optional[str] = None,
 ) -> Dict:
+    if adaptive_backend not in {"original", "fast"}:
+        raise ValueError("adaptive_backend must be 'original' or 'fast'.")
     resolved_hidden_sizes = _resolve_hidden_sizes(h, hidden_sizes)
     d = mlp_parameter_count(K, p, resolved_hidden_sizes)
     actual_init_seed = seed + 1 if init_seed is None else init_seed
+    backend_tag = "" if adaptive_backend == "original" else f"_adaptive-{adaptive_backend}"
     output_root = Path(output_dir) if output_dir is not None else (
         _OUTPUT_ROOT
         / f"K{K}_p{p}_n{n}_h{'x'.join(map(str, resolved_hidden_sizes))}"
-        / f"{activation}_r{coarse_resolution}_B{max_grad_evals}_{cheb_mode}"
+        / f"{activation}_r{coarse_resolution}_B{max_grad_evals}_{cheb_mode}{backend_tag}"
     )
     output_root.mkdir(parents=True, exist_ok=True)
 
@@ -517,16 +597,19 @@ def experiment_mlp_chebyshev_comparison(
     print(
         f"  K={K}, p={p}, n={n}, hidden_sizes={resolved_hidden_sizes}, "
         f"activation={activation}, d={d}, budget={max_grad_evals}, "
-        f"cheb_mode={cheb_mode}"
+        f"cheb_mode={cheb_mode}, adaptive_backend={adaptive_backend}"
     )
 
-    objectives, gradients, L, joint = _make_mlp_problem(
+    objectives, gradients, L, joint, stoch_oracle = _make_mlp_problem_for_backend(
+        adaptive_backend=adaptive_backend,
         K=K,
         p=p,
         n=n,
         hidden_sizes=resolved_hidden_sizes,
         seed=seed,
         activation=activation,
+        fast_batch_size=fast_batch_size,
+        fast_sampler_seed=fast_sampler_seed,
     )
     joint_oracle = prefer_fused_joint_oracle(joint)
     x0 = make_mlp_initial_point(
@@ -554,26 +637,58 @@ def experiment_mlp_chebyshev_comparison(
         verbose=verbose,
     )
 
-    print("\n  [adaptive bundle] ...")
-    adaptive = algorithm_adaptive(
-        K=K,
-        d=d,
-        objectives=objectives,
-        grad_objectives=gradients,
-        L=L,
-        x0=x0,
-        max_outer=max_outer,
-        max_inner=max_inner,
-        eval_every_n_grads=eval_every_n_grads,
-        target_cov=None,
-        lambda_max_starts=lambda_max_starts,
-        lambda_solver=lambda_solver,
-        require_ipopt=require_ipopt,
-        max_grad_evals=max_grad_evals,
-        prune_inner=prune_inner,
-        joint_oracle=joint_oracle,
-        verbose=verbose,
-    )
+    if adaptive_backend == "fast":
+        print("\n  [adaptive bundle: fast Gram + Momentum-SVRG] ...")
+        adaptive = algorithm_adaptive_fast(
+            K=K,
+            d=d,
+            objectives=objectives,
+            grad_objectives=gradients,
+            L=L,
+            x0=x0,
+            stoch_oracle=stoch_oracle,
+            epsilon=fast_epsilon,
+            max_outer=max_outer,
+            eval_every_n_grads=eval_every_n_grads,
+            max_grad_evals=max_grad_evals,
+            lambda_max_starts=lambda_max_starts,
+            lambda_tier_mode=fast_lambda_tier_mode,
+            require_ipopt=require_ipopt,
+            msvrg_step_c=fast_msvrg_step_c,
+            msvrg_momentum=fast_msvrg_momentum,
+            msvrg_epoch_len=fast_msvrg_epoch_len,
+            msvrg_max_segments=fast_msvrg_max_segments,
+            msvrg_trigger_rho=fast_msvrg_trigger_rho,
+            msvrg_trigger_consec=fast_msvrg_trigger_consec,
+            prune_grid_r=coarse_resolution,
+            joint_oracle=joint_oracle,
+            verbose=verbose,
+        )
+        adaptive["adaptive_backend"] = "fast"
+        adaptive["plot_label"] = "adaptive bundle (fast)"
+    else:
+        print("\n  [adaptive bundle] ...")
+        adaptive = algorithm_adaptive(
+            K=K,
+            d=d,
+            objectives=objectives,
+            grad_objectives=gradients,
+            L=L,
+            x0=x0,
+            max_outer=max_outer,
+            max_inner=max_inner,
+            eval_every_n_grads=eval_every_n_grads,
+            target_cov=None,
+            lambda_max_starts=lambda_max_starts,
+            lambda_solver=lambda_solver,
+            require_ipopt=require_ipopt,
+            max_grad_evals=max_grad_evals,
+            prune_inner=prune_inner,
+            joint_oracle=joint_oracle,
+            verbose=verbose,
+        )
+        adaptive["adaptive_backend"] = "original"
+        adaptive["plot_label"] = "adaptive bundle"
 
     print("\n  [weighted Chebyshev] ...")
     cheb_options = _chebyshev_kwargs(cheb_mode)
@@ -605,7 +720,8 @@ def experiment_mlp_chebyshev_comparison(
 
     title = (
         f"MLP Chebyshev comparison: K={K}, p={p}, n={n}, "
-        f"hidden_sizes={resolved_hidden_sizes}, d={d}, {cheb_mode}"
+        f"hidden_sizes={resolved_hidden_sizes}, d={d}, {cheb_mode}, "
+        f"adaptive={adaptive_backend}"
     )
     plot_path = _plot_three_way(
         baseline,
@@ -645,6 +761,17 @@ def experiment_mlp_chebyshev_comparison(
             "cheb_mode": cheb_mode,
             "cheb_options": cheb_options,
             "prune_inner": prune_inner,
+            "adaptive_backend": adaptive_backend,
+            "fast_epsilon": fast_epsilon,
+            "fast_batch_size": fast_batch_size,
+            "fast_sampler_seed": fast_sampler_seed,
+            "fast_lambda_tier_mode": fast_lambda_tier_mode,
+            "fast_msvrg_step_c": fast_msvrg_step_c,
+            "fast_msvrg_momentum": fast_msvrg_momentum,
+            "fast_msvrg_epoch_len": fast_msvrg_epoch_len,
+            "fast_msvrg_max_segments": fast_msvrg_max_segments,
+            "fast_msvrg_trigger_rho": fast_msvrg_trigger_rho,
+            "fast_msvrg_trigger_consec": fast_msvrg_trigger_consec,
         },
         "data_seed": seed,
         "init_seed": actual_init_seed,
@@ -728,9 +855,12 @@ def _plot_k_sweep_summary(runs: Sequence[Dict], out_path: Path) -> str:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(6.8, 4.4))
     ks = np.asarray([run["K"] for run in runs], dtype=int)
+    adaptive_label = "adaptive bundle"
+    if runs and runs[0]["summary"]["config"].get("adaptive_backend") == "fast":
+        adaptive_label = "adaptive bundle (fast)"
     series = [
         ("baseline", "uniform discretisation", _BL_KW),
-        ("adaptive", "adaptive bundle", _A2_KW),
+        ("adaptive", adaptive_label, _A2_KW),
         ("chebyshev", "weighted Chebyshev", _CH_KW),
     ]
     for key, label, style in series:
@@ -753,6 +883,9 @@ def _plot_k_sweep_summary(runs: Sequence[Dict], out_path: Path) -> str:
 def run_k_sweep(args, hidden_sizes: Optional[Sequence[int]]) -> None:
     k_values = _parse_int_sweep(args.k_sweep)
     hidden_tag = _hidden_sizes_tag(args.h, hidden_sizes, args.classmate_crossover_width)
+    backend_tag = (
+        "" if args.adaptive_backend == "original" else f"_adaptive-{args.adaptive_backend}"
+    )
     base_dir = (
         Path(args.output_dir)
         if args.output_dir is not None
@@ -761,7 +894,7 @@ def run_k_sweep(args, hidden_sizes: Optional[Sequence[int]]) -> None:
             / "k_sweep"
             / (
                 f"p{args.p}_n{args.n}_h{hidden_tag}_{args.activation}"
-                f"_r{args.r}_B{args.budget}_{args.cheb_mode}"
+                f"_r{args.r}_B{args.budget}_{args.cheb_mode}{backend_tag}"
             )
         )
     )
@@ -786,6 +919,17 @@ def run_k_sweep(args, hidden_sizes: Optional[Sequence[int]]) -> None:
             dual_solver=args.dual_solver,
             require_ipopt=args.require_ipopt,
             cheb_mode=args.cheb_mode,
+            adaptive_backend=args.adaptive_backend,
+            fast_epsilon=None if args.fast_epsilon <= 0.0 else args.fast_epsilon,
+            fast_batch_size=args.fast_batch_size,
+            fast_sampler_seed=args.fast_sampler_seed,
+            fast_lambda_tier_mode=args.fast_lambda_tier_mode,
+            fast_msvrg_step_c=args.fast_msvrg_step_c,
+            fast_msvrg_momentum=args.fast_msvrg_momentum,
+            fast_msvrg_epoch_len=args.fast_msvrg_epoch_len,
+            fast_msvrg_max_segments=args.fast_msvrg_max_segments,
+            fast_msvrg_trigger_rho=args.fast_msvrg_trigger_rho,
+            fast_msvrg_trigger_consec=args.fast_msvrg_trigger_consec,
             plot_best=not args.raw_plot,
             output_dir=str(base_dir / f"K{K}"),
         )
@@ -813,6 +957,11 @@ def run_k_sweep(args, hidden_sizes: Optional[Sequence[int]]) -> None:
             "lambda_solver": args.lambda_solver,
             "dual_solver": args.dual_solver,
             "cheb_mode": args.cheb_mode,
+            "adaptive_backend": args.adaptive_backend,
+            "fast_epsilon": None if args.fast_epsilon <= 0.0 else args.fast_epsilon,
+            "fast_batch_size": args.fast_batch_size,
+            "fast_sampler_seed": args.fast_sampler_seed,
+            "fast_lambda_tier_mode": args.fast_lambda_tier_mode,
         },
         "runs": [
             {
@@ -878,6 +1027,31 @@ def main() -> None:
     parser.add_argument("--lambda-solver", choices=["ipopt", "slsqp"], default="ipopt")
     parser.add_argument("--dual-solver", choices=["ipopt", "slsqp"], default="ipopt")
     parser.add_argument("--require-ipopt", action="store_true")
+    parser.add_argument(
+        "--adaptive-backend",
+        choices=["original", "fast"],
+        default="original",
+        help="Use the original adaptive bundle or the classmate fast backend.",
+    )
+    parser.add_argument(
+        "--fast-epsilon",
+        type=float,
+        default=1e-3,
+        help="Fast adaptive epsilon target; use <=0 for budget mode.",
+    )
+    parser.add_argument("--fast-batch-size", type=int, default=1024)
+    parser.add_argument("--fast-sampler-seed", type=int, default=41)
+    parser.add_argument(
+        "--fast-lambda-tier-mode",
+        choices=["strict", "two_tier"],
+        default="strict",
+    )
+    parser.add_argument("--fast-msvrg-step-c", type=float, default=0.1)
+    parser.add_argument("--fast-msvrg-momentum", type=float, default=0.9)
+    parser.add_argument("--fast-msvrg-epoch-len", type=int, default=None)
+    parser.add_argument("--fast-msvrg-max-segments", type=int, default=10)
+    parser.add_argument("--fast-msvrg-trigger-rho", type=float, default=0.7)
+    parser.add_argument("--fast-msvrg-trigger-consec", type=int, default=2)
     parser.add_argument("--cheb-only", action="store_true")
     parser.add_argument("--candidate-anchors", type=int, default=None)
     parser.add_argument("--normalization-powers", default=None)
@@ -930,6 +1104,17 @@ def main() -> None:
             lambda_solver="slsqp",
             dual_solver="slsqp",
             cheb_mode=args.cheb_mode,
+            adaptive_backend=args.adaptive_backend,
+            fast_epsilon=None if args.fast_epsilon <= 0.0 else args.fast_epsilon,
+            fast_batch_size=args.fast_batch_size,
+            fast_sampler_seed=args.fast_sampler_seed,
+            fast_lambda_tier_mode=args.fast_lambda_tier_mode,
+            fast_msvrg_step_c=args.fast_msvrg_step_c,
+            fast_msvrg_momentum=args.fast_msvrg_momentum,
+            fast_msvrg_epoch_len=args.fast_msvrg_epoch_len,
+            fast_msvrg_max_segments=args.fast_msvrg_max_segments,
+            fast_msvrg_trigger_rho=args.fast_msvrg_trigger_rho,
+            fast_msvrg_trigger_consec=args.fast_msvrg_trigger_consec,
             plot_best=not args.raw_plot,
             output_dir=args.output_dir,
         )
@@ -988,6 +1173,17 @@ def main() -> None:
         dual_solver=args.dual_solver,
         require_ipopt=args.require_ipopt,
         cheb_mode=args.cheb_mode,
+        adaptive_backend=args.adaptive_backend,
+        fast_epsilon=None if args.fast_epsilon <= 0.0 else args.fast_epsilon,
+        fast_batch_size=args.fast_batch_size,
+        fast_sampler_seed=args.fast_sampler_seed,
+        fast_lambda_tier_mode=args.fast_lambda_tier_mode,
+        fast_msvrg_step_c=args.fast_msvrg_step_c,
+        fast_msvrg_momentum=args.fast_msvrg_momentum,
+        fast_msvrg_epoch_len=args.fast_msvrg_epoch_len,
+        fast_msvrg_max_segments=args.fast_msvrg_max_segments,
+        fast_msvrg_trigger_rho=args.fast_msvrg_trigger_rho,
+        fast_msvrg_trigger_consec=args.fast_msvrg_trigger_consec,
         plot_best=not args.raw_plot,
         output_dir=args.output_dir,
     )

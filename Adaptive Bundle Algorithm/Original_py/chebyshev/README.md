@@ -42,6 +42,28 @@ To run the `[64, 64]` case:
 python -m chebyshev.experiment --classmate-crossover-width 64
 ```
 
+To reuse the faster adaptive backend from `mlp-comparison-results` while
+keeping the same baseline and Chebyshev code, add:
+
+```bash
+python -m chebyshev.experiment --adaptive-backend fast
+```
+
+For a K sweep with the fast adaptive curve:
+
+```bash
+python -m chebyshev.experiment \
+  --k-sweep 2,3,4 \
+  --cheb-mode high-k \
+  --adaptive-backend fast
+```
+
+The fast backend uses the classmate Gram-path lambda search and
+Momentum-SVRG inner loop.  Its gradient axis is reported in gradient
+equivalents, so it can be plotted against the original baseline and
+Chebyshev curves in the same comparison figure.  Use `--fast-epsilon 0`
+to run it in budget mode instead of epsilon-target mode.
+
 For GN*-aligned experiments, use:
 
 ```python
