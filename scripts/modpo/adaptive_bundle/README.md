@@ -25,6 +25,15 @@ objective gradients. Each outer step:
 4. appends the new first-order information to the bundle,
 5. optionally saves the current adapter checkpoint.
 
+Install dependencies first. PyTorch is intentionally not pinned here because CUDA wheels depend on the cloud image; install the PyTorch build that matches your CUDA version. IPOPT must be available before installing `cyipopt` from `requirements.txt`:
+
+```bash
+# Example only: choose the PyTorch command for your CUDA image from pytorch.org.
+# conda install pytorch pytorch-cuda=12.1 -c pytorch -c nvidia
+conda install -y -c conda-forge ipopt
+pip install -r requirements.txt
+```
+
 Run a small sanity pass first:
 
 ```bash
