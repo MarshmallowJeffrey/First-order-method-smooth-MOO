@@ -36,6 +36,7 @@ lambda_max_starts="${ADAPTIVE_LAMBDA_MAX_STARTS:-64}"
 lambda_solver="${ADAPTIVE_LAMBDA_SOLVER:-ipopt}"
 require_ipopt="${ADAPTIVE_REQUIRE_IPOPT:-True}"
 lambda_normalization="${ADAPTIVE_LAMBDA_NORMALIZATION:-none}"
+lambda_min="${ADAPTIVE_LAMBDA_MIN:-0.05}"
 smoothness="${ADAPTIVE_SMOOTHNESS:-1.0,1.0}"
 l_scale="${ADAPTIVE_L_SCALE:-1.0}"
 descent_atol="${ADAPTIVE_DESCENT_ATOL:-1e-6}"
@@ -69,6 +70,7 @@ PYTHONPATH=. python scripts/modpo/adaptive_bundle/beavertails.py \
     --lambda_solver "${lambda_solver}" \
     --require_ipopt "${require_ipopt}" \
     --lambda_normalization "${lambda_normalization}" \
+    --lambda_min "${lambda_min}" \
     --smoothness "${smoothness}" \
     --l_scale "${l_scale}" \
     --descent_atol "${descent_atol}" \

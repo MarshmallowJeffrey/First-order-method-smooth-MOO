@@ -72,6 +72,7 @@ class ScriptArguments:
     lambda_solver: Optional[str] = field(default="ipopt")
     require_ipopt: Optional[bool] = field(default=True)
     lambda_normalization: Optional[str] = field(default="none")
+    lambda_min: Optional[float] = field(default=0.05)
     smoothness: Optional[str] = field(default="1.0,1.0")
     l_scale: Optional[float] = field(default=1.0)
     descent_atol: Optional[float] = field(default=1e-6)
@@ -200,6 +201,12 @@ def main():
         raise ValueError("lambda_solver must be either 'ipopt' or 'slsqp'.")
     if script_args.lambda_normalization not in {"none", "global_mean"}:
         raise ValueError("lambda_normalization must be either 'none' or 'global_mean'.")
+    if (
+        not np.isfinite(script_args.lambda_min)
+        or script_args.lambda_min < 0.0
+        or script_args.lambda_min >= 1.0 / len(smoothness)
+    ):
+        raise ValueError("lambda_min must be finite and in [0, 1 / num_objectives).")
     if script_args.update_rule == "adam":
         script_args.update_rule = "adamw"
     if script_args.update_rule not in {"adamw", "t_map"}:
@@ -417,6 +424,7 @@ def main():
             solver=script_args.lambda_solver,
             require_ipopt=script_args.require_ipopt,
             lambda_normalization=script_args.lambda_normalization,
+            lambda_min=script_args.lambda_min,
         )
         if script_args.lambda_normalization == "none":
             pc_value = selection_pc_value
@@ -429,25 +437,34 @@ def main():
                 solver=script_args.lambda_solver,
                 require_ipopt=script_args.require_ipopt,
                 lambda_normalization="none",
+                lambda_min=script_args.lambda_min,
             )
         raw_gn_at_selected_lam = gn_value_at_lambda(
             bundle,
             lam,
             lambda_normalization="none",
+            lambda_min=script_args.lambda_min,
         )
         selection_gn_at_selected_lam = gn_value_at_lambda(
             bundle,
             lam,
             lambda_normalization=script_args.lambda_normalization,
+            lambda_min=script_args.lambda_min,
         )
         prev_lam = lam.copy()
         lambda_diagnostics = {
             "lambda_normalization": script_args.lambda_normalization,
+            "lambda_min": script_args.lambda_min,
             "gradient": bundle_gradient_diagnostics(bundle),
-            "gn_grid": gn_grid_diagnostics(bundle, lambda_normalization="none"),
+            "gn_grid": gn_grid_diagnostics(
+                bundle,
+                lambda_normalization="none",
+                lambda_min=script_args.lambda_min,
+            ),
             "selection_gn_grid": gn_grid_diagnostics(
                 bundle,
                 lambda_normalization=script_args.lambda_normalization,
+                lambda_min=script_args.lambda_min,
             ),
         }
 
@@ -577,6 +594,7 @@ def main():
             "lambda": lam.tolist(),
             "update_rule": script_args.update_rule,
             "lambda_normalization": script_args.lambda_normalization,
+            "lambda_min": script_args.lambda_min,
             "gn_star": pc_value,
             "raw_gn_star": pc_value,
             "raw_gn_star_lambda": raw_pc_lam.tolist(),

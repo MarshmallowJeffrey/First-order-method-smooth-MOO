@@ -104,6 +104,27 @@ def project_simplex(values: Sequence[float]) -> np.ndarray:
     return arr / total
 
 
+def project_truncated_simplex(values: Sequence[float], lambda_min: float = 0.0) -> np.ndarray:
+    """Clip to {lambda: sum lambda=1, lambda_k >= lambda_min} by renormalization."""
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.ndim != 1 or arr.shape[0] < 1:
+        raise ValueError("lambda values must be a non-empty one-dimensional array")
+    if not np.isfinite(lambda_min) or lambda_min < 0.0:
+        raise ValueError("lambda_min must be finite and non-negative")
+    K = arr.shape[0]
+    if lambda_min * K >= 1.0:
+        raise ValueError("lambda_min must be smaller than 1 / K")
+    if lambda_min == 0.0:
+        return project_simplex(arr)
+
+    free_mass = 1.0 - lambda_min * K
+    shifted = np.maximum(arr - lambda_min, 0.0)
+    total = float(shifted.sum())
+    if not np.isfinite(total) or total <= 0.0:
+        return np.full(K, 1.0 / K, dtype=np.float64)
+    return lambda_min + free_mass * shifted / total
+
+
 def _bundle_grads(bundle: FirstOrderBundle) -> np.ndarray:
     return np.asarray(bundle.grads, dtype=bundle.dtype)
 
@@ -138,9 +159,10 @@ def gn_value_at_lambda(
     bundle: FirstOrderBundle,
     lam: Sequence[float],
     lambda_normalization: str = "none",
+    lambda_min: float = 0.0,
 ) -> float:
     Jmat, _ = _lambda_selection_grads(bundle, lambda_normalization=lambda_normalization)
-    return _gn_value_batched(Jmat, project_simplex(lam))
+    return _gn_value_batched(Jmat, project_truncated_simplex(lam, lambda_min=lambda_min))
 
 
 def bundle_gradient_diagnostics(bundle: FirstOrderBundle) -> dict:
@@ -175,18 +197,21 @@ def gn_grid_diagnostics(
     bundle: FirstOrderBundle,
     num_points: int = 21,
     lambda_normalization: str = "none",
+    lambda_min: float = 0.0,
 ) -> list:
     """Evaluate GN(lambda; bundle) on a 2-objective helpful-weight grid."""
     if bundle.K != 2:
         return []
     if num_points < 2:
         raise ValueError("num_points must be at least 2")
+    if not np.isfinite(lambda_min) or lambda_min < 0.0 or lambda_min >= 0.5:
+        raise ValueError("For K=2, lambda_min must be finite and in [0, 0.5)")
     Jmat, scales = _lambda_selection_grads(
         bundle,
         lambda_normalization=lambda_normalization,
     )
     rows = []
-    for helpful_weight in np.linspace(0.0, 1.0, num_points):
+    for helpful_weight in np.linspace(lambda_min, 1.0 - lambda_min, num_points):
         lam = np.array([helpful_weight, 1.0 - helpful_weight], dtype=np.float64)
         rows.append({
             "lambda_helpful": float(helpful_weight),
@@ -194,6 +219,7 @@ def gn_grid_diagnostics(
             "gn": _gn_value_batched(Jmat, lam),
             "lambda_normalization": lambda_normalization,
             "lambda_normalization_scales": scales.tolist(),
+            "lambda_min": float(lambda_min),
         })
     return rows
 
@@ -210,13 +236,20 @@ def _gn_value_and_jac_batched(Jmat: np.ndarray, lam: np.ndarray) -> Tuple[float,
     return float(gnorms_sq[i_star]), grad_lam
 
 
-def _gn_multistart_set(K: int, prev_lam: Optional[np.ndarray], max_starts: int) -> List[np.ndarray]:
+def _gn_multistart_set(
+    K: int,
+    prev_lam: Optional[np.ndarray],
+    max_starts: int,
+    lambda_min: float = 0.0,
+) -> List[np.ndarray]:
     if K == 1:
         return [np.ones(1, dtype=np.float64)]
     if max_starts < 1:
         raise ValueError("max_starts must be at least 1")
+    if not np.isfinite(lambda_min) or lambda_min < 0.0 or lambda_min * K >= 1.0:
+        raise ValueError("lambda_min must be finite and smaller than 1 / K")
 
-    eps = 1e-8
+    eps = max(1e-8, float(lambda_min))
     starts: List[np.ndarray] = []
 
     def room() -> int:
@@ -235,7 +268,7 @@ def _gn_multistart_set(K: int, prev_lam: Optional[np.ndarray], max_starts: int) 
             start[k] = 0.8
             starts.append(start)
     if room() > 0 and prev_lam is not None:
-        starts.append(project_simplex(prev_lam))
+        starts.append(project_truncated_simplex(prev_lam, lambda_min=lambda_min))
     if room() > 0:
         for a in range(K):
             for b in range(a + 1, K):
@@ -257,12 +290,15 @@ def maximise_gn(
     solver: str = "ipopt",
     require_ipopt: bool = False,
     lambda_normalization: str = "none",
+    lambda_min: float = 0.0,
 ) -> Tuple[float, np.ndarray]:
     """Approximate argmax_lambda min_i ||sum_k lambda_k grad F_k(x_i)||^2."""
     if solver not in {"ipopt", "slsqp"}:
         raise ValueError("solver must be either 'ipopt' or 'slsqp'")
     if lambda_normalization not in {"none", "global_mean"}:
         raise ValueError("lambda_normalization must be either 'none' or 'global_mean'")
+    if not np.isfinite(lambda_min) or lambda_min < 0.0 or lambda_min * bundle.K >= 1.0:
+        raise ValueError("lambda_min must be finite and smaller than 1 / K")
     if bundle.m == 0:
         raise ValueError("Cannot maximize GN for an empty bundle")
     if bundle.K == 1:
@@ -280,16 +316,21 @@ def maximise_gn(
         _, jac = _gn_value_and_jac_batched(Jmat, lam)
         return -jac
 
-    starts = _gn_multistart_set(bundle.K, prev_lam=prev_lam, max_starts=max_starts)
+    starts = _gn_multistart_set(
+        bundle.K,
+        prev_lam=prev_lam,
+        max_starts=max_starts,
+        lambda_min=lambda_min,
+    )
     best_neg_value = np.inf
-    best_lam = project_simplex(starts[0])
+    best_lam = project_truncated_simplex(starts[0], lambda_min=lambda_min)
 
     constraints = [{
         "type": "eq",
         "fun": lambda lam: float(np.sum(lam) - 1.0),
         "jac": lambda lam: np.ones(bundle.K, dtype=np.float64),
     }]
-    bounds = [(1e-8, 1.0)] * bundle.K
+    bounds = [(max(1e-8, lambda_min), 1.0)] * bundle.K
     use_ipopt = solver == "ipopt" and HAS_IPOPT
     if solver == "ipopt" and not HAS_IPOPT:
         message = (
@@ -301,7 +342,7 @@ def maximise_gn(
         warnings.warn(message, RuntimeWarning, stacklevel=2)
 
     for start in starts:
-        start = project_simplex(start)
+        start = project_truncated_simplex(start, lambda_min=lambda_min)
         start_neg_value = neg_gn(start)
         if start_neg_value < best_neg_value:
             best_neg_value = float(start_neg_value)
@@ -343,7 +384,7 @@ def maximise_gn(
                 warnings.warn(f"GN SLSQP solve failed from start {start}: {exc}", RuntimeWarning)
                 continue
 
-        candidate_lam = project_simplex(result.x)
+        candidate_lam = project_truncated_simplex(result.x, lambda_min=lambda_min)
         candidate_neg_value = neg_gn(candidate_lam)
         if np.isfinite(candidate_neg_value) and candidate_neg_value < best_neg_value:
             best_neg_value = float(candidate_neg_value)
