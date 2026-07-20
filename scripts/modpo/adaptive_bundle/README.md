@@ -36,16 +36,16 @@ loss = lambda_helpful * F_helpful + lambda_harmless * F_harmless
 The original smoothness-based T-map path is still available for ablations with
 `ADAPTIVE_UPDATE_RULE=t_map`.
 
-The lambda search uses a small lower bound by default:
+The lambda search uses the original full simplex by default:
 
 ```text
-ADAPTIVE_LAMBDA_MIN=0.05
+ADAPTIVE_LAMBDA_MIN=0.0
 ```
 
-For two objectives this restricts selection to
-`lambda_helpful in [0.05, 0.95]`, preventing pure endpoint updates while still
-allowing strongly imbalanced weights. Set `ADAPTIVE_LAMBDA_MIN=0.0` to recover
-the original full simplex.
+For an endpoint-avoidance ablation, set `ADAPTIVE_LAMBDA_MIN=0.05`. For two
+objectives this restricts selection to `lambda_helpful in [0.05, 0.95]`,
+preventing pure endpoint updates while still allowing strongly imbalanced
+weights.
 
 Run a small sanity pass first:
 
@@ -136,7 +136,7 @@ adaptive max_inner: 25
 adaptive update_rule: adamw
 adaptive per_objective_batch_size: 2
 adaptive prune_inner: false
-adaptive lambda_min: 0.05
+adaptive lambda_min: 0.0
 lambda max starts: 64
 lambda solver: ipopt
 require ipopt: true
@@ -176,10 +176,10 @@ Important current assumptions:
 - GN lambda maximization defaults to IPOPT through `cyipopt`, matching the
   original adaptive-bundle implementation. `ADAPTIVE_REQUIRE_IPOPT=True` makes
   missing IPOPT fail fast instead of silently using SLSQP.
-- `ADAPTIVE_LAMBDA_MIN` constrains lambda selection away from simplex vertices.
-  The default `0.05` is a practical LLM safeguard against endpoint collapse
-  with nearly orthogonal helpful/harmless gradients; set it to `0.0` for the
-  original unconstrained MOA lambda search.
+- `ADAPTIVE_LAMBDA_MIN` optionally constrains lambda selection away from simplex
+  vertices. The default `0.0` keeps the original unconstrained MOA lambda
+  search. Set it to `0.05` for a practical LLM ablation against endpoint
+  collapse with nearly orthogonal helpful/harmless gradients.
 - `ADAPTIVE_LAMBDA_NORMALIZATION=global_mean` enables an LLM-oriented
   scale-calibrated lambda selection: the GN maximization divides each
   objective gradient by its mean bundle norm before selecting lambda. AdamW

@@ -72,7 +72,7 @@ class ScriptArguments:
     lambda_solver: Optional[str] = field(default="ipopt")
     require_ipopt: Optional[bool] = field(default=True)
     lambda_normalization: Optional[str] = field(default="none")
-    lambda_min: Optional[float] = field(default=0.05)
+    lambda_min: Optional[float] = field(default=0.0)
     smoothness: Optional[str] = field(default="1.0,1.0")
     l_scale: Optional[float] = field(default=1.0)
     descent_atol: Optional[float] = field(default=1e-6)
