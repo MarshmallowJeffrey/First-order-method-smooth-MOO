@@ -20,19 +20,21 @@ entry stores the current trainable vector, both objective losses, and both
 objective gradients. Each outer step:
 
 1. maximizes GN over the two-objective simplex,
-2. applies one or more T-map steps at the selected lambda,
+2. applies one or more AdamW weighted-DPO steps at the selected lambda,
 3. evaluates both DPO objectives at the new LoRA vector,
 4. appends the new first-order information to the bundle,
 5. optionally saves the current adapter checkpoint.
 
-Install dependencies first. PyTorch is intentionally not pinned here because CUDA wheels depend on the cloud image; install the PyTorch build that matches your CUDA version. IPOPT must be available before installing `cyipopt` from `requirements.txt`:
+`ADAPTIVE_UPDATE_RULE=adamw` is the default LLM runner. It keeps the adaptive
+bundle lambda selection, but updates LoRA parameters with the same optimizer
+family as the DPO-LW baseline:
 
-```bash
-# Example only: choose the PyTorch command for your CUDA image from pytorch.org.
-# conda install pytorch pytorch-cuda=12.1 -c pytorch -c nvidia
-conda install -y -c conda-forge ipopt
-pip install -r requirements.txt
+```text
+loss = lambda_helpful * F_helpful + lambda_harmless * F_harmless
 ```
+
+The original smoothness-based T-map path is still available for ablations with
+`ADAPTIVE_UPDATE_RULE=t_map`.
 
 Run a small sanity pass first:
 
@@ -95,9 +97,10 @@ Budget accounting used in the plots:
 - For uniform DPO-LW, one parameter update is one optimizer step for one fixed
   lambda run. A full pass over all uniform lambdas contains many updates.
 - For adaptive bundle, choosing lambda from the cached bundle is not counted as
-  an update. Each inner T-map candidate evaluation counts as one parameter
-  update, even if `prune_inner=True` later removes that candidate from the
-  retained bundle.
+  an update. With the default AdamW update, each inner optimizer step counts as
+  one parameter update. With the optional T-map update, each inner T-map
+  candidate evaluation counts as one parameter update, even if `prune_inner=True`
+  later removes that candidate from the retained bundle.
 - In this two-objective setup, one parameter update corresponds to about
   `2` objective-gradient evaluations. The logs also keep `gradient_eval` /
   `oracle_gradient_eval` for backward compatibility and provenance, but
@@ -119,6 +122,9 @@ fixed oracle subset: 128 samples per objective
 oracle batch size: 4
 adaptive max_outer: 20
 adaptive max_inner: 25
+adaptive update_rule: adamw
+adaptive per_objective_batch_size: 2
+adaptive prune_inner: false
 lambda max starts: 64
 lambda solver: ipopt
 require ipopt: true
@@ -144,10 +150,11 @@ Data handling:
 
 Important current assumptions:
 
-- The smoothness constants `L_k` are user-provided via `ADAPTIVE_SMOOTHNESS`
-  and default to `1.0,1.0`.
-- The T-map inner loop uses the same descent-lemma safeguard as the original
-  bundle code: if the new point violates
+- The default adaptive update is AdamW. `ADAPTIVE_SMOOTHNESS`,
+  `ADAPTIVE_L_SCALE`, `ADAPTIVE_DESCENT_ATOL`, and `ADAPTIVE_DESCENT_RTOL`
+  only affect the optional `ADAPTIVE_UPDATE_RULE=t_map` ablation.
+- The optional T-map inner loop uses the same descent-lemma safeguard as the
+  original bundle code: if the new point violates
   `F_lambda(x_new) <= F_lambda(x_i) - ||grad F_lambda(x_i)||^2/(2 L_lambda)`,
   the runner doubles the global `L_scale`, keeps the paid-for candidate in the
   bundle, and uses the smaller step size afterward. The LLM runner allows a
@@ -159,13 +166,13 @@ Important current assumptions:
   missing IPOPT fail fast instead of silently using SLSQP.
 - `ADAPTIVE_LAMBDA_NORMALIZATION=global_mean` enables an LLM-oriented
   scale-calibrated lambda selection: the GN maximization divides each
-  objective gradient by its mean bundle norm before selecting lambda. The
-  T-map update still uses the original raw scalarized gradient. The default
-  `none` keeps the original MOA criterion unchanged.
+  objective gradient by its mean bundle norm before selecting lambda. AdamW
+  updates still use the original raw scalarized DPO loss. The default `none`
+  keeps the original MOA criterion unchanged.
 - Each adaptive outer record includes `lambda_diagnostics`: per-objective
   gradient norm summaries, helpful/harmless gradient cosines, and GN values on
   a 21-point helpful-weight grid for both raw and lambda-selection metrics.
-  These diagnostics are logging only and do not change T-map updates.
+  These diagnostics are logging only and do not change parameter updates.
 - This first migration uses a fixed oracle subset, so GN* is deterministic for
   the selected subset but still only approximates the full dataset objective.
 - DPO-LW writes `uniform_gn_history.jsonl` by evaluating each trained uniform

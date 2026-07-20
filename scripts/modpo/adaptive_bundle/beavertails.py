@@ -23,7 +23,7 @@ import tyro
 from accelerate import Accelerator
 from peft import LoraConfig
 from torch.utils.data import DataLoader
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, get_scheduler
 
 from scripts.modpo.adaptive_bundle.trainer import AdaptiveBundleMODPOTrainer
 from src.data.configs import DATASET_CONFIGS
@@ -61,6 +61,13 @@ class ScriptArguments:
 
     max_outer: Optional[int] = field(default=20)
     max_inner: Optional[int] = field(default=25)
+    update_rule: Optional[str] = field(default="adamw")
+    per_objective_batch_size: Optional[int] = field(default=2)
+    gradient_accumulation_steps: Optional[int] = field(default=1)
+    warmup_ratio: Optional[float] = field(default=0.03)
+    lr_scheduler_type: Optional[str] = field(default="cosine")
+    weight_decay: Optional[float] = field(default=0.0)
+    max_grad_norm: Optional[float] = field(default=1.0)
     lambda_max_starts: Optional[int] = field(default=64)
     lambda_solver: Optional[str] = field(default="ipopt")
     require_ipopt: Optional[bool] = field(default=True)
@@ -69,7 +76,7 @@ class ScriptArguments:
     l_scale: Optional[float] = field(default=1.0)
     descent_atol: Optional[float] = field(default=1e-6)
     descent_rtol: Optional[float] = field(default=1e-6)
-    prune_inner: Optional[bool] = field(default=True)
+    prune_inner: Optional[bool] = field(default=False)
     save_every_outer: Optional[int] = field(default=0)
     bundle_dtype: Optional[str] = field(default="float32")
 
@@ -163,6 +170,16 @@ def save_jsonl(path, record):
         handle.write(json.dumps(record) + "\n")
 
 
+def weighted_dpo_loss(trainer, helpful_batch, harmless_batch, helpful_weight, harmless_weight):
+    helpful_batch = trainer._prepare_inputs(helpful_batch)
+    harmless_batch = trainer._prepare_inputs(harmless_batch)
+
+    helpful_loss = trainer.dpo_objective_loss(trainer.model, helpful_batch)
+    harmless_loss = trainer.dpo_objective_loss(trainer.model, harmless_batch)
+    loss = helpful_weight * helpful_loss + harmless_weight * harmless_loss
+    return loss, helpful_loss.detach(), harmless_loss.detach()
+
+
 def main():
     script_args = tyro.cli(ScriptArguments)
     set_seeds(script_args.seed)
@@ -183,12 +200,31 @@ def main():
         raise ValueError("lambda_solver must be either 'ipopt' or 'slsqp'.")
     if script_args.lambda_normalization not in {"none", "global_mean"}:
         raise ValueError("lambda_normalization must be either 'none' or 'global_mean'.")
+    if script_args.update_rule == "adam":
+        script_args.update_rule = "adamw"
+    if script_args.update_rule not in {"adamw", "t_map"}:
+        raise ValueError("update_rule must be either 'adamw' or 't_map'.")
+    if script_args.per_objective_batch_size is None or script_args.per_objective_batch_size < 1:
+        raise ValueError("per_objective_batch_size must be at least 1.")
+    if script_args.gradient_accumulation_steps is None or script_args.gradient_accumulation_steps < 1:
+        raise ValueError("gradient_accumulation_steps must be at least 1.")
+    if not np.isfinite(script_args.warmup_ratio) or script_args.warmup_ratio < 0.0:
+        raise ValueError("warmup_ratio must be finite and non-negative.")
+    if script_args.max_grad_norm is not None and script_args.max_grad_norm < 0.0:
+        raise ValueError("max_grad_norm must be non-negative when provided.")
     if script_args.require_ipopt and script_args.lambda_solver == "ipopt" and not ipopt_available():
         raise RuntimeError(
             "IPOPT was required for adaptive bundle lambda selection, but "
             "cyipopt/IPOPT is unavailable. Install IPOPT + cyipopt on the "
             "training machine before running this experiment. "
             f"Import error: {ipopt_import_error()!r}"
+        )
+    if script_args.update_rule == "adamw" and script_args.prune_inner:
+        warnings.warn(
+            "prune_inner is ignored for AdamW updates because optimizer state "
+            "follows the full trajectory.",
+            RuntimeWarning,
+            stacklevel=2,
         )
 
     print_local_main("loading model...")
@@ -292,6 +328,39 @@ def main():
         trainer.model.print_trainable_parameters()
     trainer.model.train()
 
+    helpful_loader = CyclingLoader(DataLoader(
+        better_train,
+        batch_size=script_args.per_objective_batch_size,
+        shuffle=True,
+        drop_last=True,
+        collate_fn=data_collator,
+    ))
+    harmless_loader = CyclingLoader(DataLoader(
+        safer_train,
+        batch_size=script_args.per_objective_batch_size,
+        shuffle=True,
+        drop_last=True,
+        collate_fn=data_collator,
+    ))
+    trainable_params = [param for param in trainer.model.parameters() if param.requires_grad]
+    optimizer = None
+    scheduler = None
+    if script_args.update_rule == "adamw":
+        optimizer = torch.optim.AdamW(
+            trainable_params,
+            lr=script_args.training_args.learning_rate,
+            weight_decay=script_args.weight_decay,
+        )
+        total_optimizer_steps = max(1, script_args.max_outer * script_args.max_inner)
+        warmup_steps = int(total_optimizer_steps * script_args.warmup_ratio)
+        scheduler = get_scheduler(
+            script_args.lr_scheduler_type,
+            optimizer=optimizer,
+            num_warmup_steps=warmup_steps,
+            num_training_steps=total_optimizer_steps,
+        )
+        optimizer.zero_grad(set_to_none=True)
+
     def oracle_call():
         return trainer.multi_objective_gradient_oracle_over_batches(
             objective_batch_groups,
@@ -391,45 +460,88 @@ def main():
         inner_records = []
         for inner_step in range(1, script_args.max_inner + 1):
             l_scale_before_step = current_l_scale
-            x_new, source_idx, source_grad_norm_sq, t_map_u_star, L_lambda = t_map_step(
-                bundle,
-                lam,
-                L_scale=current_l_scale,
-            )
-            trainer.set_trainable_parameter_vector(x_new)
+            source_idx = bundle.m - 1
+            source_grad_norm_sq = None
+            t_map_u_star = None
+            L_lambda = None
+            f_lambda_new = None
+            descent_slack = None
+            descent_tolerance = None
+            safeguard_triggered = False
+            train_loss_value = None
+            train_helpful_loss = None
+            train_harmless_loss = None
+            learning_rate = None
+
+            if script_args.update_rule == "t_map":
+                x_new, source_idx, source_grad_norm_sq, t_map_u_star, L_lambda = t_map_step(
+                    bundle,
+                    lam,
+                    L_scale=current_l_scale,
+                )
+                trainer.set_trainable_parameter_vector(x_new)
+            else:
+                micro_losses = []
+                micro_helpful_losses = []
+                micro_harmless_losses = []
+                for _ in range(script_args.gradient_accumulation_steps):
+                    loss, helpful_loss, harmless_loss = weighted_dpo_loss(
+                        trainer,
+                        helpful_loader.next(),
+                        harmless_loader.next(),
+                        float(lam[0]),
+                        float(lam[1]),
+                    )
+                    micro_losses.append(float(loss.detach().cpu()))
+                    micro_helpful_losses.append(float(helpful_loss.cpu()))
+                    micro_harmless_losses.append(float(harmless_loss.cpu()))
+                    scaled_loss = loss / script_args.gradient_accumulation_steps
+                    scaled_loss.backward()
+                if script_args.max_grad_norm and script_args.max_grad_norm > 0:
+                    torch.nn.utils.clip_grad_norm_(trainable_params, script_args.max_grad_norm)
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad(set_to_none=True)
+                learning_rate = float(scheduler.get_last_lr()[0])
+                train_loss_value = float(np.mean(micro_losses))
+                train_helpful_loss = float(np.mean(micro_helpful_losses))
+                train_harmless_loss = float(np.mean(micro_harmless_losses))
+
             oracle = oracle_call()
             bundle.add(oracle["x"], oracle["fvals"], oracle["grads"])
-            f_lambda_new = float(np.asarray(oracle["fvals"], dtype=np.float64) @ lam)
-            descent_slack = f_lambda_new - t_map_u_star
-            descent_tolerance = (
-                script_args.descent_atol
-                + script_args.descent_rtol * (1.0 + abs(t_map_u_star))
-            )
-            safeguard_triggered = descent_slack > descent_tolerance
-            if safeguard_triggered:
-                safeguard_violations += 1
-                current_l_scale *= 2.0
-                if not safeguard_warned:
-                    warnings.warn(
-                        "Descent-lemma check failed: ADAPTIVE_SMOOTHNESS / "
-                        "ADAPTIVE_L_SCALE underestimate local curvature. "
-                        "The adaptive bundle runner is doubling L_scale and "
-                        "continuing with a smaller T-map step size.",
-                        RuntimeWarning,
-                        stacklevel=2,
-                    )
-                    safeguard_warned = True
-                if current_l_scale > 2.0 ** 60:
-                    raise RuntimeError(
-                        "Descent-lemma safeguard scaled L by more than 2^60. "
-                        "The DPO objectives do not appear to satisfy the "
-                        "current smoothness model along the iterates."
-                    )
+            if script_args.update_rule == "t_map":
+                f_lambda_new = float(np.asarray(oracle["fvals"], dtype=np.float64) @ lam)
+                descent_slack = f_lambda_new - t_map_u_star
+                descent_tolerance = (
+                    script_args.descent_atol
+                    + script_args.descent_rtol * (1.0 + abs(t_map_u_star))
+                )
+                safeguard_triggered = descent_slack > descent_tolerance
+                if safeguard_triggered:
+                    safeguard_violations += 1
+                    current_l_scale *= 2.0
+                    if not safeguard_warned:
+                        warnings.warn(
+                            "Descent-lemma check failed: ADAPTIVE_SMOOTHNESS / "
+                            "ADAPTIVE_L_SCALE underestimate local curvature. "
+                            "The adaptive bundle runner is doubling L_scale and "
+                            "continuing with a smaller T-map step size.",
+                            RuntimeWarning,
+                            stacklevel=2,
+                        )
+                        safeguard_warned = True
+                    if current_l_scale > 2.0 ** 60:
+                        raise RuntimeError(
+                            "Descent-lemma safeguard scaled L by more than 2^60. "
+                            "The DPO objectives do not appear to satisfy the "
+                            "current smoothness model along the iterates."
+                        )
             total_parameter_updates += 1
             total_oracle_gradient_evals += 1
             total_inner_steps += 1
             inner_records.append({
                 "inner_step": inner_step,
+                "update_rule": script_args.update_rule,
                 "gradient_eval": total_oracle_gradient_evals,
                 "oracle_gradient_eval": total_oracle_gradient_evals,
                 "parameter_update": total_parameter_updates,
@@ -449,16 +561,21 @@ def main():
                 "descent_rtol": script_args.descent_rtol,
                 "safeguard_triggered": safeguard_triggered,
                 "safeguard_violations": safeguard_violations,
+                "train_loss": train_loss_value,
+                "train_helpful_loss": train_helpful_loss,
+                "train_harmless_loss": train_harmless_loss,
+                "learning_rate": learning_rate,
                 "fvals": oracle["fvals"].tolist(),
             })
 
-        if script_args.prune_inner:
+        if script_args.update_rule == "t_map" and script_args.prune_inner:
             prune_last_candidates(bundle, bundle_size_before, script_args.max_inner, lam)
             trainer.set_trainable_parameter_vector(bundle.points[-1])
 
         record = {
             "outer": outer,
             "lambda": lam.tolist(),
+            "update_rule": script_args.update_rule,
             "lambda_normalization": script_args.lambda_normalization,
             "gn_star": pc_value,
             "raw_gn_star": pc_value,
@@ -488,11 +605,14 @@ def main():
             "inner": inner_records,
         }
         save_jsonl(history_path, record)
-        print_local_main(
+        status = (
             f"outer={outer} lambda={np.round(lam, 4).tolist()} "
             f"gn*={pc_value:.4e} updates={total_parameter_updates} "
-            f"bundle={bundle.m} L_scale={current_l_scale:g}"
+            f"bundle={bundle.m} update={script_args.update_rule}"
         )
+        if script_args.update_rule == "t_map":
+            status += f" L_scale={current_l_scale:g}"
+        print_local_main(status)
 
         if script_args.save_every_outer and outer % script_args.save_every_outer == 0:
             checkpoint_dir = os.path.join(script_args.training_args.output_dir, f"outer_{outer}")
@@ -506,6 +626,7 @@ def main():
     with open(final_state_path, "w") as handle:
         json.dump(
             {
+                "update_rule": script_args.update_rule,
                 "parameter_updates": total_parameter_updates,
                 "oracle_gradient_evals": total_oracle_gradient_evals,
                 "objective_gradient_evals": num_objectives * total_parameter_updates,

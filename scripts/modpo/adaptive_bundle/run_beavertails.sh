@@ -24,6 +24,14 @@ oracle_subset_size="${ORACLE_SUBSET_SIZE_PER_OBJECTIVE:-128}"
 oracle_batch_size="${ADAPTIVE_ORACLE_BATCH_SIZE:-4}"
 max_outer="${ADAPTIVE_MAX_OUTER:-20}"
 max_inner="${ADAPTIVE_MAX_INNER:-25}"
+update_rule="${ADAPTIVE_UPDATE_RULE:-adamw}"
+per_objective_batch_size="${ADAPTIVE_PER_OBJECTIVE_BATCH_SIZE:-2}"
+gradient_accumulation_steps="${ADAPTIVE_GRADIENT_ACCUMULATION_STEPS:-1}"
+warmup_ratio="${ADAPTIVE_WARMUP_RATIO:-0.03}"
+lr_scheduler_type="${ADAPTIVE_LR_SCHEDULER_TYPE:-cosine}"
+weight_decay="${ADAPTIVE_WEIGHT_DECAY:-0.0}"
+max_grad_norm="${ADAPTIVE_MAX_GRAD_NORM:-1.0}"
+prune_inner="${ADAPTIVE_PRUNE_INNER:-False}"
 lambda_max_starts="${ADAPTIVE_LAMBDA_MAX_STARTS:-64}"
 lambda_solver="${ADAPTIVE_LAMBDA_SOLVER:-ipopt}"
 require_ipopt="${ADAPTIVE_REQUIRE_IPOPT:-True}"
@@ -49,6 +57,14 @@ PYTHONPATH=. python scripts/modpo/adaptive_bundle/beavertails.py \
     --oracle_batch_size "${oracle_batch_size}" \
     --max_outer "${max_outer}" \
     --max_inner "${max_inner}" \
+    --update_rule "${update_rule}" \
+    --per_objective_batch_size "${per_objective_batch_size}" \
+    --gradient_accumulation_steps "${gradient_accumulation_steps}" \
+    --warmup_ratio "${warmup_ratio}" \
+    --lr_scheduler_type "${lr_scheduler_type}" \
+    --weight_decay "${weight_decay}" \
+    --max_grad_norm "${max_grad_norm}" \
+    --prune_inner "${prune_inner}" \
     --lambda_max_starts "${lambda_max_starts}" \
     --lambda_solver "${lambda_solver}" \
     --require_ipopt "${require_ipopt}" \
