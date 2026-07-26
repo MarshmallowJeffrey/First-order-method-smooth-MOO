@@ -1,0 +1,168 @@
+{
+ "config": {
+  "A": 5,
+  "tau": 0.05,
+  "alpha": 4.0,
+  "T": 1000,
+  "noise_std": 0.5,
+  "data_seed": 7,
+  "sampler_seed": 41,
+  "msvrg_batch": 256,
+  "msvrg_step_const": 0.1,
+  "msvrg_momentum": 0.5,
+  "msvrg_epoch_len": null,
+  "msvrg_trigger_rho": 0.7,
+  "msvrg_trigger_patience": 2,
+  "max_segment_retries": 4,
+  "msvrg_max_segments": 64,
+  "epsilon": 0.001,
+  "node_tol": 0.0006666666666666666,
+  "solve_target": 0.00016666666666666666,
+  "global_stop_gn": 0.0006666666666666666,
+  "resolution": 11,
+  "share_mode": "gram",
+  "max_outer": 500,
+  "lambda_tier_mode": "strict",
+  "lambda_max_starts": 64,
+  "msvrg_rel_target": 0.25,
+  "prune_grid_r": 11,
+  "eval_every_n_grads": 10.0,
+  "max_grad_evals": 200000.0,
+  "max_wall_seconds": 3600.0,
+  "n_w_eval": 2001,
+  "n_dense_oracle": 5000,
+  "n_pf_ref_points": 12,
+  "L_safety": 1.5,
+  "smoke": false
+ },
+ "commit": "902a8fb428b959da851e7b9f88ea14cf4dd47d6c",
+ "L_calibration": {
+  "L": [
+   0.14932335529865415,
+   0.1406049747243565
+  ],
+  "L_raw_max": [
+   0.09954890353243609,
+   0.09373664981623767
+  ],
+  "n_hessians": 909
+ },
+ "statistical_layer": {
+  "reward_sup_gap": 0.059317198286309325,
+  "cdf_sup_gap": 0.14726711094952483
+ },
+ "baseline": {
+  "stop_reason": "global_stop_gn",
+  "global_stop_gn": 0.0006666666666666666,
+  "n_nodes": 12,
+  "n_served": 12,
+  "censored_nodes": 0,
+  "solved_nodes": 4,
+  "served_by_share": 12,
+  "served_by_chain": 0,
+  "n_delivered": 65,
+  "segments_total": 64,
+  "minibatch_steps_total": 256,
+  "safeguard_retries": 0,
+  "L_scale_final": 1.0,
+  "joint_calls": 64,
+  "ifo_minibatch_total": 100352,
+  "grad_equiv_total": 328.704,
+  "wall_seconds": 0.47292280197143555,
+  "metric_seconds": 1.4791018962860107,
+  "delivered_gn_strict": 0.0005117786407767904,
+  "grid_worst_best_val": 0.0005117786581666559,
+  "epoch_len": 4
+ },
+ "adaptive": {
+  "stop_reason": "epsilon_certified",
+  "joint_calls": 79,
+  "ifo_minibatch_total": 161792,
+  "grad_equiv_total": 481.584,
+  "L_scale_final": 1.0,
+  "inner_cap_hits": 0,
+  "lambda_search_seconds": 1.9391520023345947,
+  "lambda_tier_mode": "strict"
+ },
+ "adaptive_bundle_m": {
+  "pre_prune": 80,
+  "delivered": 3
+ },
+ "process_time_s": {
+  "baseline": 1.946972,
+  "adaptive": 1.9704329999999999
+ },
+ "wall_time_s": {
+  "baseline": 1.9523464171215892,
+  "adaptive": 1.975927249994129
+ },
+ "scorer_seconds_adaptive_prefix": 2.387536749942228,
+ "pf_metrics": {
+  "baseline": {
+   "max_point_to_oracle": 0.941385346213555,
+   "igd": 0.3215406355163069
+  },
+  "adaptive": {
+   "max_point_to_oracle": 0.6644369225698734,
+   "igd": 0.12034176512244545
+  }
+ },
+ "front_uniformity_secondary": {
+  "baseline": {
+   "at_uniform_w": {
+    "cv": 1.036792285699813,
+    "gap_ratio": 27.655810362625807
+   },
+   "at_arc_uniform_w": {
+    "cv": 0.7705792457111682,
+    "gap_ratio": 143.4919941722899
+   }
+  },
+  "adaptive": {
+   "at_uniform_w": {
+    "cv": 0.7231594622783487,
+    "gap_ratio": 6.224375506779631
+   },
+   "at_arc_uniform_w": {
+    "cv": 0.7231594622783487,
+    "gap_ratio": 6.224375506779631
+   }
+  }
+ },
+ "eps_value_final": {
+  "baseline": 0.47578446175122613,
+  "adaptive": 0.035047109170607715
+ },
+ "readouts": {
+  "baseline": {
+   "first_cpu_to_eps": 0.1484849452972412,
+   "first_grads_to_eps": 328.704,
+   "final_gn_strict": 0.0005117786407767904,
+   "total_cpu": 0.47292280197143555,
+   "total_grads": 328.704
+  },
+  "adaptive": {
+   "first_cpu_to_eps": 1.1726617813110352,
+   "first_grads_to_eps": 408.432,
+   "final_gn_strict": 0.0004953164490131801,
+   "total_cpu": 1.975450038909912,
+   "total_grads": 481.584
+  },
+  "fixed_budget": {
+   "budget_grads": 328.704,
+   "budget_cpu": 0.47292280197143555,
+   "gn_at_budget_grads": {
+    "baseline": 0.0005117786407767904,
+    "adaptive": 0.0015692388494880096
+   },
+   "gn_at_budget_cpu": {
+    "baseline": 0.0005117786407767904,
+    "adaptive": 0.0035236065876107685
+   },
+   "eps_value_at_budget_grads": {
+    "baseline": 0.47578446175122613,
+    "adaptive": 0.06886942426776965
+   }
+  }
+ }
+}

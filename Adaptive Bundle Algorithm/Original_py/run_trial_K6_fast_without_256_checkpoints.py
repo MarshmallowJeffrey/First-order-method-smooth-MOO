@@ -36,15 +36,27 @@ because the K per-class losses partition the n samples).  The legacy
 curves' axis is exactly the same unit (their steps are all full joint
 calls), so the axes are directly comparable.
 
-λ-search tier decision for THIS run: every round uses the STRICT tier
-(64 starts, tol 1e-8) — after the Gram rewrite the strict search is
-sub-second per round, and an all-strict run keeps the self-reported
-metric exactly on the legacy 64-start yardstick (no tier-mixing caveat).
-The two-tier machinery (cheap rounds + stop-verify) is implemented and
-sanity-covered; it stays available for larger K / larger bundles.
+λ-search tiers (v3 default, user-approved July 16): lambda_tier_mode=
+"two_tier" — ordinary rounds search on the CHEAP tier (centroid + K
+vertices + prev_lam ≈ 8 starts, tol 1e-4) and their values are PLOTTED
+DIRECTLY (user decision; the 8-start meter under-searches a maximiser so
+it can only under-report — disclosed in the README; the
+"strict-on-recorded-rounds" guard is held as a backup, see
+Note/Jul_16_note.md).  Only the STRICT tier (64 starts, tol 1e-8) may
+sign a stopping certificate: a cheap value at or below 2eps/3 triggers a
+strict re-solve, and the run stops only if the strict value confirms.
+
+Relative inner target (v3, user-approved July 16; Algorithm-2 VARIANT):
+each round's inner-loop target is max(eps/3, rel_target * pc_val) — "cut
+the selected worst direction to a quarter", floored by the paper's
+absolute eps/3 so the endgame matches the original algorithm exactly.
+Responds to v2's cap_hits=150 (the absolute eps/3 is unreachable from a
+cold start).  The stopping certificate is unaffected.
 
 Usage:
     python run_trial_K6_fast_without_256_checkpoints.py [--smoke]
+        [--batch B] [--beta B] [--step-const C] [--tier-mode M]
+        [--max-outer N] [--rel-target G] [--variant-tag TAG]
 """
 import argparse
 import json
@@ -94,18 +106,20 @@ TRIAL_CONFIG = dict(
     coarse_resolution=10,          # baseline grid r (reused curves) + prune grid
     epsilon=1e-3,
     # ---- kept aligned with the July 11 trial ----
-    max_outer=150,                 # same round fuse as the original adaptive run
     max_grad_evals=180_180.0,      # nominal cap (grad-equivalents), same B
     adaptive_eval_every_n_grads=600.0,
     lambda_max_starts=64,          # strict tier, same as the old run's search
-    # ---- fast-method parameters (defaults from the July 15 plan) ----
-    lambda_tier_mode="strict",     # see module docstring for the rationale
-    msvrg_batch=1024,
-    msvrg_epoch_len=None,          # None -> ceil(n/b) = 49
-    msvrg_step_c=0.1,
-    msvrg_momentum=0.9,
+    # ---- v3 settings (user-approved July 16; see module docstring) ----
+    max_outer=500,                 # raised fuse: chase eps for real
+    lambda_tier_mode="two_tier",   # cheap rounds + strict-only certificates
+    msvrg_rel_target=0.25,         # inner target = max(eps/3, 0.25*pc_val)
+    # ---- Momentum-SVRG parameters (v2-validated combination) ----
+    msvrg_batch=4096,
+    msvrg_epoch_len=None,          # None -> ceil(n/b) = 13
+    msvrg_step_const=0.1,
+    msvrg_momentum=0.5,
     msvrg_trigger_rho=0.7,
-    msvrg_trigger_consec=2,
+    msvrg_trigger_patience=2,
     msvrg_max_segments=10,
     prune_grid_r=10,
     sampler_seed=41,
@@ -116,8 +130,9 @@ SMOKE_CONFIG = dict(
     coarse_resolution=2, epsilon=1e-2,
     max_outer=8, max_grad_evals=None, adaptive_eval_every_n_grads=None,
     lambda_max_starts=8, lambda_tier_mode="two_tier",
-    msvrg_batch=60, msvrg_epoch_len=5, msvrg_step_c=0.1,
-    msvrg_momentum=0.9, msvrg_trigger_rho=0.7, msvrg_trigger_consec=2,
+    msvrg_rel_target=0.25,
+    msvrg_batch=60, msvrg_epoch_len=5, msvrg_step_const=0.1,
+    msvrg_momentum=0.9, msvrg_trigger_rho=0.7, msvrg_trigger_patience=2,
     msvrg_max_segments=4, prune_grid_r=3, sampler_seed=41,
 )
 
@@ -139,8 +154,16 @@ def main() -> None:
                         help="override msvrg_batch")
     parser.add_argument("--beta", type=float, default=None,
                         help="override msvrg_momentum")
-    parser.add_argument("--step-c", type=float, default=None,
-                        help="override msvrg_step_c")
+    parser.add_argument("--step-const", type=float, default=None,
+                        help="override msvrg_step_const")
+    parser.add_argument("--tier-mode", type=str, default=None,
+                        choices=["strict", "two_tier"],
+                        help="override lambda_tier_mode")
+    parser.add_argument("--max-outer", type=int, default=None,
+                        help="override max_outer (round fuse)")
+    parser.add_argument("--rel-target", type=float, default=None,
+                        help="override msvrg_rel_target (γ); pass 0 to "
+                             "disable the relative target (pure eps/3)")
     parser.add_argument("--variant-tag", type=str, default="",
                         help="suffix appended to the output folder name")
     args = parser.parse_args()
@@ -149,8 +172,15 @@ def main() -> None:
         cfg["msvrg_batch"] = args.batch
     if args.beta is not None:
         cfg["msvrg_momentum"] = args.beta
-    if args.step_c is not None:
-        cfg["msvrg_step_c"] = args.step_c
+    if args.step_const is not None:
+        cfg["msvrg_step_const"] = args.step_const
+    if args.tier_mode is not None:
+        cfg["lambda_tier_mode"] = args.tier_mode
+    if args.max_outer is not None:
+        cfg["max_outer"] = args.max_outer
+    if args.rel_target is not None:
+        cfg["msvrg_rel_target"] = (None if args.rel_target == 0.0
+                                   else args.rel_target)
 
     if not ipopt_available():
         raise RuntimeError("IPOPT is required but unavailable.")
@@ -174,7 +204,9 @@ def main() -> None:
         tag += f"_{args.variant_tag}"
     if args.smoke:
         tag += "_SMOKE"
-    out_dir = OUTPUT_ROOT / tag
+    # Since the July 16 reorganisation all fast-series runs live under
+    # output/fast_method_trials/ (see its README for the naming map).
+    out_dir = OUTPUT_ROOT / "fast_method_trials" / tag
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"=== K={cfg['K']} FAST trial: {tag} ===", flush=True)
@@ -191,12 +223,13 @@ def main() -> None:
             max_grad_evals=cfg["max_grad_evals"],
             lambda_max_starts=cfg["lambda_max_starts"],
             lambda_tier_mode=cfg["lambda_tier_mode"],
-            msvrg_step_c=cfg["msvrg_step_c"],
+            msvrg_step_const=cfg["msvrg_step_const"],
             msvrg_momentum=cfg["msvrg_momentum"],
             msvrg_epoch_len=cfg["msvrg_epoch_len"],
             msvrg_max_segments=cfg["msvrg_max_segments"],
             msvrg_trigger_rho=cfg["msvrg_trigger_rho"],
-            msvrg_trigger_consec=cfg["msvrg_trigger_consec"],
+            msvrg_trigger_patience=cfg["msvrg_trigger_patience"],
+            msvrg_rel_target=cfg["msvrg_rel_target"],
             prune_grid_r=cfg["prune_grid_r"],
             joint_oracle=joint_oracle, verbose=True,
         )
@@ -244,6 +277,8 @@ def main() -> None:
             "tier_history_counts": {
                 t: fast["tier_history"].count(t)
                 for t in set(fast["tier_history"])},
+            "inner_target_history": _json_ready(fast["inner_target_history"]),
+            "msvrg_rel_target": _json_ready(fast["msvrg_rel_target"]),
             "pc_history": _json_ready(fast["pc_history"]),
             "prune_report": _json_ready(fast["prune_report"]),
             "final_lambda": _json_ready(fast["lambda_history"][-1]
@@ -346,6 +381,29 @@ def _write_readmes(out_dir: Path, cfg: dict, d: int, summary: dict,
     tta = summary.get("time_to_target_vs_original_adaptive", {})
     prune = fx["prune_report"]
 
+    if cfg["lambda_tier_mode"] == "two_tier":
+        tier_note_en = (
+            "Ordinary rounds search on the CHEAP tier (~K+2 starts, tol "
+            "1e-4) and their values are plotted directly (user decision): "
+            "an under-search of a maximiser can only UNDER-report, and the "
+            "legacy curves carry the 64-start meter — keep this in mind on "
+            "cross-curve reads (backup guard recorded in "
+            "Note/Jul_16_note.md).  Certificates are strict-tier only: a "
+            "cheap value at or below 2eps/3 triggers a strict re-solve and "
+            "the run stops only on strict confirmation.")
+        tier_note_zh = (
+            "平时用粗档（约 K+2 起点、tol 1e-4）搜索，其值直接进图"
+            "（用户决定）：求最大化时搜索不足只会低报，而旧曲线是 64 起点"
+            "口径——跨曲线解读时注意这一点（backup 方案记录于 "
+            "Note/Jul_16_note.md）。证书只由严格档签发：粗档值 ≤ 2eps/3 "
+            "时触发严格档复核，复核确认才停机。")
+    else:
+        tier_note_en = (
+            "All rounds used the STRICT tier (64 starts): the self-reported "
+            "metric stays exactly on the legacy 64-start yardstick.")
+        tier_note_zh = (
+            "全程严格档（64 起点）：自报告口径与旧曲线完全一致。")
+
     readme = f"""# K={cfg['K']} FAST trial (Gram + Momentum-SVRG, eps={cfg['epsilon']}, without-256 track)
 
 Produced by `Original_py/run_trial_K6_fast_without_256_checkpoints.py`
@@ -362,19 +420,21 @@ plan items live:
    measured λ-search share this run: **{fx['lambda_search_seconds']:.1f} s
    of {fx['wall_seconds']:.1f} s wall ({lam_share:.1f}%)** vs ~95% in the
    July 11 original run.
-2. **Two-tier λ-search + stop-verify** — implemented and sanity-covered;
-   THIS run used `lambda_tier_mode="{cfg['lambda_tier_mode']}"` (all-strict,
-   64 starts): after the Gram rewrite the strict tier is sub-second per
-   round, and all-strict keeps the self-reported metric exactly on the
-   legacy 64-start yardstick.  Tier counts: {fx['tier_history_counts']}.
+2. **Two-tier λ-search + stop-verify** —
+   `lambda_tier_mode="{cfg['lambda_tier_mode']}"`.  {tier_note_en}
+   Tier counts: {fx['tier_history_counts']}.
 3. **Momentum-SVRG inner loop** — segments of stratified minibatch
    variance-reduced heavy-ball steps (b={cfg['msvrg_batch']},
-   p_seg={cfg['msvrg_epoch_len'] or 'ceil(n/b)'}, c={cfg['msvrg_step_c']},
-   beta={cfg['msvrg_momentum']}, rho={cfg['msvrg_trigger_rho']},
-   consec={cfg['msvrg_trigger_consec']},
-   max_segments={cfg['msvrg_max_segments']}); every bundle admission and
-   every eps/3 acceptance test runs on FULL gradients (randomness cannot
-   fake a certificate).
+   p_seg={cfg['msvrg_epoch_len'] or 'ceil(n/b)'},
+   step_const={cfg['msvrg_step_const']}, beta={cfg['msvrg_momentum']},
+   rho={cfg['msvrg_trigger_rho']}, patience={cfg['msvrg_trigger_patience']},
+   max_segments={cfg['msvrg_max_segments']},
+   rel_target={cfg['msvrg_rel_target']}).  Per-round inner target =
+   max(eps/3, rel_target*pc_val) when rel_target is set — an Algorithm-2
+   VARIANT responding to v2's cap_hits (the certificate is unaffected;
+   the stop line never moves).  Every bundle admission and every
+   acceptance test runs on FULL gradients (randomness cannot fake a
+   certificate).
 4. **Delivery-time pruning** — bundle {prune['m_before']} -> {prune['m_after']}
    points by lambda-activation on the r={cfg['prune_grid_r']} simplex grid
    (+ final search winners); probe GN values bitwise unchanged.
@@ -459,16 +519,18 @@ the Algorithm-2 termination argument for those rounds
 1. **Gram 化 λ-search**——精确恒等改写 GN(λ)=min_i λ^T M_i λ；本次实测
    λ-search 耗时 **{fx['lambda_search_seconds']:.1f} s / 总 {fx['wall_seconds']:.1f} s
    （{lam_share:.1f}%）**，对比 7 月 11 日原版 run 的 ~95%。
-2. **两档 λ-search + 停机复核**——已实现并被 sanity 覆盖；本次正式 run 采用
-   `lambda_tier_mode="{cfg['lambda_tier_mode']}"`（全程严格档、64 起点）：
-   Gram 化后严格档每轮已是亚秒级，全程严格档使自报告口径与旧曲线
-   （64 起点）完全一致。档位统计：{fx['tier_history_counts']}。
+2. **两档 λ-search + 停机复核**——
+   `lambda_tier_mode="{cfg['lambda_tier_mode']}"`。{tier_note_zh}
+   档位统计：{fx['tier_history_counts']}。
 3. **Momentum-SVRG 内层**——分层 minibatch 方差缩减 + heavy-ball 动量的
    分段结构（b={cfg['msvrg_batch']}，p_seg={cfg['msvrg_epoch_len'] or 'ceil(n/b)'}，
-   c={cfg['msvrg_step_c']}，beta={cfg['msvrg_momentum']}，
-   rho={cfg['msvrg_trigger_rho']}，consec={cfg['msvrg_trigger_consec']}，
-   max_segments={cfg['msvrg_max_segments']}）；入 bundle 与 eps/3 验收全部
-   基于 FULL 梯度（随机性无法伪造证书）。
+   step_const={cfg['msvrg_step_const']}，beta={cfg['msvrg_momentum']}，
+   rho={cfg['msvrg_trigger_rho']}，patience={cfg['msvrg_trigger_patience']}，
+   max_segments={cfg['msvrg_max_segments']}，
+   rel_target={cfg['msvrg_rel_target']}）。启用 rel_target 时每轮内层目标 =
+   max(eps/3, rel_target×pc_val)——针对 v2 cap_hits 的 Algorithm-2 变体
+   （证书不受影响，停机线不动）。入 bundle 与验收全部基于 FULL 梯度
+   （随机性无法伪造证书）。
 4. **交付时修剪**——bundle {prune['m_before']} -> {prune['m_after']} 点
    （r={cfg['prune_grid_r']} simplex 网格 + 末轮搜索赢家的 λ-激活检测）；
    探针 λ 上的 GN 值逐位不变。

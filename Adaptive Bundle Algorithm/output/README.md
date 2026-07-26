@@ -29,6 +29,22 @@ crossover/                    equal-budget CPU-time crossover, sweep over width 
   crossover_ratio_vs_d.png    cross-d trend plot
   sweep_index.json
   README.md
+
+fast_method_trials/           accelerated-method series (July 15-16):
+  v1_plan_defaults/           Gram + Momentum-SVRG; see its README for the
+  v2_tuned_b4096_beta0.5/     per-run identity table, results and the
+  v3_rel_target_two_tier/     old-name mapping (folders were renamed on
+  cert_attempt_partial/       reorganisation, July 16)
+  README.md / README_ZH.md
+
+trial_K6_..._B180180_without_256_checkpoints/   July 11 K=6 96x96 trial:
+                              baseline + ORIGINAL adaptive — the reference
+                              curves reused by fast_method_trials (do not move)
+calibration_speed_test_B2000/ July 11 SPEED-CALIBRATION pre-run for the
+                              B180180 trial (measured joint-oracle and
+                              lambda-search unit costs; r=2, superseded —
+                              not an experiment result; renamed Jul 16 from
+                              trial_K6_..._B2000_without_256_checkpoints)
 ```
 
 ## How to read the per-configuration plots

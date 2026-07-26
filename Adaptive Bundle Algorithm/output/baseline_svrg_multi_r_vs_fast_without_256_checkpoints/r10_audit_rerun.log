@@ -1,0 +1,15 @@
+=== baseline-SVRG r=10 (node_tol=0.02, share=gram) ===
+[r=10] instance rebuilt in 3.7s (fresh sampler, seed 41)
+  BL-SVRG node 0 | t=0.00s | grad_equiv=0.0 | served=0/3003 | delivered=1 | censored=0 | worst=7.3157e+00
+  BL-SVRG node 429 | t=70.87s | grad_equiv=4503.5 | served=429/3003 | delivered=406 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 808 | t=139.32s | grad_equiv=9011.1 | served=809/3003 | delivered=777 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 1108 | t=204.67s | grad_equiv=13516.0 | served=1109/3003 | delivered=1134 | censored=0 | worst=5.4784e+00
+  BL-SVRG node 1404 | t=264.72s | grad_equiv=18019.7 | served=1404/3003 | delivered=1447 | censored=0 | worst=3.5043e+00
+  BL-SVRG node 1757 | t=331.17s | grad_equiv=22534.5 | served=1758/3003 | delivered=1781 | censored=0 | worst=2.5468e+00
+  BL-SVRG node 2066 | t=393.69s | grad_equiv=27038.8 | served=2068/3003 | delivered=2096 | censored=0 | worst=1.3047e+00
+  BL-SVRG node 2330 | t=458.35s | grad_equiv=31546.8 | served=2333/3003 | delivered=2425 | censored=0 | worst=9.6887e-01
+  BL-SVRG node 2651 | t=522.49s | grad_equiv=36049.2 | served=2663/3003 | delivered=2753 | censored=0 | worst=4.9036e-01
+  BL-SVRG node 2937 | t=586.71s | grad_equiv=40550.0 | served=2946/3003 | delivered=3089 | censored=0 | worst=1.7154e-01
+  BL-SVRG final | t=598.58s | grad_equiv=41326.8 | served=3003/3003 | delivered=3155 | censored=0 | worst=1.9911e-02
+[r=10] DONE in 636s | GN*=1.6352e-01 | grads=41327 | solved=2879 | shared=3003 | censored=0 | stop=completed
+ALL DONE -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/baseline_svrg_multi_r_vs_fast_without_256_checkpoints

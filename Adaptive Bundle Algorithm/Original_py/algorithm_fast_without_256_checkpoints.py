@@ -34,12 +34,12 @@ README):
         u ← 0, y ← a, g_a = J_a^T λ  (free from the bundle cache)
         repeat ≤ p_seg times, interruptible by the early trigger:
             v = ∇f_{λ,S}(y) − ∇f_{λ,S}(a) + g_a     (SVRG estimator)
-            u = β u + v;   y ← y − η u,  η = c/(L_λ·L_scale)
-            trigger: ‖v‖² ≤ ρ·(ε/3) for `consec` consecutive steps
+            u = β u + v;   y ← y − η u,  η = step_const/(L_λ·L_scale)
+            trigger: ‖v‖² ≤ ρ·(ε/3) for `patience` consecutive steps
         full joint evaluation of y → ALWAYS added to the bundle
         (inclusive policy) → exact Gram-path ε/3 check on full gradients.
 
-    At the anchor v equals the full gradient, so β=0, p_seg=1, b=n, c=1
+    At the anchor v equals the full gradient, so β=0, p_seg=1, b=n, step_const=1
     reproduces the original T-map inner loop exactly (asserted by the
     sanity script).  Randomness can only delay the inner loop, never fake
     a certificate: every acceptance test runs on full gradients.
@@ -259,12 +259,12 @@ def _bundle_update_msvrg(
     *,
     eps_inner: Optional[float],
     L_scale: float,
-    step_c: float = 0.1,
+    step_const: float = 0.1,
     momentum: float = 0.9,
     epoch_len: Optional[int] = None,
     max_segments: int = 10,
     trigger_rho: float = 0.7,
-    trigger_consec: int = 2,
+    trigger_patience: int = 2,
     max_segment_retries: int = 4,
 ) -> Dict:
     """One inner loop at fixed λ: segments of Momentum-SVRG steps.
@@ -286,25 +286,57 @@ def _bundle_update_msvrg(
     minibatch_steps = 0
     retries = 0
 
+    # ------------------------------------------------------------------
+    # Per-round scalarised caches (July 16 fix for the stacked-copy
+    # waste).  At fixed λ, F_λ(x_i), ∇F_λ(x_i) and ‖∇F_λ(x_i)‖² of the
+    # EXISTING bundle points never change during this inner loop, so
+    # they are built ONCE per call — in chunks, so no (m, K, d)
+    # temporary is ever materialised — and new rows are appended
+    # incrementally as segments add points.  The previous code
+    # re-stacked the whole bundle every segment (three O(m·K·d)
+    # np.asarray copies plus a full einsum), which came to dominate
+    # long runs (~24 s/round at m ≈ 4000).  Only u_vals depends on the
+    # current L_scale; it is recomputed per segment as an O(m) vector
+    # operation.  Same math, different bookkeeping.
+    # ------------------------------------------------------------------
+    m0 = bundle.m
+    cap = m0 + max_segments * (max_segment_retries + 1) + 2
+    Fl = np.empty(cap)                  # F_λ(x_i)
+    Gl = np.empty((cap, d))             # ∇F_λ(x_i)
+    Gn = np.empty(cap)                  # ‖∇F_λ(x_i)‖²
+    _CH = 128
+    for s0 in range(0, m0, _CH):
+        Jc = np.asarray(bundle.grads[s0:s0 + _CH])          # (≤CH, K, d)
+        Fc = np.asarray(bundle.fvals[s0:s0 + _CH])          # (≤CH, K)
+        Gc = np.einsum('ikd,k->id', Jc, lam)
+        n_rows = Gc.shape[0]
+        Gl[s0:s0 + n_rows] = Gc
+        Gn[s0:s0 + n_rows] = np.einsum('id,id->i', Gc, Gc)
+        Fl[s0:s0 + n_rows] = Fc @ lam
+    mcur = m0
+
+    def _append_cache_row() -> None:
+        nonlocal mcur
+        g_new = bundle.grads[-1].T @ lam
+        Gl[mcur] = g_new
+        Gn[mcur] = float(g_new @ g_new)
+        Fl[mcur] = float(np.asarray(bundle.fvals[-1]) @ lam)
+        mcur += 1
+
     for _seg in range(max_segments):
-        # ---- anchor by the T-map selection rule, from bundle cache ----
-        Fmat = np.asarray(bundle.fvals)                    # (m, K)
-        Jmat = np.asarray(bundle.grads)                    # (m, K, d)
-        P = np.asarray(bundle.points)                      # (m, d)
+        # ---- anchor by the T-map selection rule, from the caches ----
         Ll = float(lam @ L_arr) * L_scale
-        grad_lam = np.einsum('ikd,k->id', Jmat, lam)       # (m, d)
-        gnorm_sq = np.einsum('id,id->i', grad_lam, grad_lam)
-        u_vals = Fmat @ lam - 0.5 * gnorm_sq / Ll
+        u_vals = Fl[:mcur] - 0.5 * Gn[:mcur] / Ll
         ai = int(np.argmin(u_vals))
-        anchor = P[ai].copy()
-        g_a = grad_lam[ai].copy()
-        F_a = float(Fmat[ai] @ lam)
+        anchor = np.asarray(bundle.points[ai], dtype=float).copy()
+        g_a = Gl[ai].copy()
+        F_a = float(Fl[ai])
 
         # ---- run the segment (with safeguard retries) ----
         seg_retry = 0
         while True:
             Ll = float(lam @ L_arr) * L_scale              # retry ⇒ larger
-            eta = step_c / Ll
+            eta = step_const / Ll
             stoch_oracle.set_anchor(anchor)
             y = anchor.copy()
             u_vec = np.zeros(d)
@@ -320,7 +352,7 @@ def _bundle_update_msvrg(
                 if eps_inner is not None:
                     if float(v @ v) <= trigger_rho * eps_inner:
                         consec += 1
-                        if consec >= trigger_consec:
+                        if consec >= trigger_patience:
                             break
                     else:
                         consec = 0
@@ -330,7 +362,8 @@ def _bundle_update_msvrg(
             bundle.add_point(y, objectives, grad_objectives,
                              joint_oracle=joint_oracle)
             full_evals += 1
-            F_y = float(np.asarray(bundle.fvals[-1]) @ lam)
+            _append_cache_row()
+            F_y = float(Fl[mcur - 1])
 
             if F_y > F_a + 1e-10 * (1.0 + abs(F_a)):
                 # Descent safeguard: the scaled L is still too small along
@@ -395,14 +428,16 @@ def algorithm_adaptive_fast(
     sticky_strict: bool = True,
     require_ipopt: bool = True,
     # --- Momentum-SVRG inner loop ---
-    msvrg_step_c: float = 0.1,
+    msvrg_step_const: float = 0.1,
     msvrg_momentum: float = 0.9,
     msvrg_epoch_len: Optional[int] = None,
     msvrg_max_segments: int = 10,
     msvrg_trigger_rho: float = 0.7,
-    msvrg_trigger_consec: int = 2,
+    msvrg_trigger_patience: int = 2,
+    msvrg_rel_target: Optional[float] = None,
     # --- delivery-time pruning ---
     prune_grid_r: int = 10,
+    return_pre_prune: bool = False,
     joint_oracle: Optional[Callable] = None,
     verbose: bool = False,
 ) -> Dict:
@@ -424,6 +459,11 @@ def algorithm_adaptive_fast(
         raise ValueError(f"epsilon must be finite and positive; got {epsilon!r}.")
     if lambda_tier_mode not in {"strict", "two_tier"}:
         raise ValueError("lambda_tier_mode must be 'strict' or 'two_tier'.")
+    if msvrg_rel_target is not None and not (0.0 < msvrg_rel_target < 1.0):
+        raise ValueError(
+            f"msvrg_rel_target must lie in (0, 1) or be None; "
+            f"got {msvrg_rel_target!r}."
+        )
     if require_ipopt and not _HAS_IPOPT:
         raise RuntimeError(
             "IPOPT was required but cyipopt/IPOPT is unavailable. "
@@ -440,8 +480,10 @@ def algorithm_adaptive_fast(
 
     cpu_times: List[float] = []
     cov_history: List[float] = []
+    m_history: List[int] = []       # bundle size at each checkpoint (Jul 26)
     pc_history: List[float] = []
     tier_history: List[str] = []
+    inner_target_history: List[Optional[float]] = []
     lambda_history: List[np.ndarray] = []
     grad_evals_history: List[float] = []
     segments_history: List[int] = []
@@ -467,6 +509,7 @@ def algorithm_adaptive_fast(
         ck_t0 = time.time()
         cov = pc_history[-1] if pc_history else float("nan")
         cov_history.append(cov)
+        m_history.append(int(bundle.m))
         checkpoint_overhead += time.time() - ck_t0
         grad_evals_history.append(float(grad_equiv))
         if verbose:
@@ -519,15 +562,30 @@ def algorithm_adaptive_fast(
             _checkpoint(f"outer {outer}/{max_outer}")
             break
 
+        # Relative inner target (Algorithm-2 VARIANT when enabled): the
+        # round's task is "cut the selected worst direction to a γ
+        # fraction", floored by the paper's absolute eps/3 so the endgame
+        # is exactly the original algorithm.  The stopping certificate is
+        # unaffected (the strict 2eps/3 stop line above never moves); the
+        # early-trigger threshold inside the inner loop scales with this
+        # target automatically (it is rho * eps_inner there).
+        if eps_inner is None:
+            inner_target = None
+        elif msvrg_rel_target is not None:
+            inner_target = max(eps_inner, msvrg_rel_target * pc_val)
+        else:
+            inner_target = eps_inner
+        inner_target_history.append(inner_target)
+
         ifo_before = stoch_oracle.ifo_count
         inner = _bundle_update_msvrg(
             bundle, lam, objectives, grad_objectives, joint_oracle,
             stoch_oracle,
-            eps_inner=eps_inner, L_scale=L_scale,
-            step_c=msvrg_step_c, momentum=msvrg_momentum,
+            eps_inner=inner_target, L_scale=L_scale,
+            step_const=msvrg_step_const, momentum=msvrg_momentum,
             epoch_len=msvrg_epoch_len, max_segments=msvrg_max_segments,
             trigger_rho=msvrg_trigger_rho,
-            trigger_consec=msvrg_trigger_consec,
+            trigger_patience=msvrg_trigger_patience,
         )
         if inner["L_scale"] > L_scale:
             if not safeguard_warned:
@@ -544,9 +602,9 @@ def algorithm_adaptive_fast(
             if not inner_cap_warned:
                 warnings.warn(
                     "epsilon mode: an inner loop exhausted its segment cap "
-                    "before reaching eps/3 at the active lambda; the "
-                    "Algorithm 2 termination argument does not apply to "
-                    "such rounds.",
+                    "before reaching the round's inner target at the active "
+                    "lambda; the Algorithm 2 termination argument does not "
+                    "apply to such rounds.",
                     RuntimeWarning, stacklevel=2,
                 )
                 inner_cap_warned = True
@@ -571,6 +629,16 @@ def algorithm_adaptive_fast(
         cov_history[0] = float(pc_history[0])
 
     # ---- delivery-time pruning (run-time policy stays inclusive) ----
+    # Jul 26: optional pre-prune snapshot so post-hoc scorers can rebuild
+    # the bundle state at every checkpoint (prefix of length m_history[j]).
+    # Off by default: on large problems the points copy is memory-heavy.
+    pre_prune: Optional[Dict] = None
+    if return_pre_prune:
+        pre_prune = {
+            "points": np.asarray(bundle.points, dtype=float).copy(),
+            "fvals": np.asarray(bundle.fvals, dtype=float).copy(),
+            "gram_stack": bundle.gram_stack().copy(),
+        }
     extra = [lambda_history[-1]] if lambda_history else None
     prune_report = prune_inactive(
         bundle, grid_resolution=prune_grid_r, extra_lams=extra,
@@ -580,8 +648,12 @@ def algorithm_adaptive_fast(
         "bundle": bundle,
         "cpu_times": cpu_times,
         "cov_history": cov_history,
+        "m_history": m_history,
+        "pre_prune": pre_prune,
         "pc_history": pc_history,
         "tier_history": tier_history,
+        "inner_target_history": inner_target_history,
+        "msvrg_rel_target": msvrg_rel_target,
         "lambda_history": lambda_history,
         "grad_evals_history": grad_evals_history,
         "segments_history": segments_history,

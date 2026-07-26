@@ -1,0 +1,83 @@
+[r=10] found existing summary, skipping (use --force to re-run)
+[r=12] found existing summary, skipping (use --force to re-run)
+=== baseline-SVRG r=15 (node_tol=0.02, share=gram) ===
+[r=15] instance rebuilt in 4.2s (fresh sampler, seed 41)
+  BL-SVRG node 0 | t=0.00s | grad_equiv=0.0 | served=0/15504 | delivered=1 | censored=0 | worst=7.3157e+00
+  BL-SVRG node 784 | t=66.16s | grad_equiv=4505.4 | served=789/15504 | delivered=419 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 1168 | t=130.84s | grad_equiv=9029.1 | served=1175/15504 | delivered=767 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 1747 | t=196.80s | grad_equiv=13537.5 | served=1759/15504 | delivered=1124 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 2173 | t=260.06s | grad_equiv=18043.1 | served=2277/15504 | delivered=1454 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 2855 | t=324.87s | grad_equiv=22568.0 | served=3016/15504 | delivered=1790 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 3696 | t=392.02s | grad_equiv=27086.1 | served=3751/15504 | delivered=2130 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 4260 | t=462.34s | grad_equiv=31587.6 | served=4375/15504 | delivered=2442 | censored=0 | worst=4.8778e+00
+  BL-SVRG node 5008 | t=524.45s | grad_equiv=36088.8 | served=5190/15504 | delivered=2733 | censored=0 | worst=3.5142e+00
+  BL-SVRG node 5855 | t=586.42s | grad_equiv=40609.9 | served=6043/15504 | delivered=3020 | censored=0 | worst=2.7353e+00
+  BL-SVRG node 6979 | t=649.76s | grad_equiv=45115.0 | served=7096/15504 | delivered=3316 | censored=0 | worst=1.8420e+00
+  BL-SVRG node 7890 | t=711.38s | grad_equiv=49622.0 | served=8430/15504 | delivered=3606 | censored=0 | worst=7.3235e-01
+  BL-SVRG node 8764 | t=773.81s | grad_equiv=54148.4 | served=9595/15504 | delivered=3895 | censored=0 | worst=7.3235e-01
+  BL-SVRG node 9625 | t=838.82s | grad_equiv=58674.2 | served=10592/15504 | delivered=4196 | censored=0 | worst=7.3235e-01
+  BL-SVRG node 10616 | t=898.61s | grad_equiv=63187.6 | served=11528/15504 | delivered=4480 | censored=0 | worst=6.3989e-01
+  BL-SVRG node 11894 | t=963.75s | grad_equiv=67708.1 | served=12776/15504 | delivered=4782 | censored=0 | worst=2.5018e-01
+  BL-SVRG node 13044 | t=1030.71s | grad_equiv=72212.4 | served=13669/15504 | delivered=5073 | censored=0 | worst=2.5018e-01
+  BL-SVRG node 14350 | t=1107.61s | grad_equiv=76747.2 | served=14732/15504 | delivered=5374 | censored=0 | worst=1.6187e-01
+  BL-SVRG final | t=1172.53s | grad_equiv=80911.9 | served=15504/15504 | delivered=5667 | censored=0 | worst=1.9997e-02
+[r=15] DONE in 1255s | GN*=5.9456e-02 | grads=80912 | solved=4758 | shared=15504 | censored=0 | stop=completed
+=== baseline-SVRG r=20 (node_tol=0.02, share=gram) ===
+[r=20] instance rebuilt in 4.4s (fresh sampler, seed 41)
+  BL-SVRG node 0 | t=0.00s | grad_equiv=0.0 | served=0/53130 | delivered=1 | censored=0 | worst=7.3157e+00
+  BL-SVRG node 1479 | t=67.05s | grad_equiv=4507.2 | served=1523/53130 | delivered=413 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 2304 | t=130.49s | grad_equiv=9011.6 | served=2478/53130 | delivered=762 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 3308 | t=195.64s | grad_equiv=13517.6 | served=3622/53130 | delivered=1106 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 4282 | t=271.82s | grad_equiv=18041.3 | served=5015/53130 | delivered=1436 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 5988 | t=347.91s | grad_equiv=22568.0 | served=6602/53130 | delivered=1767 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 7881 | t=411.20s | grad_equiv=27077.5 | served=8464/53130 | delivered=2087 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 10222 | t=480.74s | grad_equiv=31591.5 | served=10399/53130 | delivered=2415 | censored=0 | worst=7.0916e+00
+  BL-SVRG node 11455 | t=552.40s | grad_equiv=36092.1 | served=11869/53130 | delivered=2719 | censored=0 | worst=5.1593e+00
+  BL-SVRG node 13136 | t=615.73s | grad_equiv=40607.9 | served=14079/53130 | delivered=3002 | censored=0 | worst=4.4568e+00
+  BL-SVRG node 15254 | t=681.50s | grad_equiv=45118.7 | served=16676/53130 | delivered=3276 | censored=0 | worst=4.0702e+00
+  BL-SVRG node 18085 | t=752.44s | grad_equiv=49625.2 | served=19525/53130 | delivered=3550 | censored=0 | worst=3.2016e+00
+  BL-SVRG node 20643 | t=818.82s | grad_equiv=54127.3 | served=21593/53130 | delivered=3855 | censored=0 | worst=2.9374e+00
+  BL-SVRG node 22259 | t=884.07s | grad_equiv=58629.4 | served=23537/53130 | delivered=4143 | censored=0 | worst=1.5379e+00
+  BL-SVRG node 24153 | t=951.42s | grad_equiv=63173.9 | served=25169/53130 | delivered=4428 | censored=0 | worst=1.5379e+00
+  BL-SVRG node 26006 | t=1018.09s | grad_equiv=67691.2 | served=26498/53130 | delivered=4715 | censored=0 | worst=1.5379e+00
+  BL-SVRG node 27043 | t=1087.49s | grad_equiv=72199.7 | served=27330/53130 | delivered=5027 | censored=0 | worst=1.5379e+00
+  BL-SVRG node 27720 | t=1157.04s | grad_equiv=76740.2 | served=28155/53130 | delivered=5332 | censored=0 | worst=1.5379e+00
+  BL-SVRG node 28502 | t=1224.36s | grad_equiv=81249.6 | served=29103/53130 | delivered=5624 | censored=0 | worst=1.5379e+00
+  BL-SVRG node 29437 | t=1299.86s | grad_equiv=85752.7 | served=30128/53130 | delivered=5911 | censored=0 | worst=1.5379e+00
+  BL-SVRG node 30490 | t=1370.83s | grad_equiv=90263.9 | served=31280/53130 | delivered=6191 | censored=0 | worst=1.5379e+00
+  BL-SVRG node 31557 | t=1434.10s | grad_equiv=94789.8 | served=32139/53130 | delivered=6484 | censored=0 | worst=1.5379e+00
+  BL-SVRG node 32934 | t=1501.88s | grad_equiv=99295.5 | served=33330/53130 | delivered=6804 | censored=0 | worst=1.5037e+00
+  BL-SVRG node 33875 | t=1565.97s | grad_equiv=103799.1 | served=34519/53130 | delivered=7106 | censored=0 | worst=6.1870e-01
+  BL-SVRG node 34691 | t=1627.86s | grad_equiv=108301.6 | served=35702/53130 | delivered=7404 | censored=0 | worst=6.1870e-01
+  BL-SVRG node 35497 | t=1688.70s | grad_equiv=112825.4 | served=36811/53130 | delivered=7691 | censored=0 | worst=6.1004e-01
+  BL-SVRG node 36424 | t=1748.65s | grad_equiv=117349.5 | served=37725/53130 | delivered=7987 | censored=0 | worst=6.1004e-01
+  BL-SVRG node 37386 | t=1810.25s | grad_equiv=121860.0 | served=38432/53130 | delivered=8290 | censored=0 | worst=6.1004e-01
+  BL-SVRG node 37900 | t=1872.80s | grad_equiv=126379.0 | served=38937/53130 | delivered=8608 | censored=0 | worst=6.1004e-01
+  BL-SVRG node 38444 | t=1932.45s | grad_equiv=130884.0 | served=39493/53130 | delivered=8907 | censored=0 | worst=6.1004e-01
+  BL-SVRG node 39128 | t=1992.55s | grad_equiv=135413.2 | served=40145/53130 | delivered=9209 | censored=0 | worst=6.1004e-01
+  BL-SVRG node 39834 | t=2058.72s | grad_equiv=139918.7 | served=40846/53130 | delivered=9493 | censored=0 | worst=6.1004e-01
+  BL-SVRG node 40728 | t=2125.26s | grad_equiv=144421.9 | served=41506/53130 | delivered=9796 | censored=0 | worst=3.9309e-01
+  BL-SVRG node 41644 | t=2193.33s | grad_equiv=148925.4 | served=42509/53130 | delivered=10116 | censored=0 | worst=3.9309e-01
+  BL-SVRG node 42547 | t=2267.97s | grad_equiv=153449.7 | served=43657/53130 | delivered=10408 | censored=0 | worst=3.6616e-01
+  BL-SVRG node 43253 | t=2328.59s | grad_equiv=157962.4 | served=44610/53130 | delivered=10704 | censored=0 | worst=3.5777e-01
+  BL-SVRG node 44119 | t=2394.39s | grad_equiv=162475.8 | served=45486/53130 | delivered=11003 | censored=0 | worst=3.5777e-01
+  BL-SVRG node 44697 | t=2469.43s | grad_equiv=166995.9 | served=46028/53130 | delivered=11324 | censored=0 | worst=3.5777e-01
+  BL-SVRG node 45260 | t=2546.59s | grad_equiv=171514.3 | served=46456/53130 | delivered=11629 | censored=0 | worst=3.5777e-01
+  BL-SVRG node 45927 | t=2620.00s | grad_equiv=176027.5 | served=46900/53130 | delivered=11919 | censored=0 | worst=3.5777e-01
+  BL-SVRG node 46839 | t=2696.23s | grad_equiv=180545.1 | served=47454/53130 | delivered=12221 | censored=0 | worst=3.5777e-01
+  BL-SVRG node 47494 | t=2775.01s | grad_equiv=185059.9 | served=48071/53130 | delivered=12543 | censored=0 | worst=2.4286e-01
+  BL-SVRG node 47870 | t=2844.11s | grad_equiv=189572.3 | served=48563/53130 | delivered=12838 | censored=0 | worst=2.4286e-01
+  BL-SVRG node 48336 | t=2904.13s | grad_equiv=194085.8 | served=49082/53130 | delivered=13132 | censored=0 | worst=2.4286e-01
+  BL-SVRG node 48833 | t=2966.78s | grad_equiv=198599.0 | served=49483/53130 | delivered=13449 | censored=0 | worst=2.4286e-01
+  BL-SVRG node 49227 | t=3029.30s | grad_equiv=203113.6 | served=49823/53130 | delivered=13746 | censored=0 | worst=2.4286e-01
+  BL-SVRG node 49750 | t=3098.53s | grad_equiv=207633.1 | served=50179/53130 | delivered=14040 | censored=0 | worst=2.4286e-01
+  BL-SVRG node 50261 | t=3169.57s | grad_equiv=212155.0 | served=50659/53130 | delivered=14370 | censored=0 | worst=2.3494e-01
+  BL-SVRG node 50694 | t=3237.90s | grad_equiv=216668.0 | served=51093/53130 | delivered=14672 | censored=0 | worst=2.1884e-01
+  BL-SVRG node 51078 | t=3303.50s | grad_equiv=221189.3 | served=51498/53130 | delivered=14980 | censored=0 | worst=2.1884e-01
+  BL-SVRG node 51469 | t=3391.96s | grad_equiv=225694.2 | served=51788/53130 | delivered=15305 | censored=0 | worst=2.1884e-01
+  BL-SVRG node 51996 | t=3473.61s | grad_equiv=230194.9 | served=52191/53130 | delivered=15629 | censored=0 | worst=2.1101e-01
+  BL-SVRG node 52353 | t=3554.22s | grad_equiv=234702.1 | served=52563/53130 | delivered=15952 | censored=0 | worst=1.2861e-01
+  BL-SVRG node 52825 | t=3643.79s | grad_equiv=239217.8 | served=52940/53130 | delivered=16287 | censored=0 | worst=9.1909e-02
+  BL-SVRG final | t=3688.98s | grad_equiv=241720.6 | served=53130/53130 | delivered=16487 | censored=0 | worst=1.9999e-02
+[r=20] DONE in 4114s | GN*=6.3415e-02 | grads=241721 | solved=11820 | shared=53130 | censored=0 | stop=completed
+ALL DONE -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/baseline_svrg_multi_r_vs_fast_without_256_checkpoints

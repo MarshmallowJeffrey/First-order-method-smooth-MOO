@@ -1,3 +1,5 @@
+> **RENAMED July 16, 2026:** this folder was `trial_K6_d11910_h96x96_tanh_n50000_B2000_without_256_checkpoints` (older Notes/LEDGER lines cite that name).  New name states its role: the SPEED-CALIBRATION pre-run for the main B180180 trial — it measured the two unit costs (joint-oracle ~0.13 s/call; lambda-search ~0.0137 s/start/bundle-point/round) that dimensioned every parameter of the real experiment.
+>
 > **SUPERSEDED — calibration data only (July 11, 2026).**  This run used
 > r=2, which the user subsequently rejected (hard floor: r >= 10).  It is
 > kept ONLY because its measured costs dimension the real r=10 trial:

@@ -1,0 +1,20 @@
+=== K=6 FAST trial: trial_K6_d11910_h96x96_tanh_n50000_eps0.001_fast_msvrg_without_256_checkpoints_v3 ===
+  Fast outer 0/500 | t=0.00s | bundle=1 | grad_equiv=0.0 | self-reported pc=nan
+  Fast outer 42/500 | t=17.43s | bundle=43 | grad_equiv=605.9 | self-reported pc=4.6733e-01
+  Fast outer 74/500 | t=33.00s | bundle=75 | grad_equiv=1206.8 | self-reported pc=2.6612e-01
+  Fast outer 106/500 | t=50.29s | bundle=107 | grad_equiv=1807.8 | self-reported pc=2.0819e-01
+  Fast outer 138/500 | t=68.10s | bundle=139 | grad_equiv=2408.7 | self-reported pc=1.2303e-01
+  Fast outer 170/500 | t=85.80s | bundle=171 | grad_equiv=3009.7 | self-reported pc=1.5760e-01
+  Fast outer 202/500 | t=104.38s | bundle=203 | grad_equiv=3610.6 | self-reported pc=9.9151e-02
+  Fast outer 234/500 | t=122.32s | bundle=235 | grad_equiv=4211.6 | self-reported pc=1.1960e-01
+  Fast outer 266/500 | t=140.26s | bundle=267 | grad_equiv=4812.5 | self-reported pc=7.4880e-02
+  Fast outer 298/500 | t=158.60s | bundle=299 | grad_equiv=5413.5 | self-reported pc=5.8110e-02
+  Fast outer 330/500 | t=177.72s | bundle=331 | grad_equiv=6014.4 | self-reported pc=7.0576e-02
+  Fast outer 362/500 | t=197.45s | bundle=363 | grad_equiv=6615.3 | self-reported pc=1.0320e-01
+  Fast outer 394/500 | t=217.70s | bundle=395 | grad_equiv=7216.3 | self-reported pc=1.1144e-01
+  Fast outer 426/500 | t=240.57s | bundle=427 | grad_equiv=7817.2 | self-reported pc=7.1313e-02
+  Fast outer 458/500 | t=262.68s | bundle=459 | grad_equiv=8418.2 | self-reported pc=7.5405e-02
+  Fast outer 489/500 | t=285.31s | bundle=491 | grad_equiv=9019.1 | self-reported pc=1.2207e-01
+  Fast outer 500/500 | t=292.63s | bundle=502 | grad_equiv=9225.7 | self-reported pc=6.6056e-02
+fast run finished in 293.0s (stop=round_fuse, lambda-search 135.7s)
+DONE in 294s -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/trial_K6_d11910_h96x96_tanh_n50000_eps0.001_fast_msvrg_without_256_checkpoints_v3

@@ -7,7 +7,7 @@ Checks (all must print PASS):
  2. Stochastic oracle at full batch ≡ J(θ)^T λ from the joint oracle
     (≤ 1e-10) — also proves the re-generated dataset matches the original
     instance bit-for-bit.
- 3. Momentum-SVRG degeneration (β=0, p_seg=1, b=n, c=1, trigger off)
+ 3. Momentum-SVRG degeneration (β=0, p_seg=1, b=n, step_const=1, trigger off)
     reproduces the original T-map inner loop point-for-point (≤ 1e-10).
  4. prune_inactive keeps every probe-λ GN value bitwise unchanged.
  5. Strict-tier fast λ-search agrees with the original maximiser on the
@@ -137,7 +137,7 @@ def test_degeneration(setup) -> None:
     _bundle_update_msvrg(
         b_new, lam, objectives, grads, joint, stoch,
         eps_inner=None, L_scale=1.0,
-        step_c=1.0, momentum=0.0, epoch_len=1, max_segments=S,
+        step_const=1.0, momentum=0.0, epoch_len=1, max_segments=S,
     )
 
     ok = b_ref.m == b_new.m
@@ -209,22 +209,36 @@ def test_smoke(setup) -> None:
             K=K, p=p, n=n, hidden_sizes=hs, seed=7, activation="tanh",
             n_probes=10, batch_size=30, sampler_seed=13,
         )
+        # two_tier also exercises the relative inner target; strict keeps
+        # rel_target=None so the plain eps/3 path stays covered.
+        rel = 0.25 if mode == "two_tier" else None
         res = algorithm_adaptive_fast(
             K=K, d=stoch2.d, objectives=objectives, grad_objectives=grads,
             L=np.asarray(L), x0=x0, stoch_oracle=stoch2,
             epsilon=1e-2, max_outer=6, lambda_max_starts=16,
             lambda_tier_mode=mode, msvrg_max_segments=4,
             msvrg_epoch_len=3, prune_grid_r=4,
+            msvrg_rel_target=rel,
             joint_oracle=joint, verbose=False,
         )
         needed = {"cov_history", "cpu_times", "grad_evals_history",
                   "tier_history", "prune_report", "stop_reason",
-                  "grad_equiv_total", "joint_calls", "ifo_minibatch_total"}
+                  "grad_equiv_total", "joint_calls", "ifo_minibatch_total",
+                  "inner_target_history"}
         ok = needed.issubset(res.keys()) and len(res["cov_history"]) >= 2
-        check(f"end-to-end smoke ({mode})", ok,
+        tgts = res["inner_target_history"]
+        ok = ok and len(tgts) == len(res["pc_history"])
+        if rel is not None and tgts:
+            eps_floor = 1e-2 / 3.0
+            ok = ok and all(
+                t is not None and t >= eps_floor - 1e-15
+                and abs(t - max(eps_floor, rel * v)) <= 1e-12 * (1.0 + v)
+                for t, v in zip(tgts, res["pc_history"])
+            )
+        check(f"end-to-end smoke ({mode}, rel_target={rel})", ok,
               f"stop={res.get('stop_reason')}, "
               f"equiv={res.get('grad_equiv_total'):.1f}, "
-              f"pruned {res['prune_report']['m_before']}->"
+              f"targets ok, pruned {res['prune_report']['m_before']}->"
               f"{res['prune_report']['m_after']}")
 
 
