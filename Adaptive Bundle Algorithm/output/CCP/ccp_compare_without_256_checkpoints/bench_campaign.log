@@ -1,0 +1,19 @@
+[2a] K2_early_m41: 20 batches done
+[2a] K2_mid_m1641: 20 batches done
+[2a] K2_late_m3195: 20 batches done
+[2a] K6_early_m108: 20 batches done
+[2a] K6_mid_m2248: 20 batches done
+[2a] K6_late_m4309: 20 batches done
+[2b] K2_early_m41 ccp  : 91375 restarts (15244 within 10s) best@10s=1.439575e-02 best@60s=1.439575e-02 distinct=13
+[2b] K2_early_m41 ipopt: 519 restarts (87 within 10s) best@10s=1.439575e-02 best@60s=1.439575e-02 distinct=55
+[2b] K2_mid_m1641 ccp  : 1750 restarts (243 within 10s) best@10s=2.356014e-04 best@60s=2.356014e-04 distinct=231
+[2b] K2_mid_m1641 ipopt: 407 restarts (67 within 10s) best@10s=2.356014e-04 best@60s=2.356014e-04 distinct=125
+[2b] K2_late_m3195 ccp  : 712 restarts (133 within 10s) best@10s=9.517552e-05 best@60s=9.518545e-05 distinct=229
+[2b] K2_late_m3195 ipopt: 334 restarts (52 within 10s) best@10s=9.518551e-05 best@60s=9.518551e-05 distinct=129
+[2b] K6_early_m108 ccp  : 16949 restarts (2828 within 10s) best@10s=1.799524e+00 best@60s=1.799524e+00 distinct=103
+[2b] K6_early_m108 ipopt: 698 restarts (116 within 10s) best@10s=1.799524e+00 best@60s=1.799524e+00 distinct=655
+[2b] K6_mid_m2248 ccp  : 434 restarts (77 within 10s) best@10s=1.022267e-01 best@60s=1.081086e-01 distinct=364
+[2b] K6_mid_m2248 ipopt: 362 restarts (58 within 10s) best@10s=9.248323e-02 best@60s=9.956213e-02 distinct=361
+[2b] K6_late_m4309 ccp  : 153 restarts (29 within 10s) best@10s=5.567853e-02 best@60s=6.568873e-02 distinct=143
+[2b] K6_late_m4309 ipopt: 242 restarts (39 within 10s) best@10s=5.187915e-02 best@60s=5.343836e-02 distinct=242
+[bench] outputs -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/lambda_solver_bench

@@ -1,0 +1,10 @@
+[audit_v2] adaptive_s5_ccp      stacks=42 final v2=3.624948e-02 (strict64 3.175359e-02 / ccp 3.624948e-02; ccp instrument tighter on 34/42) 294s
+[audit_v2] adaptive_s5_ts24     stacks=42 final v2=6.283908e-02 (strict64 4.616040e-02 / ccp 6.283908e-02; ccp instrument tighter on 42/42) 255s
+[audit_v2] baseline_r10_s1      stacks=1 final v2=1.364542e-01 (strict64 1.039003e-01 / ccp 1.364542e-01; ccp instrument tighter on 1/1) 15s
+[audit_v2] baseline_r10_s5      stacks=1 final v2=3.178319e+00 (strict64 3.178319e+00 / ccp 3.178319e+00; ccp instrument tighter on 1/1) 10s
+[audit_v2] baseline_r12_s5      stacks=1 final v2=7.091563e+00 (strict64 7.091563e+00 / ccp 7.091563e+00; ccp instrument tighter on 1/1) 4s
+[audit_v2] baseline_r15_s1      stacks=1 final v2=4.903728e+00 (strict64 4.903728e+00 / ccp 4.903728e+00; ccp instrument tighter on 1/1) 5s
+[audit_v2] baseline_r15_s5      stacks=1 final v2=7.091563e+00 (strict64 7.091563e+00 / ccp 7.091563e+00; ccp instrument tighter on 1/1) 4s
+[audit_v2] baseline_r15_s5_wallclock_artifact stacks=1 final v2=7.091563e+00 (strict64 7.091563e+00 / ccp 7.091563e+00; ccp instrument tighter on 1/1) 4s
+[audit_v2] baseline_r20_s5      stacks=1 final v2=7.091563e+00 (strict64 7.091563e+00 / ccp 7.091563e+00; ccp instrument tighter on 1/1) 4s
+[audit_v2] done

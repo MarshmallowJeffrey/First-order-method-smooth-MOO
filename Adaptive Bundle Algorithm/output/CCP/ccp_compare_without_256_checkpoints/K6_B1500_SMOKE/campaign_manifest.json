@@ -1,0 +1,27 @@
+{
+  "campaign": "ccp_compare K6 pure budget (Aug 9, 2026)",
+  "machine": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "processor": "arm",
+  "smoke": true,
+  "legs": [
+    {
+      "leg": "baseline_r04_s2",
+      "wall_seconds": 1.8176770210266113,
+      "decision_seconds": 0.00013113021850585938,
+      "final_audit": 2.4437510504282978
+    },
+    {
+      "leg": "adaptive_s2_ts8",
+      "wall_seconds": 48.49223971366882,
+      "decision_seconds": 20.20031499862671,
+      "final_audit": 0.31942360725777114
+    },
+    {
+      "leg": "adaptive_s2_ccp",
+      "wall_seconds": 4.3195624351501465,
+      "decision_seconds": 0.8596231937408447,
+      "final_audit": 0.2137188284422297
+    }
+  ],
+  "total_wall_seconds": 54.6312997341156
+}

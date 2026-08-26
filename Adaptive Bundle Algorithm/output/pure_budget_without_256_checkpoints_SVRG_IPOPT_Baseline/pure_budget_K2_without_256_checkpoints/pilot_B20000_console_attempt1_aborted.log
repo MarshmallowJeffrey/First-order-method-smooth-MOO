@@ -1,0 +1,3 @@
+[baseline] instance in 4.5s (epoch_len=13)
+[baseline] budget spent: 19998.7 of 20000.0 | segments=3404 | wall=546.1s | decision=0.0s | L_scale=1.0
+[attempt 1 aborted: host app restart killed the shell mid-audit of leg r10; machine also carried ~35-50% third-party load. No summaries were written. Clean re-run follows in pilot_B20000_console.log]

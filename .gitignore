@@ -3,3 +3,6 @@
 __pycache__/
 *.py[cod]
 mlp_adaptive_smoke.png
+
+# Experiment-4 parameter dumps: 190-206 MB each, over GitHub 100 MB limit (kept on disk only)
+Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/pair_*_B20000/*/thetas.npz

@@ -1,0 +1,90 @@
+{
+  "baseline_r10": {
+    "n_points": 3405,
+    "n_front": 35,
+    "certified_eps": 0.0001607173423729664,
+    "central_bound": 1.0,
+    "igd_to_union": 0.20986687460689138,
+    "maxdist_to_union": 4.222207459766821,
+    "igd_central": 0.019519896159606465,
+    "maxdist_central": 0.24699758804389338,
+    "hv_central": 0.9986241944547838,
+    "cv_central": 4.432705857272172,
+    "gap_ratio_central": 207341.38627893422,
+    "n_front_central": 27
+  },
+  "baseline_r20": {
+    "n_points": 3303,
+    "n_front": 42,
+    "certified_eps": 0.0006202407678651145,
+    "central_bound": 1.0,
+    "igd_to_union": 0.7482217627934271,
+    "maxdist_to_union": 7.740267985691748,
+    "igd_central": 0.12629795421143522,
+    "maxdist_central": 0.9087388091304653,
+    "hv_central": 0.9973679472412599,
+    "cv_central": 1.6651309999837687,
+    "gap_ratio_central": 8061.124617037058,
+    "n_front_central": 33
+  },
+  "baseline_r40": {
+    "n_points": 3248,
+    "n_front": 62,
+    "certified_eps": 0.00027018163626723376,
+    "central_bound": 1.0,
+    "igd_to_union": 0.41985406988331087,
+    "maxdist_to_union": 2.347624804760912,
+    "igd_central": 0.11999816814660892,
+    "maxdist_central": 0.9302543411169503,
+    "hv_central": 0.9970482376337197,
+    "cv_central": 2.3895206229039876,
+    "gap_ratio_central": 23204.926560200172,
+    "n_front_central": 55
+  },
+  "baseline_r80": {
+    "n_points": 3221,
+    "n_front": 107,
+    "certified_eps": 0.0002982855227981974,
+    "central_bound": 1.0,
+    "igd_to_union": 0.3014075705962789,
+    "maxdist_to_union": 3.3488009317366996,
+    "igd_central": 0.04542642946935469,
+    "maxdist_central": 0.21330142770562074,
+    "hv_central": 0.993001503606163,
+    "cv_central": 2.978406925052341,
+    "gap_ratio_central": 59796.35825002589,
+    "n_front_central": 101
+  },
+  "adaptive_ts24": {
+    "n_points": 3195,
+    "n_front": 88,
+    "certified_eps": 9.528647981666101e-05,
+    "central_bound": 1.0,
+    "igd_to_union": 1.0179654811001073,
+    "maxdist_to_union": 9.426036392730689,
+    "igd_central": 0.04308790982995473,
+    "maxdist_central": 0.17837894325676967,
+    "hv_central": 0.9938200167090322,
+    "cv_central": 4.12611414069466,
+    "gap_ratio_central": 34034.67239599671,
+    "n_front_central": 78
+  },
+  "union_front_composition": {
+    "raw": {
+      "baseline_r10": 34,
+      "baseline_r20": 3,
+      "baseline_r40": 6,
+      "baseline_r80": 0,
+      "adaptive_ts24": 2
+    },
+    "central": {
+      "baseline_r10": 27,
+      "baseline_r20": 0,
+      "baseline_r40": 2,
+      "baseline_r80": 0,
+      "adaptive_ts24": 1
+    },
+    "n_raw": 45,
+    "n_central": 30
+  }
+}

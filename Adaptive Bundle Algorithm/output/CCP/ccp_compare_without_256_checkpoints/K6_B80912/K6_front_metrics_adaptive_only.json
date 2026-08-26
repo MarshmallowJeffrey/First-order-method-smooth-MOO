@@ -1,0 +1,29 @@
+{
+  "reference": {
+    "union_size": 26,
+    "central_size": 13,
+    "c_box": 6.692836059572904,
+    "z_ideal": [
+      0.005492323752679572,
+      0.013474841785085498,
+      0.24843525277279452,
+      0.7144905938347748,
+      0.694732296176614,
+      0.5326112783338314
+    ]
+  },
+  "adaptive_ccp": {
+    "n_front_points": 14,
+    "n_central_points": 7,
+    "central_igd": 1.412381547060003,
+    "central_max_distance": 3.5323947647572953,
+    "central_hv": 0.7394981384277344
+  },
+  "adaptive": {
+    "n_front_points": 23,
+    "n_central_points": 16,
+    "central_igd": 0.3278017508300758,
+    "central_max_distance": 1.7456821550908606,
+    "central_hv": 0.8073596954345703
+  }
+}

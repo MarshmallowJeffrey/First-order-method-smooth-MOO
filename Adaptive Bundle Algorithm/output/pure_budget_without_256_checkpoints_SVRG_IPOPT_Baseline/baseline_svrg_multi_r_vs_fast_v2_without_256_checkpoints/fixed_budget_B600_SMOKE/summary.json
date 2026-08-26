@@ -1,0 +1,325 @@
+{
+  "metric": "strict 64-start in-family audit, one instrument for both methods; adaptive prefix audits post-hoc, off both axes",
+  "config_instance": {
+    "K": 6,
+    "p": 6,
+    "n": 300,
+    "hidden_sizes": [
+      8
+    ],
+    "activation": "tanh",
+    "msvrg_batch": 60,
+    "sampler_seed": 41
+  },
+  "config_adaptive": {
+    "epsilon": 0.01,
+    "lambda_tier_mode": "strict",
+    "msvrg_step_const": 0.1,
+    "msvrg_momentum": 0.5,
+    "msvrg_epoch_len": 5,
+    "msvrg_max_segments": 4,
+    "msvrg_trigger_rho": 0.7,
+    "msvrg_trigger_patience": 2,
+    "prune_grid_r": 3,
+    "rel_target": 0.05,
+    "targeting_starts": 8,
+    "budget": 600.0,
+    "eval_every": 50.0,
+    "max_outer": 60
+  },
+  "data_seed": 7,
+  "init_seed": 8,
+  "adaptive": {
+    "grad_evals_history": [
+      0.0,
+      54.0,
+      108.0,
+      180.0,
+      252.0,
+      324.0,
+      396.0,
+      468.0,
+      540.0,
+      612.0
+    ],
+    "cpu_times": [
+      0.0,
+      0.08732414245605469,
+      0.1618483066558838,
+      0.33269739151000977,
+      0.5010504722595215,
+      0.6279482841491699,
+      0.7556092739105225,
+      1.193716287612915,
+      1.684091567993164,
+      2.174203634262085
+    ],
+    "m_history": [
+      1,
+      4,
+      7,
+      11,
+      15,
+      19,
+      23,
+      27,
+      31,
+      35
+    ],
+    "audited_gn_history": [
+      2.674458446901668,
+      2.5367805337315272,
+      2.1701284547091473,
+      1.9642726841729943,
+      1.9354651154074474,
+      1.928308678803992,
+      0.8163200890322178,
+      0.8163200890322178,
+      0.8163200890322178,
+      0.8163200890322178
+    ],
+    "audit_lambdas": [
+      [
+        0.9999999999966923,
+        8.244609080442294e-13,
+        2.8939786646554464e-13,
+        9.595848391654852e-14,
+        5.8989600450132586e-18,
+        2.097972045002683e-12
+      ],
+      [
+        1.3149558072238187e-12,
+        5.604832140186497e-13,
+        2.6546211590512927e-12,
+        0.9999999999932406,
+        7.84497622523605e-18,
+        2.229345646079288e-12
+      ],
+      [
+        2.0753559052448647e-13,
+        0.9999999999966922,
+        1.9110205569634207e-18,
+        2.3953039303217703e-13,
+        2.5960910982815306e-12,
+        2.6466770267641164e-13
+      ],
+      [
+        2.8357065623174155e-12,
+        3.1570031807035732e-18,
+        0.999999999996482,
+        4.8064355462506174e-14,
+        3.324927864734936e-13,
+        3.015370404476964e-13
+      ],
+      [
+        3.0024190180654738e-12,
+        4.559973263460096e-14,
+        9.25056683157996e-19,
+        4.75767397698824e-13,
+        8.800088178079325e-13,
+        0.9999999999955962
+      ],
+      [
+        5.537298806119083e-18,
+        2.2852102958447647e-12,
+        1.1161102180008772e-13,
+        2.893016518923406e-12,
+        0.9999999999945552,
+        1.549556411533698e-13
+      ],
+      [
+        6.210398812520707e-09,
+        1.2100322073060788e-08,
+        0.5087019243430857,
+        1.3757791721855473e-08,
+        0.4912980357433177,
+        7.845084000448569e-09
+      ],
+      [
+        6.210398812520707e-09,
+        1.2100322073060788e-08,
+        0.5087019243430857,
+        1.3757791721855473e-08,
+        0.4912980357433177,
+        7.845084000448569e-09
+      ],
+      [
+        6.210398812520707e-09,
+        1.2100322073060788e-08,
+        0.5087019243430857,
+        1.3757791721855473e-08,
+        0.4912980357433177,
+        7.845084000448569e-09
+      ],
+      [
+        6.210398812520707e-09,
+        1.2100322073060788e-08,
+        0.5087019243430857,
+        1.3757791721855473e-08,
+        0.4912980357433177,
+        7.845084000448569e-09
+      ]
+    ],
+    "inrun_pc_history_targeting_tier": [
+      2.67445844402726,
+      2.536780533560997,
+      2.1701284517498016,
+      1.9642726839063318,
+      1.9354651153859268,
+      1.928308678798203,
+      0.7495865645965033,
+      0.7063597677074435,
+      0.7063597677074435
+    ],
+    "cov_history_inrun": [
+      2.67445844402726,
+      2.67445844402726,
+      2.536780533560997,
+      2.1701284517498016,
+      1.9642726839063318,
+      1.9354651153859268,
+      1.928308678798203,
+      0.7495865645965033,
+      0.7063597677074435,
+      0.7063597677074435
+    ]
+  },
+  "adaptive_extras": {
+    "stop_reason": "budget",
+    "grad_equiv_total": 612.0,
+    "wall_seconds": 2.1797099113464355,
+    "lambda_search_seconds": 1.7166991233825684,
+    "joint_calls": 34,
+    "ifo_minibatch_total": 20400,
+    "segments_history": [
+      3,
+      3,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+    ],
+    "inner_target_history": [
+      0.133722922201363,
+      0.12683902667804986,
+      0.10850642258749009,
+      0.09821363419531659,
+      0.09677325576929635,
+      0.09641543393991014,
+      0.037479328229825165,
+      0.03531798838537217,
+      0.03531798838537217
+    ],
+    "inner_cap_hits": 5,
+    "L_scale_final": 1.0,
+    "m_final": 35,
+    "prune_report": {
+      "m_before": 35,
+      "m_after": 26,
+      "kept_indices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        33,
+        34
+      ],
+      "n_probe_lams": 57,
+      "grid_resolution": 3
+    }
+  },
+  "post_prune_audit": 0.8163200890322178,
+  "audit_seconds": 9.600836038589478,
+  "baseline_points": [
+    {
+      "r": 10,
+      "node_tol": "0.02",
+      "n_nodes": 3003,
+      "grad_equiv_total": 41326.800480000005,
+      "wall_seconds": 598.5802738666534,
+      "delivered_gn_strict": 0.16351924809585325,
+      "stop_reason": "completed",
+      "censored_nodes": 0,
+      "source": "baseline_svrg_multi_r_vs_fast_v2_without_256_checkpoints/tol0.02/r10/summary.json"
+    },
+    {
+      "r": 12,
+      "node_tol": "0.02",
+      "n_nodes": 6188,
+      "grad_equiv_total": 64427.55144,
+      "wall_seconds": 986.2669348716736,
+      "delivered_gn_strict": 0.09541545082049618,
+      "stop_reason": "completed",
+      "censored_nodes": 0,
+      "source": "baseline_svrg_multi_r_vs_fast_v2_without_256_checkpoints/tol0.02/r12/summary.json"
+    },
+    {
+      "r": 15,
+      "node_tol": "0.02",
+      "n_nodes": 15504,
+      "grad_equiv_total": 80911.8684,
+      "wall_seconds": 1172.525130033493,
+      "delivered_gn_strict": 0.05945612804371133,
+      "stop_reason": "completed",
+      "censored_nodes": 0,
+      "source": "baseline_svrg_multi_r_vs_fast_v2_without_256_checkpoints/tol0.02/r15/summary.json"
+    },
+    {
+      "r": 20,
+      "node_tol": "0.02",
+      "n_nodes": 53130,
+      "grad_equiv_total": 241720.63128,
+      "wall_seconds": 3688.978602170944,
+      "delivered_gn_strict": 0.06341549552021737,
+      "stop_reason": "completed",
+      "censored_nodes": 0,
+      "source": "baseline_svrg_multi_r_vs_fast_v2_without_256_checkpoints/tol0.02/r20/summary.json"
+    },
+    {
+      "r": 10,
+      "node_tol": "0.01",
+      "n_nodes": 3003,
+      "grad_equiv_total": 55416.168000000005,
+      "wall_seconds": 882.0166079998016,
+      "delivered_gn_strict": 0.14993355896957375,
+      "stop_reason": "completed",
+      "censored_nodes": 0,
+      "source": "baseline_svrg_multi_r_vs_fast_v2_without_256_checkpoints/tol0.01/r10/summary.json"
+    },
+    {
+      "r": 15,
+      "node_tol": "0.01",
+      "n_nodes": 15504,
+      "grad_equiv_total": 254197.00464,
+      "wall_seconds": 3627.6832418441772,
+      "delivered_gn_strict": 0.058877958907556927,
+      "stop_reason": "completed",
+      "censored_nodes": 0,
+      "source": "baseline_svrg_multi_r_vs_fast_v2_without_256_checkpoints/tol0.01/r15/summary.json"
+    }
+  ],
+  "runtime_note": "MLP torch runs are not bit-reproducible in this environment (session-12 finding); one realization."
+}

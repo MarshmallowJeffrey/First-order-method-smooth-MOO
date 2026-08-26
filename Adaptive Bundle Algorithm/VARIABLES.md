@@ -237,3 +237,162 @@ Quick lookup — "my run is too slow, which knob?":
   `prune_inner=True`, or raise `max_inner` (fewer searches per budget).
 - Everything too slow → the real levers are `n`, `hidden_sizes`, and
   `max_grad_evals`; nothing else changes the oracle bill.
+
+---
+---
+
+# Part 2 — knobs added after July 8 (written Aug 25, 2026)
+
+Part 1 above (sections 1–3) covers the original engines and is kept as
+written. The later generations (`_fast`, `_ccp`, the SVRG baselines and
+the campaign runners) reuse those knobs where they apply and add the
+ones below. File-by-file context: `CODE_MAP.md`; run commands:
+`MANUAL.md` Part 2.
+
+## 4. Fast engine — `algorithm_fast_without_256_checkpoints.py`, `algorithm_adaptive_fast`
+
+| variable | meaning | default |
+|---|---|---|
+| `lambda_tier_mode` | λ-search tiering: `"strict"` = every round pays the full multistart search; `"two_tier"` = cheap tier (centroid+vertices+prev starts) with periodic strict verification | `"strict"` — the only honest choice on the K=6 MLP: the two-tier cheap meter was proven to under-report ~2x AND mistarget (v3 diagnosis) |
+| `lambda_max_starts` | starts of the strict tier | 64 |
+| `cheap_tol` / `cheap_max_iter` | cheap-tier solve tolerance / iteration cap | 1e-4 / 30 |
+| `strict_tol` / `strict_max_iter` | strict-tier solve tolerance / iteration cap | 1e-8 / 100 |
+| `sticky_strict` | once strict fires, stay strict | True |
+| `msvrg_step_const` | Momentum-SVRG inner step constant | 0.1 |
+| `msvrg_momentum` | inner momentum β | 0.9 (the pure-budget runners set 0.5) |
+| `msvrg_epoch_len` | minibatch steps per segment (one segment = `epoch_len` steps + 1 full joint evaluation) | None = auto rule; the K=6 pure-budget campaign resolves to 13 |
+| `msvrg_max_segments` | segment cap per outer round; hitting it is the `cap_hits` health flag (in budget mode a hit is accepted, in target mode it marks an unreachable inner target) | 10 |
+| `msvrg_trigger_rho` / `msvrg_trigger_patience` | early-exit trigger of the inner loop (REMOVED from the pure-budget protocol: segments run to length there) | 0.7 / 2 |
+| `msvrg_rel_target` | relative inner target (fraction of the round's search value) | None (v4 probe 0.1; fixed-budget run 0.05) |
+| `prune_grid_r` | probe-λ grid resolution for delivery-time pruning (bitwise-checked) | 10 |
+| `epsilon`, `max_outer`, `max_grad_evals`, `eval_every_n_grads`, `require_ipopt` | as in Part 1 | 1e-3 / 150 / None / None / True |
+
+`objectives_torch_fast.StochLamOracle` (the minibatch oracle): `batch_size`
+b, stratified across classes ∝ n_k (campaign standard b = 4096; MNIST runs
+use 1024), `seed`. Gradient-equivalent accounting everywhere in this
+generation: one full joint call = K units; one minibatch step = 2·b·K/n
+units; x0 and metric/audit work stay off-axis.
+
+## 5. SVRG-certified baseline — `baseline_svrg_certified_without_256_checkpoints.py` via `run_baseline_svrg_r_sweep_without_256_checkpoints.py`
+
+| flag | meaning | default |
+|---|---|---|
+| `--r-list` | grid resolutions swept, comma-separated | `10,12,15,20` |
+| `--node-tol` | per-node certification level on ‖∇F_{λ_i}‖² | 0.02 (the tol0.01 home used 0.01) |
+| `--solve-target-frac` | inner solve target as a fraction of node_tol | 0.25 |
+| `--share-mode` | certificate sharing between nodes | `"gram"` (Gram-based share; all 12→N nodes may be signed by share) |
+| `--ckpt-every-grads` | checkpoint cadence | 4,500 |
+| `--max-wall-per-r` / `--max-grads-per-r` | per-resolution fuses | 14,400 s / 2e6 |
+| `--save-grams` | store `delivery_audit.npz` (per-node Grams for the between-node audit) | off |
+| `--out-dirname` | output home override (used to build the v2 homes) | old home |
+| `--fast-ref` | path to an adaptive `summary.json` drawn as the reference curve | None |
+| `--replot` | redraw figures from stored summaries, no runs | off |
+
+## 6. Pure fixed-budget protocol — `run_pure_budget_{K6,K2}(_ccp)_…`, `run_fixed_budget_K6_…`
+
+The protocol has NO tolerance parameter anywhere. Shared knobs:
+
+| flag | meaning | values of record |
+|---|---|---|
+| `--run` | which leg: `baseline` or `adaptive` (one leg per invocation, serial) | — |
+| `--budget` | total gradient-equivalent budget B | K6: 80,912 (= r15@0.02's realized cost); K2 and MNIST pairs: 20,000 |
+| `--s` | segments spent per allocation decision | 5 main; 1 sensitivity legs |
+| `--r` | baseline grid resolution | K6: 10/12/15/20; K2: 10/20/40/80; pairs: 10/20/40 |
+| `--targeting-starts` | starts of the adaptive worst-λ search (its decision policy) | K6: 24; K2: 64 (ts64 leg) and 24 (ts24 leg) |
+| `--eval-every` | checkpoint cadence in grad-equivalents | K6: 2,000; K2: 250 |
+| `--backfill-audits` | add strict 64-start prefix audits to finished baseline legs (never-understate merge) | — |
+| `--figure` / `--replot` | redraw campaign figures from stored data | — |
+| `--force` | allow overwriting a completed leg | off |
+
+K=2 exact-meter extras (`run_pure_budget_K2_…`): `--decision-mode`,
+`--decision-grid` (default 2,001) and `--audit-grid` (default 200,001)
+— at K=2 the simplex is 1-D, so quality is measured by an exact dense
+grid, no multistart search in any measurement. The CCP leg
+(`run_pure_budget_K2_ccp_…`) swaps only the next-λ policy and adds
+`--ccp-N0` (2,000), `--ccp-r` (10), `--ccp-seed` (0).
+
+`run_fixed_budget_K6_…` (protocol 5e, the precursor): `--budget 80912`,
+`--rel-target 0.05`, `--targeting-starts 24`, `--eval-every 2000`,
+`--max-outer 5000`, `--tag`.
+
+## 7. CCP λ-solver — `ccp_lambda_solver.CCPConfig`
+
+| field | meaning | default |
+|---|---|---|
+| `N0` | random seeds sampled per round (static mode) | 2,000 (heavy audit instrument: 8,192) |
+| `r` | restarts polished by CCP per round | 10 (heavy audit: 20) |
+| `pool_cap_factor` | carried cross-round pool cap = factor × r | 3 |
+| `tau_rel` | relative stationarity tolerance of a CCP restart | 1e-8 |
+| `tau_eps_frac` | safety cap 0.01×epsilon on tau (rarely binds) | 0.01 |
+| `T_max` | CCP iteration cap per restart | 100 |
+| `seed_sampler` | random-seed law: `"exp"` (Exp(1)-normalized) or `"sobol"` (scrambled) | `"exp"` — Study A found no significant difference; exp kept |
+| `adaptive_seed_schedule` | rho-rule shrinking of N0 (ablation switch) | False |
+| `n_new_floor_factor` | shrink floor = factor × r when the schedule is on | 10 |
+| `rho_low` | schedule band edge | 0.25 |
+| `screen_sep_l1` | l1 separation enforced among retained seeds | 0.05 |
+| `dedup_l1_tol` / `dedup_phi_rel` | pool dedup: same-point l1 / phi proximity | 1e-3 / 1e-9 |
+| `active_tol` | tolerant active-set threshold (rel) | 1e-9 |
+| `collapse_frac` | pool-collapse trigger fraction | 0.5 |
+| `seed` | rng / Sobol scramble seed | 0 |
+| `use_highspy` | force/forbid HiGHS for the game LP | None = auto-detect |
+
+## 8. Bandit-toy runners — `run_bandit_toy{,_K5,_mv}_without_256_checkpoints.py`
+
+| flag | meaning | default |
+|---|---|---|
+| `--epsilon` | the accuracy rung (recorded rungs: 1e-2, 1e-3, 1e-4; mv: 1e-2, 1e-3) | 1e-2 |
+| `--eval-every` | checkpoint cadence in gradients; **0 = per-segment recording**, the precise-readout mode (session 13) — coarse-cadence first-crossing readouts are upper-bound artifacts | 10 |
+| `--max-grad-evals` / `--max-wall` | fuses | 200,000 / 3,600 s (K5: 7,200 s) |
+| `--smoke` | tiny run into `smoke/` | off |
+| mv only: `--gamma` | variance weight (kills the closed form) | None = value recorded by `gamma_scan.json` |
+| mv only: `--gamma-scan`, `--gamma-list` | scan γ candidates | — |
+| mv only: `--rebuild-reference` | rebuild the untimed multistart ground-truth table (`reference_gamma1_*.npz`) | — |
+| mv only: `--epsilons` | run several rungs in one call | None |
+
+Bandit-only semantics: the equal-level stop grants the baseline a
+terminal global property its native theory does not promise — NEVER
+cite terminal GN\* as baseline coverage evidence; coverage weakness
+shows in value/PF metrics and audits.
+
+## 9. MNIST runners
+
+`run_ccp_compare_K10_mnist_…` (K=10 patch-softplus): `--budget` 55,000,
+`--eval-every` 1,500, `--per-class` 1,000 (first N train images per
+class), `--batch` 1,024, `--s` 5, `--ts` 24 (IPOPT leg's strict
+starts), `--ah16-faithful` (ablation switch), `--ccp-seed` 0.
+Problem family: `objectives_mnist_patch.py` (patch-connected softplus
+MLP, d = 8,874).
+
+`run_pure_budget_K2_mnist_pair_…` (Experiment 4): `--pair a b` (the
+two digits; campaigns of record 3 5 and 7 9), `--budget` 20,000,
+`--eval-every` 250, `--audit-grid` 200,001, `--s` 5, `--ccp-seed` 0.
+per_class is the balanced maximum for the pair (5,421 for 3v5); batch
+1,024; test values use ALL official t10k rows of the two digits.
+Problem family: `objectives_mnist_pair.py` (d = 8,098).
+
+## 10. Audit instruments (not knobs of any single run)
+
+- The family instrument everywhere: strict 64-start λ-search.
+- August campaigns: `audit_v2 = max(strict-64 IPOPT, heavy CCP with
+  N0 = 8,192, r = 20, fresh solver)` per delivered stack
+  (`audit_v2_K6_…py`, `--quick` = first 3 stacks per leg) — both are
+  lower bounds of an NP-hard max, so the max is a tighter, method-
+  symmetric lower bound.
+- Where audits are load-bearing, the monotone lower-bound envelope is
+  applied (prefix GN\* is non-increasing; raw values are kept
+  alongside).
+- Time accounting: the adaptive λ-search is ON the CPU axis (it steers
+  the run); checkpoint metric and audit work are OFF both axes
+  (`metric_seconds` / `audit_seconds` in the summaries).
+
+## 11. Which of the new knobs matter most
+
+| rank | knob | why |
+|---|---|---|
+| 1 | `--budget` B | the whole contest is defined at fixed B; every verdict is "at this budget" |
+| 2 | `--s` | coverage collapse lever: at K=6, s=5 lets baseline grids visit only 39%/19%/7.5%/2.2% of nodes for r=10/12/15/20 |
+| 3 | `--r` | the baseline's budget dial (node count C(r+K−1, K−1)) and quality floor |
+| 4 | `--targeting-starts` / CCP `N0`,`r` | decision quality AND the decision-time cost on the CPU axis |
+| 5 | batch b | the inner-solver floor: b = 4,096 evidence says targets ≲ 0.01 hit the segment cap from some anchors; the designed next lever is 8,192/16,384 or b = n |
+| 6 | `lambda_tier_mode` | strict is the only honest measurement mode on the MLP family |
+| 7 | `--eval-every` | wall-clock only (off-axis), but real waiting time |

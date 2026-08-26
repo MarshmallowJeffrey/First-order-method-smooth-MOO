@@ -1,0 +1,173 @@
+{
+  "syn_K3_m30_s0_gauss": {
+    "ref": 12.925006280336726,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 12.925006280336726,
+    "heavy_sobol": 12.925006280336726,
+    "K": 3,
+    "m": 30,
+    "family": "gauss"
+  },
+  "syn_K3_m30_s1_cancel": {
+    "ref": 1.5272219182508484,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 1.5272219182508484,
+    "heavy_sobol": 1.5272219182508484,
+    "K": 3,
+    "m": 30,
+    "family": "cancel"
+  },
+  "syn_K3_m30_s2_gauss": {
+    "ref": 14.469712273400136,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 14.469712273400136,
+    "heavy_sobol": 14.469712273400136,
+    "K": 3,
+    "m": 30,
+    "family": "gauss"
+  },
+  "syn_K3_m200_s0_gauss": {
+    "ref": 10.99124743732033,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 10.99124743732033,
+    "heavy_sobol": 10.99124743732033,
+    "K": 3,
+    "m": 200,
+    "family": "gauss"
+  },
+  "syn_K3_m200_s1_cancel": {
+    "ref": 0.3397002012693404,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 0.3397002012693404,
+    "heavy_sobol": 0.33970020126483713,
+    "K": 3,
+    "m": 200,
+    "family": "cancel"
+  },
+  "syn_K3_m200_s2_gauss": {
+    "ref": 11.045793790506343,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 11.045793790506343,
+    "heavy_sobol": 11.045793790506343,
+    "K": 3,
+    "m": 200,
+    "family": "gauss"
+  },
+  "syn_K6_m30_s0_gauss": {
+    "ref": 34.37145016791148,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 34.37145016791148,
+    "heavy_sobol": 34.37145016791148,
+    "K": 6,
+    "m": 30,
+    "family": "gauss"
+  },
+  "syn_K6_m30_s1_cancel": {
+    "ref": 22.969014763628604,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 22.969014763628604,
+    "heavy_sobol": 22.969014763628604,
+    "K": 6,
+    "m": 30,
+    "family": "cancel"
+  },
+  "syn_K6_m30_s2_gauss": {
+    "ref": 34.955543973181136,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 34.955543973181136,
+    "heavy_sobol": 34.955543973181136,
+    "K": 6,
+    "m": 30,
+    "family": "gauss"
+  },
+  "syn_K6_m200_s0_gauss": {
+    "ref": 26.48872941053705,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 26.48872941053705,
+    "heavy_sobol": 26.48872941053705,
+    "K": 6,
+    "m": 200,
+    "family": "gauss"
+  },
+  "syn_K6_m200_s1_cancel": {
+    "ref": 12.14011907534909,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 12.14011907534909,
+    "heavy_sobol": 12.14011907534909,
+    "K": 6,
+    "m": 200,
+    "family": "cancel"
+  },
+  "syn_K6_m200_s2_gauss": {
+    "ref": 28.1380971699654,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 28.1380971699654,
+    "heavy_sobol": 28.1380971699654,
+    "K": 6,
+    "m": 200,
+    "family": "gauss"
+  },
+  "k2_m30_s0_gauss": {
+    "ref": 8.292798324257069,
+    "ref_source": "exact_K2",
+    "heavy_exp": 8.292798324257069,
+    "heavy_sobol": 8.292798324257069,
+    "K": 2,
+    "m": 30,
+    "family": "gauss"
+  },
+  "k2_m30_s1_cancel": {
+    "ref": 0.5282129909381206,
+    "ref_source": "exact_K2",
+    "heavy_exp": 0.5282129909381206,
+    "heavy_sobol": 0.5282129909381206,
+    "K": 2,
+    "m": 30,
+    "family": "cancel"
+  },
+  "k2_m200_s0_gauss": {
+    "ref": 4.638318475714356,
+    "ref_source": "exact_K2",
+    "heavy_exp": 4.638318475714349,
+    "heavy_sobol": 4.638318475714348,
+    "K": 2,
+    "m": 200,
+    "family": "gauss"
+  },
+  "k2_m200_s1_cancel": {
+    "ref": 0.03427912347438894,
+    "ref_source": "exact_K2",
+    "heavy_exp": 0.034279122372019875,
+    "heavy_sobol": 0.0342791232527242,
+    "K": 2,
+    "m": 200,
+    "family": "cancel"
+  },
+  "real_K5_early_m4": {
+    "ref": 0.006815152767999211,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 0.006815152767999211,
+    "heavy_sobol": 0.006815152767999211,
+    "K": 5,
+    "m": 4,
+    "family": "bandit_toy"
+  },
+  "real_K5_mid_m30": {
+    "ref": 0.0011913418323557655,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 0.0011913418323557655,
+    "heavy_sobol": 0.0011913418323557655,
+    "K": 5,
+    "m": 30,
+    "family": "bandit_toy"
+  },
+  "real_K5_late_m42": {
+    "ref": 0.0004951989160520078,
+    "ref_source": "best_observed_incl_heavy",
+    "heavy_exp": 0.0004951989143697762,
+    "heavy_sobol": 0.0004951989159146243,
+    "K": 5,
+    "m": 42,
+    "family": "bandit_toy"
+  }
+}

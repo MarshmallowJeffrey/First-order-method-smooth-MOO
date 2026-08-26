@@ -1,0 +1,34 @@
+{
+  "adaptive CCP": {
+    "n_points": 114,
+    "n_front_train": 28,
+    "n_front_test": 28,
+    "n_front_test_err": 20,
+    "igd_to_union_train": 0.4827569943725572,
+    "maxdist_to_union_train": 4.619721421093185,
+    "igd_central_train": 0.0,
+    "maxdist_central_train": 0.0,
+    "hv_central_train": 0.3218249261284674,
+    "hv_central_test": 0.30064130057348826
+  },
+  "baseline r=4": {
+    "n_points": 132,
+    "n_front_train": 21,
+    "n_front_test": 22,
+    "n_front_test_err": 23,
+    "igd_to_union_train": 0.1899105170936128,
+    "maxdist_to_union_train": 1.4766948600179806,
+    "igd_central_train": 0.0832439206629095,
+    "maxdist_central_train": 0.1333880729478148,
+    "hv_central_train": 0.26079250985964086,
+    "hv_central_test": 0.23849598156001856
+  },
+  "_conventions": {
+    "central_bound": 0.6931471805599453,
+    "hv_reference": [
+      0.6931471805599453,
+      0.6931471805599453
+    ],
+    "note": "central = both losses <= ln 2 (guess-level CE of the balanced pair); union/reference from TRAIN fronts of all legs; test values on ALL official t10k rows"
+  }
+}

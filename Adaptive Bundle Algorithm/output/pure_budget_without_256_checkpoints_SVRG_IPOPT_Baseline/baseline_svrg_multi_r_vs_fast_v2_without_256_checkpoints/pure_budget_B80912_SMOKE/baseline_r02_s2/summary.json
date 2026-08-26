@@ -1,0 +1,81 @@
+{
+  "protocol": "pure fixed budget: shared segment unit, shared s, chain warm start; ONLY the next-lambda policy differs; no tolerance parameter anywhere; stop = budget",
+  "policy": "baseline",
+  "config_instance": {
+    "K": 6,
+    "p": 6,
+    "n": 300,
+    "hidden_sizes": [
+      8
+    ],
+    "activation": "tanh",
+    "msvrg_batch": 60,
+    "sampler_seed": 41,
+    "msvrg_step_const": 0.1,
+    "msvrg_momentum": 0.5,
+    "msvrg_epoch_len": 5
+  },
+  "budget": 400.0,
+  "s": 2,
+  "eval_every": 50.0,
+  "targeting_starts": null,
+  "extra": {
+    "r": 2
+  },
+  "grad_equiv_total": 387.6,
+  "joint_calls": 41,
+  "wall_seconds": 0.2508690357208252,
+  "decision_seconds": 6.747245788574219e-05,
+  "segments_total": 41,
+  "m_final": 42,
+  "n_decisions": 21,
+  "n_distinct_lambdas": 21,
+  "L_scale_final": 1.0,
+  "safeguard_retries": 0,
+  "ck_grads": [
+    0.0,
+    58.2,
+    116.2,
+    172.8,
+    231.6,
+    286.4,
+    339.6,
+    387.6
+  ],
+  "ck_cpu": [
+    0.0,
+    0.03920793533325195,
+    0.07548713684082031,
+    0.11292910575866699,
+    0.1508350372314453,
+    0.18695497512817383,
+    0.2199411392211914,
+    0.2508690357208252
+  ],
+  "ck_m": [
+    1,
+    8,
+    14,
+    20,
+    26,
+    32,
+    37,
+    42
+  ],
+  "final_audit": 0.42658138696497117,
+  "audited_gn_history": [
+    0.42658138696497117
+  ],
+  "audited_gn_envelope": null,
+  "lambda_star": [
+    0.5584487221510963,
+    0.44155127781927134,
+    6.465621198337104e-12,
+    8.794913306282877e-12,
+    7.610877577772146e-12,
+    6.760887949184463e-12
+  ],
+  "audit_seconds": 2.0872278213500977,
+  "data_seed": 7,
+  "init_seed": 8
+}

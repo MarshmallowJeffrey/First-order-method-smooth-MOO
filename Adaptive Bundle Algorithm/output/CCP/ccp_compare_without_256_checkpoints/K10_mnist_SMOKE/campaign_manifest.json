@@ -1,0 +1,20 @@
+{
+  "campaign": "ccp_compare K10 MNIST patch-softplus trial",
+  "machine": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "smoke": true,
+  "legs": [
+    {
+      "leg": "adaptive_s5_ts24",
+      "wall_seconds": 4.2551140785217285,
+      "decision_seconds": 1.832021951675415,
+      "final_probe": 15.270244406852333
+    },
+    {
+      "leg": "adaptive_s5_ccp",
+      "wall_seconds": 3.2536492347717285,
+      "decision_seconds": 0.11159586906433105,
+      "final_probe": 1.8447580546931095
+    }
+  ],
+  "total_wall_seconds": 7.509484052658081
+}

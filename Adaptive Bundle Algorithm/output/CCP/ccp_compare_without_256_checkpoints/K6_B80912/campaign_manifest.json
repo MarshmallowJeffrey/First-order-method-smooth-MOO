@@ -1,0 +1,15 @@
+{
+  "campaign": "ccp_compare K6 pure budget (Aug 9, 2026)",
+  "machine": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "processor": "arm",
+  "smoke": false,
+  "legs": [
+    {
+      "leg": "baseline_r15_s5",
+      "wall_seconds": 1342.8345849514008,
+      "decision_seconds": 0.004293680191040039,
+      "final_audit": 7.091562943870589
+    }
+  ],
+  "total_wall_seconds": 1343.2109079360962
+}

@@ -1,0 +1,33 @@
+[campaign] === 3v5 / baseline_r10_s5 ===
+[baseline|3v5] instance in 7.5s (n=10842 d=8098 per_class=5421 epoch_len=11 L=[1.458,1.357])
+[baseline|3v5] budget spent: 19993.9 of 20000.0 | segments=3459 | wall=733.2s | decision=0.0s | L_scale=1.0
+[baseline|3v5] final EXACT audit = 1.733122e-04 | final test CE = (0.0192, 0.0551) err = (0.0050, 0.0168) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/K2_mnist_pair_without_256_checkpoints/pair_3v5_B20000/baseline_r10_s5
+[campaign] === 3v5 / baseline_r20_s5 ===
+[baseline|3v5] instance in 8.6s (n=10842 d=8098 per_class=5421 epoch_len=11 L=[1.458,1.357])
+[baseline|3v5] budget spent: 19997.8 of 20000.0 | segments=3355 | wall=729.4s | decision=0.0s | L_scale=1.0
+[baseline|3v5] final EXACT audit = 9.063115e-05 | final test CE = (0.0156, 0.0603) err = (0.0050, 0.0213) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/K2_mnist_pair_without_256_checkpoints/pair_3v5_B20000/baseline_r20_s5
+[campaign] === 3v5 / baseline_r40_s5 ===
+[baseline|3v5] instance in 7.9s (n=10842 d=8098 per_class=5421 epoch_len=11 L=[1.458,1.357])
+[baseline|3v5] budget spent: 19995.6 of 20000.0 | segments=3304 | wall=730.4s | decision=0.0s | L_scale=1.0
+[baseline|3v5] final EXACT audit = 8.899675e-05 | final test CE = (0.0522, 0.0282) err = (0.0109, 0.0067) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/K2_mnist_pair_without_256_checkpoints/pair_3v5_B20000/baseline_r40_s5
+[campaign] === 3v5 / adaptive_s5_ccp ===
+[adaptive_ccp|3v5] instance in 9.0s (n=10842 d=8098 per_class=5421 epoch_len=11 L=[1.458,1.357])
+[adaptive_ccp|3v5] budget spent: 19997.5 of 20000.0 | segments=3252 | wall=801.2s | decision=87.8s | L_scale=1.0
+[adaptive_ccp|3v5] final EXACT audit = 1.234481e-05 | final test CE = (0.0142, 0.1160) err = (0.0040, 0.0247) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/K2_mnist_pair_without_256_checkpoints/pair_3v5_B20000/adaptive_s5_ccp
+[campaign] === 7v9 / baseline_r10_s5 ===
+[baseline|7v9] instance in 9.9s (n=11898 d=8098 per_class=5949 epoch_len=12 L=[1.370,1.372])
+[baseline|7v9] budget spent: 19994.0 of 20000.0 | segments=3475 | wall=796.2s | decision=0.0s | L_scale=1.0
+[baseline|7v9] final EXACT audit = 1.341204e-04 | final test CE = (0.0559, 0.0460) err = (0.0107, 0.0099) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/K2_mnist_pair_without_256_checkpoints/pair_7v9_B20000/baseline_r10_s5
+[campaign] === 7v9 / baseline_r20_s5 ===
+[baseline|7v9] instance in 9.9s (n=11898 d=8098 per_class=5949 epoch_len=12 L=[1.370,1.372])
+[baseline|7v9] budget spent: 19996.7 of 20000.0 | segments=3371 | wall=801.9s | decision=0.0s | L_scale=1.0
+[baseline|7v9] final EXACT audit = 7.801619e-05 | final test CE = (0.0550, 0.0559) err = (0.0136, 0.0129) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/K2_mnist_pair_without_256_checkpoints/pair_7v9_B20000/baseline_r20_s5
+[campaign] === 7v9 / baseline_r40_s5 ===
+[baseline|7v9] instance in 10.3s (n=11898 d=8098 per_class=5949 epoch_len=12 L=[1.370,1.372])
+[baseline|7v9] budget spent: 19996.1 of 20000.0 | segments=3317 | wall=794.2s | decision=0.0s | L_scale=1.0
+[baseline|7v9] final EXACT audit = 2.474152e-05 | final test CE = (0.0503, 0.0703) err = (0.0097, 0.0139) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/K2_mnist_pair_without_256_checkpoints/pair_7v9_B20000/baseline_r40_s5
+[campaign] === 7v9 / adaptive_s5_ccp ===
+[adaptive_ccp|7v9] instance in 10.1s (n=11898 d=8098 per_class=5949 epoch_len=12 L=[1.370,1.372])
+[adaptive_ccp|7v9] budget spent: 19997.4 of 20000.0 | segments=3265 | wall=859.2s | decision=86.3s | L_scale=1.0
+[adaptive_ccp|7v9] final EXACT audit = 3.838076e-06 | final test CE = (0.0371, 0.0748) err = (0.0068, 0.0168) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/K2_mnist_pair_without_256_checkpoints/pair_7v9_B20000/adaptive_s5_ccp
+[campaign] ALL DONE in 7583s

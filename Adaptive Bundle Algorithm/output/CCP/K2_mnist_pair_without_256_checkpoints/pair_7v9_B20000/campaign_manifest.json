@@ -1,0 +1,48 @@
+{
+  "campaign": "K2 MNIST pair 7v9 pure budget (baseline r[10, 20, 40] + adaptive CCP)",
+  "machine": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "smoke": false,
+  "legs": [
+    {
+      "leg": "baseline_r10_s5",
+      "wall_seconds": 974.6818890571594,
+      "decision_seconds": 0.0024793148040771484,
+      "final_audit": 0.00013412044711817814,
+      "final_test_err": [
+        0.010700389105058366,
+        0.009910802775024777
+      ]
+    },
+    {
+      "leg": "baseline_r20_s5",
+      "wall_seconds": 976.844527721405,
+      "decision_seconds": 0.0024445056915283203,
+      "final_audit": 7.801619441986486e-05,
+      "final_test_err": [
+        0.013618677042801557,
+        0.01288404360753221
+      ]
+    },
+    {
+      "leg": "baseline_r40_s5",
+      "wall_seconds": 963.5078778266907,
+      "decision_seconds": 0.002474069595336914,
+      "final_audit": 2.474152384873666e-05,
+      "final_test_err": [
+        0.009727626459143969,
+        0.013875123885034688
+      ]
+    },
+    {
+      "leg": "adaptive_s5_ccp",
+      "wall_seconds": 1029.253751039505,
+      "decision_seconds": 86.2646906375885,
+      "final_audit": 3.838075799685037e-06,
+      "final_test_err": [
+        0.006809338521400778,
+        0.01684836471754212
+      ]
+    }
+  ],
+  "total_wall_seconds": 7582.8283450603485
+}

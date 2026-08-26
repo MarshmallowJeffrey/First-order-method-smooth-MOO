@@ -1,0 +1,292 @@
+{
+  "produced_by": "front_metrics_K6_pure_budget_without_256_checkpoints.py",
+  "date": "2026-07-30",
+  "semantics": {
+    "front": "nondominated subset of the leg's delivered cloud (all fvals rows, minimisation)",
+    "reference": "union of all legs' fronts (mutual; no oracle front for this family)",
+    "igd": "mean over reference points of Euclidean distance to the leg front (raw value space); maxdist = max",
+    "central": "reference restricted to all six losses <= 1; method fronts never clipped",
+    "hv": "Monte-Carlo fraction of the box [ideal, 1]^6 dominated by the leg's front; common samples for all legs (paired)",
+    "eps": "final strict 64-start delivered-set audit = search LOWER bound of GN*; NOT a certificate (no exact meter exists at K=6, unlike K=2)",
+    "cv_gap_ratio": "omitted: no canonical 1-D ordering of the front at K=6 (same reason as the K=5 bandit)",
+    "error_bars": "none: one realization per leg (MLP torch runs are not bit-reproducible here, session 12)"
+  },
+  "mc": {
+    "samples": 100000,
+    "seed": 20260730
+  },
+  "reference": {
+    "union_front_size": 29505,
+    "union_front_size_central": 246,
+    "ideal": [
+      0.002861732182357715,
+      0.0009109798183193273,
+      0.0005322137621245375,
+      0.00021109527614958243,
+      0.0005568924690322654,
+      0.0022440552932601948
+    ],
+    "nadir_raw": [
+      25.43038032960873,
+      24.949619703262172,
+      17.523684581267382,
+      10.496421094957332,
+      7.693299485510571,
+      11.30914409632843
+    ],
+    "hv_central_union_frac": 0.03975
+  },
+  "projection_joint_front_composition": {
+    "legs": [
+      "adaptive_s5",
+      "baseline_r10_s1"
+    ],
+    "note": "per objective pair: points each drawn leg contributes to the JOINT nondominated front of that projection",
+    "pairs": {
+      "F1-F2": {
+        "adaptive_s5": 20,
+        "baseline_r10_s1": 2
+      },
+      "F1-F3": {
+        "adaptive_s5": 7,
+        "baseline_r10_s1": 10
+      },
+      "F2-F3": {
+        "adaptive_s5": 6,
+        "baseline_r10_s1": 9
+      },
+      "F1-F4": {
+        "adaptive_s5": 7,
+        "baseline_r10_s1": 10
+      },
+      "F2-F4": {
+        "adaptive_s5": 11,
+        "baseline_r10_s1": 7
+      },
+      "F3-F4": {
+        "adaptive_s5": 5,
+        "baseline_r10_s1": 11
+      },
+      "F1-F5": {
+        "adaptive_s5": 15,
+        "baseline_r10_s1": 9
+      },
+      "F2-F5": {
+        "adaptive_s5": 11,
+        "baseline_r10_s1": 6
+      },
+      "F3-F5": {
+        "adaptive_s5": 4,
+        "baseline_r10_s1": 11
+      },
+      "F4-F5": {
+        "adaptive_s5": 6,
+        "baseline_r10_s1": 14
+      },
+      "F1-F6": {
+        "adaptive_s5": 9,
+        "baseline_r10_s1": 13
+      },
+      "F2-F6": {
+        "adaptive_s5": 7,
+        "baseline_r10_s1": 9
+      },
+      "F3-F6": {
+        "adaptive_s5": 4,
+        "baseline_r10_s1": 12
+      },
+      "F4-F6": {
+        "adaptive_s5": 6,
+        "baseline_r10_s1": 14
+      },
+      "F5-F6": {
+        "adaptive_s5": 5,
+        "baseline_r10_s1": 17
+      }
+    }
+  },
+  "legs": {
+    "adaptive_s5": {
+      "policy": "adaptive",
+      "r": null,
+      "s": 5,
+      "n_points": 4309,
+      "n_front": 3174,
+      "n_front_central": 215,
+      "per_obj_min": [
+        0.002861732182357715,
+        0.002052991695445021,
+        0.0026368171528089904,
+        0.002194453981397336,
+        0.004851131650642489,
+        0.0029657486972947305
+      ],
+      "eps_search_lb_64start": 0.046160403185160064,
+      "igd_to_union_raw": 11.975253156423756,
+      "maxdist_to_union_raw": 27.90924502546896,
+      "igd_central": 0.042034945997695417,
+      "maxdist_central": 0.41978751961167815,
+      "hv_central_frac": 0.02927,
+      "hv_central_ci95": 0.0010447602925616956,
+      "hv_adaptive_minus_this": 0.0,
+      "hv_adaptive_minus_this_ci95": 0.0,
+      "n_front_f1f2_projection": 23
+    },
+    "baseline_r10_s1": {
+      "policy": "baseline",
+      "r": 10,
+      "s": 1,
+      "n_points": 5558,
+      "n_front": 3098,
+      "n_front_central": 35,
+      "per_obj_min": [
+        0.005463596858055577,
+        0.0028423139183093847,
+        0.0017645782517560697,
+        0.0031069770806826415,
+        0.0050103867898708705,
+        0.020513619537413104
+      ],
+      "eps_search_lb_64start": 0.11144173794054531,
+      "igd_to_union_raw": 6.502643746635674,
+      "maxdist_to_union_raw": 21.841931632306977,
+      "igd_central": 0.3302072764438047,
+      "maxdist_central": 0.6503355426933067,
+      "hv_central_frac": 0.02697,
+      "hv_central_ci95": 0.0010040599859299244,
+      "hv_adaptive_minus_this": 0.0023,
+      "hv_adaptive_minus_this_ci95": 0.0009451782228652594,
+      "n_front_f1f2_projection": 26
+    },
+    "baseline_r10_s5": {
+      "policy": "baseline",
+      "r": 10,
+      "s": 5,
+      "n_points": 5898,
+      "n_front": 5751,
+      "n_front_central": 0,
+      "per_obj_min": [
+        0.9445729627833231,
+        0.0009109798183193273,
+        0.0005322137621245375,
+        0.0002854822935346507,
+        0.0008874189751151343,
+        0.0040472267089493134
+      ],
+      "eps_search_lb_64start": 3.1783185129755305,
+      "igd_to_union_raw": 2.4737344818569924,
+      "maxdist_to_union_raw": 11.487276825066942,
+      "igd_central": 1.1208426808286864,
+      "maxdist_central": 1.5655075775263834,
+      "hv_central_frac": 0.0,
+      "hv_central_ci95": 6.198064213930023e-09,
+      "hv_adaptive_minus_this": 0.02927,
+      "hv_adaptive_minus_this_ci95": 0.0010447655164023371,
+      "n_front_f1f2_projection": 39
+    },
+    "baseline_r12_s5": {
+      "policy": "baseline",
+      "r": 12,
+      "s": 5,
+      "n_points": 5822,
+      "n_front": 5747,
+      "n_front_central": 0,
+      "per_obj_min": [
+        2.1990443723527773,
+        0.07651565446055959,
+        0.0008385054680816064,
+        0.00025957905528714066,
+        0.000773979681465171,
+        0.0053367736326674405
+      ],
+      "eps_search_lb_64start": 7.091562943866374,
+      "igd_to_union_raw": 2.847230881813459,
+      "maxdist_to_union_raw": 10.539897311155991,
+      "igd_central": 3.5695455201565447,
+      "maxdist_central": 3.7625888716122646,
+      "hv_central_frac": 0.0,
+      "hv_central_ci95": 6.198064213930023e-09,
+      "hv_adaptive_minus_this": 0.02927,
+      "hv_adaptive_minus_this_ci95": 0.0010447655164023371,
+      "n_front_f1f2_projection": 37
+    },
+    "baseline_r15_s1": {
+      "policy": "baseline",
+      "r": 15,
+      "s": 1,
+      "n_points": 5432,
+      "n_front": 5214,
+      "n_front_central": 0,
+      "per_obj_min": [
+        1.185851490201931,
+        0.008031676492351597,
+        0.003935463532779996,
+        0.0033491426708860666,
+        0.005919764394090332,
+        0.01473648287515515
+      ],
+      "eps_search_lb_64start": 4.903727635568106,
+      "igd_to_union_raw": 4.33611562438708,
+      "maxdist_to_union_raw": 17.49511848359549,
+      "igd_central": 1.216930972468236,
+      "maxdist_central": 1.6257810373943784,
+      "hv_central_frac": 0.0,
+      "hv_central_ci95": 6.198064213930023e-09,
+      "hv_adaptive_minus_this": 0.02927,
+      "hv_adaptive_minus_this_ci95": 0.0010447655164023371,
+      "n_front_f1f2_projection": 23
+    },
+    "baseline_r15_s5": {
+      "policy": "baseline",
+      "r": 15,
+      "s": 5,
+      "n_points": 5847,
+      "n_front": 5785,
+      "n_front_central": 0,
+      "per_obj_min": [
+        2.1990443723527773,
+        1.0444942117046165,
+        0.0013706738614620542,
+        0.00022797674744988203,
+        0.0007007690170568022,
+        0.0053367736326674405
+      ],
+      "eps_search_lb_64start": 7.091562943870589,
+      "igd_to_union_raw": 2.554766503788503,
+      "maxdist_to_union_raw": 11.495017086740889,
+      "igd_central": 3.5695455201565447,
+      "maxdist_central": 3.7625888716122646,
+      "hv_central_frac": 0.0,
+      "hv_central_ci95": 6.198064213930023e-09,
+      "hv_adaptive_minus_this": 0.02927,
+      "hv_adaptive_minus_this_ci95": 0.0010447655164023371,
+      "n_front_f1f2_projection": 13
+    },
+    "baseline_r20_s5": {
+      "policy": "baseline",
+      "r": 20,
+      "s": 5,
+      "n_points": 5905,
+      "n_front": 5843,
+      "n_front_central": 0,
+      "per_obj_min": [
+        2.1990443723527773,
+        1.853213726141579,
+        0.011264501335284203,
+        0.00021109527614958243,
+        0.0005568924690322654,
+        0.0022440552932601948
+      ],
+      "eps_search_lb_64start": 7.091562943874517,
+      "igd_to_union_raw": 5.229746689059866,
+      "maxdist_to_union_raw": 15.581661065988252,
+      "igd_central": 3.5695455201565447,
+      "maxdist_central": 3.7625888716122646,
+      "hv_central_frac": 0.0,
+      "hv_central_ci95": 6.198064213930023e-09,
+      "hv_adaptive_minus_this": 0.02927,
+      "hv_adaptive_minus_this_ci95": 0.0010447655164023371,
+      "n_front_f1f2_projection": 1
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "baseline_r4": {
+    "n_points": 77,
+    "n_front": 47,
+    "certified_eps": 0.07823191092627697,
+    "central_bound": 1.0,
+    "igd_to_union": 0.045280329385869594,
+    "maxdist_to_union": 0.42240731758073624,
+    "igd_central": 0.010301852461696822,
+    "maxdist_central": 0.08365664389825742
+  },
+  "adaptive_ts8": {
+    "n_points": 67,
+    "n_front": 45,
+    "certified_eps": 0.009487859295541972,
+    "central_bound": 1.0,
+    "igd_to_union": 0.01409773380069291,
+    "maxdist_to_union": 0.06575854150935953,
+    "igd_central": 0.017150356648123487,
+    "maxdist_central": 0.05636579152669488
+  }
+}

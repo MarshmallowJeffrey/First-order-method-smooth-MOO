@@ -1,0 +1,87 @@
+[campaign] === baseline_r10_s1 ===
+[baseline] instance in 3.6s (epoch_len=13)
+[baseline] budget spent: 80894.6 of 80912.0 | segments=5557 | wall=1254.4s | decision=0.0s | L_scale=1.0
+[baseline] final strict audit = 0.103900 -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K6_B80912/baseline_r10_s1
+[campaign] === baseline_r10_s5 ===
+[baseline] instance in 3.6s (epoch_len=13)
+[baseline] budget spent: 80897.7 of 80912.0 | segments=5897 | wall=1215.4s | decision=0.0s | L_scale=1.0
+[baseline] final strict audit = 3.178319 -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K6_B80912/baseline_r10_s5
+[campaign] === baseline_r12_s5 ===
+[baseline] instance in 3.6s (epoch_len=13)
+[baseline] budget spent: 80898.4 of 80912.0 | segments=5821 | wall=1360.7s | decision=0.0s | L_scale=2.0
+[baseline] final strict audit = 7.091563 -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K6_B80912/baseline_r12_s5
+[campaign] === baseline_r15_s1 ===
+[baseline] instance in 4.1s (epoch_len=13)
+[baseline] budget spent: 80893.7 of 80912.0 | segments=5431 | wall=1188.9s | decision=0.0s | L_scale=2.0
+[baseline] final strict audit = 4.903728 -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K6_B80912/baseline_r15_s1
+[campaign] === baseline_r15_s5 ===
+[baseline] instance in 3.6s (epoch_len=13)
+[baseline] budget spent: 80906.6 of 80912.0 | segments=5846 | wall=21247.4s | decision=0.0s | L_scale=4.0
+[baseline] final strict audit = 7.091563 -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K6_B80912/baseline_r15_s5
+[campaign] === baseline_r20_s5 ===
+[baseline] instance in 3.6s (epoch_len=13)
+[baseline] budget spent: 80897.6 of 80912.0 | segments=5904 | wall=1412.9s | decision=0.0s | L_scale=4.0
+[baseline] final strict audit = 7.091563 -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K6_B80912/baseline_r20_s5
+[campaign] === adaptive_s5_ts24 ===
+[adaptive] instance in 3.9s (epoch_len=13)
+[adaptive] budget spent: 80902.2 of 80912.0 | segments=4308 | wall=3809.0s | decision=2799.4s | L_scale=1.0
+  [audit] m=    1  GN*=7.315672e+00
+  [audit] m=  108  GN*=1.794400e+00
+  [audit] m=  215  GN*=4.529592e-01
+  [audit] m=  322  GN*=3.572114e-01
+  [audit] m=  429  GN*=2.506611e-01
+  [audit] m=  536  GN*=2.461483e-01
+  [audit] m=  643  GN*=1.907895e-01
+  [audit] m=  750  GN*=1.866090e-01
+  [audit] m=  857  GN*=1.459360e-01
+  [audit] m=  964  GN*=1.459360e-01
+  [audit] m= 1071  GN*=1.398310e-01
+  [audit] m= 1178  GN*=1.379184e-01
+  [audit] m= 1285  GN*=1.434693e-01
+  [audit] m= 1392  GN*=1.253579e-01
+  [audit] m= 1499  GN*=1.040765e-01
+  [audit] m= 1606  GN*=1.048463e-01
+  [audit] m= 1713  GN*=1.048463e-01
+  [audit] m= 1820  GN*=1.048463e-01
+  [audit] m= 1927  GN*=1.090223e-01
+  [audit] m= 2034  GN*=1.050397e-01
+  [audit] m= 2141  GN*=1.090836e-01
+  [audit] m= 2248  GN*=8.207367e-02
+  [audit] m= 2355  GN*=8.230680e-02
+  [audit] m= 2462  GN*=6.735337e-02
+  [audit] m= 2569  GN*=7.420288e-02
+  [audit] m= 2676  GN*=7.255566e-02
+  [audit] m= 2783  GN*=6.575928e-02
+  [audit] m= 2890  GN*=6.575928e-02
+  [audit] m= 2997  GN*=6.575928e-02
+  [audit] m= 3104  GN*=6.475914e-02
+  [audit] m= 3211  GN*=5.619373e-02
+  [audit] m= 3318  GN*=5.711395e-02
+  [audit] m= 3425  GN*=6.002342e-02
+  [audit] m= 3532  GN*=4.940300e-02
+  [audit] m= 3639  GN*=6.450826e-02
+  [audit] m= 3746  GN*=4.641120e-02
+  [audit] m= 3853  GN*=4.641120e-02
+  [audit] m= 3960  GN*=4.641120e-02
+  [audit] m= 4067  GN*=4.919894e-02
+  [audit] m= 4174  GN*=4.641120e-02
+  [audit] m= 4281  GN*=4.616040e-02
+  [audit] m= 4309  GN*=4.616040e-02
+[adaptive] final strict audit = 0.046160 -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K6_B80912/adaptive_s5_ts24
+[campaign] === adaptive_s5_ccp ===
+[adaptive_ccp] instance in 3.4s (epoch_len=13)
+[adaptive_ccp] budget spent: 80903.4 of 80912.0 | segments=5089 | wall=1565.8s | decision=483.8s | L_scale=1.0
+[adaptive_ccp] final strict audit = 0.031754 -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K6_B80912/adaptive_s5_ccp
+[campaign] DONE in 33268s -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K6_B80912
+[campaign] skip baseline_r10_s1 (summary exists)
+[campaign] skip baseline_r10_s5 (summary exists)
+[campaign] skip baseline_r12_s5 (summary exists)
+[campaign] skip baseline_r15_s1 (summary exists)
+[campaign] === baseline_r15_s5 ===
+[baseline] instance in 3.5s (epoch_len=13)
+[baseline] budget spent: 80906.6 of 80912.0 | segments=5846 | wall=1338.8s | decision=0.0s | L_scale=4.0
+[baseline] final strict audit = 7.091563 -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K6_B80912/baseline_r15_s5
+[campaign] skip baseline_r20_s5 (summary exists)
+[campaign] skip adaptive_s5_ts24 (summary exists)
+[campaign] skip adaptive_s5_ccp (summary exists)
+[campaign] DONE in 1343s -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K6_B80912

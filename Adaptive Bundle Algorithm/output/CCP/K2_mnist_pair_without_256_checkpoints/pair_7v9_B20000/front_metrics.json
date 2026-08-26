@@ -1,0 +1,58 @@
+{
+  "adaptive CCP": {
+    "n_points": 3266,
+    "n_front_train": 98,
+    "n_front_test": 207,
+    "n_front_test_err": 17,
+    "igd_to_union_train": 1.2889728174024013,
+    "maxdist_to_union_train": 29.394646549846,
+    "igd_central_train": 0.046720822351656574,
+    "maxdist_central_train": 0.5496221795706882,
+    "hv_central_train": 0.4803950506118923,
+    "hv_central_test": 0.47647988191966045
+  },
+  "baseline r=10": {
+    "n_points": 3476,
+    "n_front_train": 72,
+    "n_front_test": 333,
+    "n_front_test_err": 16,
+    "igd_to_union_train": 1.1279435503045996,
+    "maxdist_to_union_train": 15.472623687934789,
+    "igd_central_train": 0.011598228422634825,
+    "maxdist_central_train": 0.5364178576435651,
+    "hv_central_train": 0.4803819799188327,
+    "hv_central_test": 0.47685423466491145
+  },
+  "baseline r=20": {
+    "n_points": 3372,
+    "n_front_train": 82,
+    "n_front_test": 309,
+    "n_front_test_err": 17,
+    "igd_to_union_train": 0.6014588542004998,
+    "maxdist_to_union_train": 15.478493016449224,
+    "igd_central_train": 0.014486121713316402,
+    "maxdist_central_train": 0.5422871850792439,
+    "hv_central_train": 0.48038977274317374,
+    "hv_central_test": 0.47612029787887067
+  },
+  "baseline r=40": {
+    "n_points": 3318,
+    "n_front_train": 110,
+    "n_front_test": 293,
+    "n_front_test_err": 17,
+    "igd_to_union_train": 0.6935898986889666,
+    "maxdist_to_union_train": 20.843854355332745,
+    "igd_central_train": 0.02446229509380723,
+    "maxdist_central_train": 0.5376654605272989,
+    "hv_central_train": 0.4804013358784759,
+    "hv_central_test": 0.47688816458148975
+  },
+  "_conventions": {
+    "central_bound": 0.6931471805599453,
+    "hv_reference": [
+      0.6931471805599453,
+      0.6931471805599453
+    ],
+    "note": "central = both losses <= ln 2 (guess-level CE of the balanced pair); union/reference from TRAIN fronts of all legs; test values on ALL official t10k rows"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "campaign": "ccp_compare K2 pure budget (Aug 9, 2026)",
+  "machine": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "processor": "arm",
+  "smoke": true,
+  "legs": [
+    {
+      "leg": "adaptive_s2_ts8",
+      "wall_seconds": 16.215049266815186,
+      "decision_seconds": 15.6233491897583,
+      "final_audit": 0.009487851098291422
+    },
+    {
+      "leg": "adaptive_s2_ccp",
+      "wall_seconds": 0.8798098564147949,
+      "decision_seconds": 0.36764979362487793,
+      "final_audit": 0.005803356218343936
+    }
+  ],
+  "total_wall_seconds": 17.095975160598755
+}

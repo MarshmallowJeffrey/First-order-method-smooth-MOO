@@ -1,0 +1,127 @@
+{
+  "protocol": "pure fixed budget at K=2 (MNIST digit pair, patch-softplus): shared segment unit, shared s, chain warm start; ONLY the next-lambda policy differs; no tolerance anywhere; stop = budget; EXACT 1-D meter for audits; theta snapshots + official-test evaluation are Aug-13 additions, both off-axis",
+  "policy": "baseline",
+  "pair": [
+    3,
+    5
+  ],
+  "config_instance": {
+    "per_class": 300,
+    "msvrg_batch": 256,
+    "msvrg_step_const": 0.1,
+    "msvrg_momentum": 0.5,
+    "n_probes": 5
+  },
+  "budget": 800.0,
+  "s": 2,
+  "eval_every": 100.0,
+  "audit_grid": 20001,
+  "meter": "exact-1d (audits); test split = ALL official t10k rows",
+  "extra": {
+    "r": 4
+  },
+  "K": 2,
+  "d": 8098,
+  "n": 600,
+  "per_class": 300,
+  "n_test": [
+    1010,
+    892
+  ],
+  "L_calibrated": [
+    1.3361211282957977,
+    0.8646418526704046
+  ],
+  "grad_equiv_total": 797.04,
+  "joint_calls": 131,
+  "wall_seconds": 2.3894357681274414,
+  "decision_seconds": 0.00015234947204589844,
+  "segments_total": 131,
+  "m_final": 132,
+  "n_decisions": 66,
+  "n_distinct_lambdas": 5,
+  "L_scale_final": 1.0,
+  "safeguard_retries": 0,
+  "ck_grads": [
+    0.0,
+    105.68,
+    206.24,
+    309.36,
+    410.48,
+    511.04,
+    614.1600000000001,
+    715.28,
+    797.04
+  ],
+  "ck_cpu": [
+    0.0,
+    0.3347358703613281,
+    0.6346659660339355,
+    0.9428737163543701,
+    1.2415039539337158,
+    1.5432639122009277,
+    1.8473737239837646,
+    2.14689302444458,
+    2.3894357681274414
+  ],
+  "ck_m": [
+    1,
+    18,
+    35,
+    52,
+    68,
+    85,
+    102,
+    118,
+    132
+  ],
+  "final_audit": 0.0712399652229685,
+  "final_audit_upper": 0.07125836225399843,
+  "audited_gn_history": [
+    94.47440322707874,
+    0.35573436100090916,
+    0.17129534612868902,
+    0.09403776259931895,
+    0.09403776259931895,
+    0.09403776259931895,
+    0.09206060049096276,
+    0.07631714968189085,
+    0.0712399652229685
+  ],
+  "audited_gn_upper_history": [
+    94.47440382460243,
+    0.3558789602832768,
+    0.1713808739484479,
+    0.09407029210517519,
+    0.09407029210517519,
+    0.09407029210517519,
+    0.09208900143899877,
+    0.07632777260980124,
+    0.07125836225399843
+  ],
+  "audit_w_history": [
+    0.0,
+    0.9149749879014749,
+    0.3969289934979603,
+    0.38194234673841637,
+    0.38194234673841637,
+    0.38194234673841637,
+    0.3814716732401064,
+    0.37745950166490855,
+    0.37604479051899387
+  ],
+  "w_star": 0.37604479051899387,
+  "audit_seconds": 0.09254670143127441,
+  "test_seconds": 2.40921688079834,
+  "final_test_ce": [
+    1.539041713217658,
+    0.01619953186073874
+  ],
+  "final_test_err": [
+    0.6049504950495049,
+    0.002242152466367713
+  ],
+  "init_seed": 8,
+  "sampler_seed": 41,
+  "probe_seed": 7
+}

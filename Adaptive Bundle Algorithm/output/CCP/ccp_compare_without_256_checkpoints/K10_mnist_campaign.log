@@ -1,0 +1,9 @@
+[campaign] === adaptive_s5_ts24 ===
+[adaptive] instance in 24.6s (K=10 d=8874 n=10000 epoch_len=10 L in [1.265,1.619])
+[adaptive] budget spent: 54985.9 of 55000.0 | segments=1804 | wall=2293.5s | decision=1454.9s | L_scale=1.0
+[adaptive] final probe GN = 2.525696e-01 -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K10_mnist10k_B55000/adaptive_s5_ts24
+[campaign] === adaptive_s5_ccp ===
+[adaptive_ccp] instance in 24.4s (K=10 d=8874 n=10000 epoch_len=10 L in [1.265,1.619])
+[adaptive_ccp] budget spent: 54984.7 of 55000.0 | segments=2372 | wall=1188.7s | decision=214.3s | L_scale=1.0
+[adaptive_ccp] final probe GN = 7.620913e-02 -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K10_mnist10k_B55000/adaptive_s5_ccp
+[campaign] DONE in 3541s -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/ccp_compare_without_256_checkpoints/K10_mnist10k_B55000

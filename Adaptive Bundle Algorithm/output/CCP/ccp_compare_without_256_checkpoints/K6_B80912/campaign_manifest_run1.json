@@ -1,0 +1,57 @@
+{
+  "campaign": "ccp_compare K6 pure budget (Aug 9, 2026)",
+  "machine": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "processor": "arm",
+  "smoke": false,
+  "legs": [
+    {
+      "leg": "baseline_r10_s1",
+      "wall_seconds": 1264.6729838848114,
+      "decision_seconds": 0.02192544937133789,
+      "final_audit": 0.10390032658035943
+    },
+    {
+      "leg": "baseline_r10_s5",
+      "wall_seconds": 1221.6950278282166,
+      "decision_seconds": 0.004569292068481445,
+      "final_audit": 3.1783185129755305
+    },
+    {
+      "leg": "baseline_r12_s5",
+      "wall_seconds": 1365.235186100006,
+      "decision_seconds": 0.004898786544799805,
+      "final_audit": 7.091562943866374
+    },
+    {
+      "leg": "baseline_r15_s1",
+      "wall_seconds": 1194.1644520759583,
+      "decision_seconds": 0.02129197120666504,
+      "final_audit": 4.903727635568106
+    },
+    {
+      "leg": "baseline_r15_s5",
+      "wall_seconds": 21251.690852880478,
+      "decision_seconds": 0.008934974670410156,
+      "final_audit": 7.091562943870589
+    },
+    {
+      "leg": "baseline_r20_s5",
+      "wall_seconds": 1417.252424955368,
+      "decision_seconds": 0.004071474075317383,
+      "final_audit": 7.091562943874517
+    },
+    {
+      "leg": "adaptive_s5_ts24",
+      "wall_seconds": 3977.6396911144257,
+      "decision_seconds": 2799.389525413513,
+      "final_audit": 0.046160403185160064
+    },
+    {
+      "leg": "adaptive_s5_ccp",
+      "wall_seconds": 1574.9453778266907,
+      "decision_seconds": 483.7677991390228,
+      "final_audit": 0.03175359111985035
+    }
+  ],
+  "total_wall_seconds": 33268.04222893715
+}

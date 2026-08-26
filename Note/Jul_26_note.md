@@ -308,3 +308,240 @@ Findings:
    needs problem classes where the oracle is expensive and memoised
    grids cannot shortcut (the MLP track, and the FUTURE_WORK
    non-convex-reward variant which kills the closed-form flatness).
+
+---
+
+## Jul 26, part 2 (SESSION 12, MLP track): grid-meter figures, tol=0.01 leg, adaptive extension
+
+Separate work block, same date: everything above is session 11's SURF
+record; everything below is session 12 (resumed from the ledger).
+
+### Ledger correction (reported to the user first)
+
+The ledger said "r15/r20 pending the user's go", but the sweep had
+already been run overnight Jul 25->26 (sweep_run.log, pid 36689;
+r15: 1255 s, audit GN* 5.9456e-2; r20: 4114 s, audit GN* 6.3415e-2;
+both completed, censored 0, node_tol 0.02) and committed in df75b55
+together with that folder's READMEs and the two July-25-presentation
+figures.  Evidently a parallel session with the user's go; the
+session-11 ledger rewrite missed it.  Data verified healthy (log +
+summaries consistent); nothing re-run.
+
+### User requests (this session)
+
+1. Adaptive: v3 stopped at round_fuse (max_outer=500), best 0.0581 vs
+   eps=1e-3 -> raise the cap, re-run, report the expected runtime.
+2. Baseline figures: intermediate checkpoints on the GRID meter
+   (enumerate nodes); final point = grid endpoint + a SEPARATE
+   full-simplex audit.  User rationale, recorded: a global meter on
+   the baseline's trajectory over-serves its contract (its theory
+   covers nodes only); the audit must EXHIBIT the between-node gap,
+   not absorb it.  The MLP sweep never used the equal-level stop
+   (that option exists only in the bandit drivers), so the engine is
+   already native — this is a figures-only change.
+3. Keep the node_tol=0.02 results AND add a lower-node_tol leg to see
+   how the audit and the trajectory move.  Value chosen by the
+   assistant (disclosed reasoning): 0.01 with solve_target 0.0025
+   (=tol/4) — halves the certificate while keeping the inner target
+   above the ~1e-3 zone where Jul_16_note.md flagged the SVRG stall,
+   so the grid-geometry question stays separated from the
+   inner-solver-floor question.  r legs: {10, 15} first (r10 = the
+   between-node-gap anchor, 96% of nodes solver-visited; r15 = where
+   the tol=0.02 audit saturates ~0.06); r12/r20 only if the result
+   warrants.
+
+### Code changes
+
+- `run_baseline_svrg_r_sweep_without_256_checkpoints.py` (edited;
+  engine `baseline_svrg_certified_without_256_checkpoints.py`
+  untouched):
+  * `_plot_sweep`: baseline lines now `cov_history` (native grid
+    meter); endpoint circle = grid certificate end; separate x marker
+    = `delivered_gn_strict` (the audit), dotted vertical connector
+    between them; legend/ylabel/title carry the meter caveat.  The
+    strict prefix history stays in the summaries, unplotted.
+  * `_write_readmes`: figure-section text (EN+ZH) rewritten to match.
+  * New args: `--out-dirname` (redirect the output folder; enables
+    the v2 home and keeps the tol legs apart) and `--fast-ref`
+    (adaptive reference curve from any fast-trial folder; the used
+    path is disclosed in the generated READMEs as before).
+- `run_trial_K6_fast_without_256_checkpoints.py`: NO changes needed —
+  `--max-outer` and `--variant-tag` already exist.
+
+### New comparison home
+
+`output/baseline_svrg_multi_r_vs_fast_v2_without_256_checkpoints/`:
+`original/` = verbatim copy of the old folder (the old folder itself
+stays in place untouched, so existing references remain valid);
+`tol0.02/` = copied summaries (r10/r12/r15/r20) with figures REDRAWN
+via --replot in the new presentation (no re-runs; output inspected —
+r10 shows the largest connector, 0.02 -> 0.1635 = 8.2x; r15/r20
+audits sit at ~0.06 near the fast best 0.0581); `tol0.01/` and
+`adaptive_extended/` land after the runs.
+
+### Run plan presented (awaiting the user's go)
+
+Serial on an idle machine (CPU-axis discipline):
+1. Fast adaptive, --max-outer 2000 --variant-tag v4_max_outer_2000:
+   estimate ~45-60 min.  Basis: lambda-search cost/round grows
+   ~linearly in bundle size m (~ round index); v3 measured 135.7 s
+   over rounds with m=2..502 -> c ~ 1.1e-3 s per m-unit; rounds
+   501..2000 add ~2000 s of search + ~470 s inner/oracle work +
+   the 500-round replay (~290 s).  Expectation set honestly IN
+   ADVANCE: v3's best_so_far was flat at 0.05811 over its last 42%
+   (grad-equiv 5413 -> 9226; cheap-tier pc bottom 0.0479), and
+   Jul_16_note.md already recorded "certification at eps=1e-3 is NOT
+   reachable by round-count alone at this pace" — so a mere-cap
+   explanation is unlikely; the run decides the hypothesis either
+   way.  If the plateau persists, the next single lever is the inner
+   solver (batch / segments / rel_target), not more rounds.
+2. Baseline node_tol=0.01: r=10 (est 15-25 min), then r=15 (est
+   35-65 min), --save-grams both, into tol0.01/.
+3. Replot both tol legs with --fast-ref at the extended run; copy the
+   extended run's outputs into adaptive_extended/; fill the Results
+   section below.
+
+### Results — part A: the v3 plateau diagnostic
+
+Script: `Original_py/diag_v3_plateau_without_256_checkpoints.py`
+(new, one-off; output `.../v2_.../diag_v3_plateau/diag.json`).  It
+replays the v3 config/seeds with `return_pre_prune=True`, strict-audits
+prefixes of the resulting bundle, and localises the strict witness.
+
+- **REPLAY NOT BIT-IDENTICAL (open item):** same config, same seeds
+  reproduced neither the grad total (9712.98 vs stored 9225.69, +5.3%)
+  nor pc_history (max abs diff 0.37); the replay had multi-segment
+  rounds and one segment-cap warning (stored v3: 499/500 rounds at a
+  single segment, no cap).  MLP-track torch runs are therefore NOT
+  bit-reproducible in the current environment (the bandit-track numpy
+  runs are — session 11 verified).  Open: thread-level float
+  nondeterminism vs a behavioural side effect of the session-11
+  algorithm edits (sanity 8/8 passes, but that compares today-vs-today,
+  not today-vs-July-15).  Conclusions below are mechanism-level, drawn
+  from the replay's own internally consistent bundle/history pair.
+- **Cheap meter under-reports ~2x:** strict 64-start audit of the
+  final replay bundle = **0.1403** vs the replay's cheap final pc
+  0.0777 (cheap min over last 50 rounds 0.0578).  The quoted "v3 best
+  0.058" is a cheap-meter artifact; the honest worst-case of such a
+  bundle is ~0.14.
+- **TARGETING FAILURE PROVEN (dominant cause):** strict witness
+  lambda* ~ [0, 0, 0.104, 0, 0, 0.896] — an e3-e6 EDGE mix; its l1
+  distance to the nearest lambda the run ever targeted is **0.208**,
+  and that nearest visit happened at ROUND 5; median l1 distance to
+  the 500 visited lambdas is 1.58.  The cheap tier (centroid + K
+  vertices + prev_lam, ~8 structured starts) never aimed at the true
+  peak region again in 495 rounds — rounds ground down only the
+  peaks the search could see.
+- **True trajectory nearly stalled:** strict prefix audits 0.753
+  (m=25) -> 0.250 (m=100) -> 0.191 (m=200) -> 0.178 (m=300) -> 0.153
+  (m=400) -> 0.140 (m=450) -> 0.140 (m=528): under one halving across
+  the last ~400 rounds, while the cheap meter crawled 0.096 -> 0.076.
+- A per-round achieved-depth statistic was also computed but is
+  **DISCARDED**: it assumed one delivered point per round, which the
+  replay violates (multi-segment rounds deliver one point per segment;
+  m=528 for 500 rounds), so the Gram/lambda pairing misaligns after
+  the first multi-segment round.  Recorded to keep the discard honest.
+- Measured strict-search pace on this problem: ~1.08e-2 s per bundle
+  point per warm-started search (12 searches, sum m = 2803, 30.4 s).
+
+**Revised adaptive plan (supersedes the max_outer=2000 idea; awaiting
+the user's go):** `run_trial_K6_fast_without_256_checkpoints.py
+--tier-mode strict --rel-target 0.1 --max-outer 300 --variant-tag
+v4_strict_rel0.1`.  Rationale: strict per-round search fixes both the
+targeting and the meter (the proven failure); rel_target 0.25 -> 0.1
+deepens each cut (~2-4 segments/round expected; initial targets ~0.008,
+still above the ~1e-3 inner floor v2 established with 150/150 cap-hits
+at 3.3e-4 targets, so no cap storm expected at first).  max_outer=300
+is a probe-sized fuse: estimated 40-60 min wall (strict lambda-search
+cost ~1.08e-2 s x bundle size per round, bundle growing 2-4/round;
+~15-20k grad-equivalents).  Honest expectation, set in advance: the
+TRUE GN* should land well below the replay's 0.14, but certification
+at eps=1e-3 is still NOT expected — when pc approaches ~3e-3 the eps/3
+floor and the b=4096 variance wall should reassert; the batch lever
+(8192/16384) is the next single change after this probe.
+
+### Results — part B: the runs (executed overnight Jul 26 -> 27)
+
+Order actually run (user decision): tol=0.01 legs first; the v4 probe
+after them; then a NEW fixed-budget experiment the user designed and
+approved the same evening (protocol below).  All serial on an idle
+machine.
+
+**B1. Baseline node_tol=0.01 legs (grid-geometry vs solve-depth):**
+
+| leg | grads | wall s | grid cert end | strict audit | vs tol=0.02 |
+|-----|-------|--------|---------------|--------------|-------------|
+| r10 | 55,416 (+34%) | 882 | 0.0098 | **0.1499** | audit -8% (was 0.1635) |
+| r15 | 254,197 (x3.1) | 3,628 | 0.0100 | **0.0589** | audit -1% (was 0.0595) |
+
+Both clean (censored 0, completed; r10 delivered 4,156 points, r15
+16,896).  VERDICT: tightening the node certificate 2x costs +34% to
+x3.1 budget and buys 1-8% of global quality — the between-node error
+is GRID-GEOMETRY dominated, not solve-depth dominated.  Publishable
+negative result; also fixes the baseline frontier shape: knee at
+r15@0.02 (81k -> 0.0595); r20@0.02 (242k -> 0.0634) and r15@0.01
+(254k -> 0.0589) show the ~0.06 saturation — 3x more budget buys
+nothing.
+
+**B2. v4 probe (strict targeting + rel_target 0.1, max_outer 300):**
+926 s, grads 12,346 (41.2/round vs v3's 18.5), stop=round_fuse.
+Strict per-round readings (now honest): 50-round block medians 0.836
+-> 0.265 -> 0.168 -> 0.136 -> 0.117 -> 0.104; no plateau.  At 300
+rounds the TRUE value (0.104) beats v3's TRUE value at 500 rounds
+(0.14, audited) — the targeting fix works.  NEW floor evidence:
+31/300 rounds hit the 10-segment cap at targets ~0.01
+(inner_cap_hits=28) — from some anchors ~0.01 is already unreachable
+in-budget; the b=4096 wall is closer than the v2 bracket suggested.
+lambda-search = 81.7% of wall at 64 starts (why the fixed-budget run
+targets with 24).  Probe archived to v2 `adaptive_extended/`.
+
+**B3. Fixed-budget experiment (user-designed protocol, approved):**
+one budget axis, ONE instrument (strict 64-start in-family audit).
+Baseline configurations (r, tol) enter as completed-run POINTS
+(x = realized cost, y = stored delivery audit); the adaptive method is
+ONE budget-mode run cut at B = 80,912 (r15@0.02's realized cost),
+its trajectory audited post-hoc on bundle prefixes at checkpoints
+(off-axis; monotone lower-bound envelope plotted — raw audits in the
+summary).  NEW driver `run_fixed_budget_K6_without_256_checkpoints.py`
+(+ --replot; smoke caught a README KeyError before launch, fixed).
+Run: rel_target 0.05, targeting 24 starts, eval_every 2000.  Result:
+48.6 min wall (lambda-search 27.5 min = 57%), grads 81,058, bundle
+m=4,318, cap-hit rounds 414 (expected at these targets; budget mode),
+stop=budget.  Audited (envelope) trajectory: 7.32 (x0) -> 0.203
+(10.5k) -> 0.159 (31k) -> 0.137 (41.6k) -> 0.146-envelope (62k) ->
+**0.102 (final, 80.9k)**; post-prune audit 0.108 (pruning costs a
+little global GN — value-blind activation pruning, known property).
+One audit non-monotonicity caught (52k raw 0.129 < 62k raw 0.146 —
+impossible for the true prefix GN*, so the 52k audit under-reported);
+the envelope repairs it and is disclosed in the README.
+
+FIXED-BUDGET VERDICT (single meter, grads axis): mixed, baseline
+ahead in the mid/high range — at 41k adaptive 0.137 vs r10@0.02
+0.1635 (adaptive x1.1 better); at 55k vs r10@0.01 ~tie (x1.0); at
+64k baseline r12@0.02 0.0954 vs ~0.135 (x0.7, baseline better); at
+B=81k baseline r15@0.02 **0.0595 vs adaptive 0.102** (x0.6, baseline
+clearly better).  Beyond budget: r20@0.02 / r15@0.01 sit at ~0.06 for
+3x the cost.  On this K=6 MLP with the gram-share baseline, the
+terminal grads-axis advantage at these budgets belongs to the
+BASELINE at its knee; the adaptive method's remaining case is the
+anytime shape below ~40k and the (still unfixed) inner floor.
+Consistent with the bandit-track lesson: memoised grids neutralise
+the K-advantage argument on the grads axis.
+
+**Figures/archive (final layout of the v2 home):** `original/`,
+`tol0.02/` (grid-meter presentation, adaptive reference = v4 strict
+curve via --fast-ref), `tol0.01/` (same), `adaptive_extended/` (v4
+probe copy), `fixed_budget_B80912/` (headline figures
+fixed_budget_gn_vs_{grads,cpu}.png + summary + bundle_grams.npz),
+`diag_v3_plateau/`, `fixed_budget_B600_SMOKE/`.
+
+**Open items after session 12:** (1) MLP torch runs not
+bit-reproducible in this environment — cause unresolved (threading vs
+session-11 edit side effect); (2) the b=4096 inner floor now has a
+measured onset (~0.01 from some anchors) — the batch lever
+(8192/16384/b=n) is the designed next single change if the user wants
+to chase eps=1e-3; (3) audit under-search exists even at 64 starts
+(the caught non-monotonicity) — more starts or restarts are an option
+where audits are load-bearing; (4) Jul_20_note.md §7 still carries
+the wrong ~16x CPU figure (correct 8.8x) — fix on next MLP-track
+touch.

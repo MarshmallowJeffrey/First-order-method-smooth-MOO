@@ -1,0 +1,45 @@
+{
+  "campaign": "ccp_compare K2 pure budget (Aug 9, 2026)",
+  "machine": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "processor": "arm",
+  "smoke": false,
+  "legs": [
+    {
+      "leg": "baseline_r10_s5",
+      "wall_seconds": 706.4609899520874,
+      "decision_seconds": 0.0020012855529785156,
+      "final_audit": 0.00016071080744535434
+    },
+    {
+      "leg": "baseline_r20_s5",
+      "wall_seconds": 682.3248977661133,
+      "decision_seconds": 0.0018811225891113281,
+      "final_audit": 0.000620154282588292
+    },
+    {
+      "leg": "baseline_r40_s5",
+      "wall_seconds": 796.7097070217133,
+      "decision_seconds": 0.002060413360595703,
+      "final_audit": 0.0002700979734795348
+    },
+    {
+      "leg": "baseline_r80_s5",
+      "wall_seconds": 749.2486128807068,
+      "decision_seconds": 0.0019307136535644531,
+      "final_audit": 0.00029811020403869293
+    },
+    {
+      "leg": "adaptive_s5_ts24",
+      "wall_seconds": 1243.573404788971,
+      "decision_seconds": 560.0502698421478,
+      "final_audit": 9.518550531850516e-05
+    },
+    {
+      "leg": "adaptive_s5_ccp",
+      "wall_seconds": 802.692134141922,
+      "decision_seconds": 103.47507524490356,
+      "final_audit": 7.934105514612044e-06
+    }
+  ],
+  "total_wall_seconds": 4981.017603635788
+}

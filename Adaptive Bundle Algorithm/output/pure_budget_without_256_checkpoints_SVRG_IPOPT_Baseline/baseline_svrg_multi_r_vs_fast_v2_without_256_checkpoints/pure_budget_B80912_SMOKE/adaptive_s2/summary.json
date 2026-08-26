@@ -1,0 +1,100 @@
+{
+  "protocol": "pure fixed budget: shared segment unit, shared s, chain warm start; ONLY the next-lambda policy differs; no tolerance parameter anywhere; stop = budget",
+  "policy": "adaptive",
+  "config_instance": {
+    "K": 6,
+    "p": 6,
+    "n": 300,
+    "hidden_sizes": [
+      8
+    ],
+    "activation": "tanh",
+    "msvrg_batch": 60,
+    "sampler_seed": 41,
+    "msvrg_step_const": 0.1,
+    "msvrg_momentum": 0.5,
+    "msvrg_epoch_len": 5
+  },
+  "budget": 400.0,
+  "s": 2,
+  "eval_every": 50.0,
+  "targeting_starts": 8,
+  "extra": {},
+  "grad_equiv_total": 396.0,
+  "joint_calls": 22,
+  "wall_seconds": 3.308107852935791,
+  "decision_seconds": 2.995183229446411,
+  "segments_total": 22,
+  "m_final": 23,
+  "n_decisions": 11,
+  "n_distinct_lambdas": 11,
+  "L_scale_final": 1.0,
+  "safeguard_retries": 0,
+  "ck_grads": [
+    0.0,
+    54.0,
+    108.0,
+    162.0,
+    216.0,
+    270.0,
+    324.0,
+    378.0,
+    396.0
+  ],
+  "ck_cpu": [
+    0.0,
+    0.11455893516540527,
+    0.21561694145202637,
+    0.41350483894348145,
+    0.511815071105957,
+    1.7689330577850342,
+    2.3983731269836426,
+    3.2942090034484863,
+    3.308107852935791
+  ],
+  "ck_m": [
+    1,
+    4,
+    7,
+    10,
+    13,
+    16,
+    19,
+    22,
+    23
+  ],
+  "final_audit": 0.5468259780115209,
+  "audited_gn_history": [
+    2.674458446901668,
+    2.251134851731816,
+    2.067837309011455,
+    1.9283086788045285,
+    0.7487083106658555,
+    0.6928183987123391,
+    0.5813446581712026,
+    0.5733917644243363,
+    0.5468259780115209
+  ],
+  "audited_gn_envelope": [
+    2.674458446901668,
+    2.251134851731816,
+    2.067837309011455,
+    1.9283086788045285,
+    0.7487083106658555,
+    0.6928183987123391,
+    0.5813446581712026,
+    0.5733917644243363,
+    0.5468259780115209
+  ],
+  "lambda_star": [
+    2.696745692496614e-10,
+    4.2067111869098366e-10,
+    0.47121292467152476,
+    3.282945659383415e-10,
+    0.5287870739853964,
+    3.244387002958561e-10
+  ],
+  "audit_seconds": 9.396127939224243,
+  "data_seed": 7,
+  "init_seed": 8
+}

@@ -320,3 +320,315 @@ frozen-loop defect (39 duplicated bundle points, quality pinned at 1.0)
   `ledger-artifacts/pre_fix_outputs_archive/` outside the repo.
 - The presentation DOCX files were removed; a future talk should be
   rebuilt from `EXPERIMENTS.md` §5.
+
+---
+---
+
+# Part 2 — everything added after July 9 (written Aug 25, 2026)
+
+Part 1 above (sections 1–6, dated July 7) is kept as written and still
+accurately describes the ORIGINAL track: the plateau and crossover
+sweeps run by `run_experiments.py`. Every later track is documented
+here, in the same two-question spirit: what is each piece, and what do
+I run to reproduce it.
+
+## ⚠ Aug 25 reorganisation notice (read first)
+
+Later on Aug 25 the user reorganised the whole repository. Every path
+in this manual — Part 1 AND Part 2 — refers to the PRE-reorganisation
+layout; use these maps to translate:
+
+- **Code**: `Original_py/` is no longer flat. Files moved into
+  `Core Engine/` (engines + bundle + CCP solver), `baseline/`,
+  `objective/`, `experiment_plot/` (all runners, plots, audits,
+  `experiments.py`), `sanity_check/`; only `run.sh` stays at the top.
+  The layout was PATCHED the same day (user-approved): each subfolder
+  carries a `_layout.py` sys.path bootstrap, every module with sibling
+  imports loads it first, output/data anchors were deepened one level,
+  and all output-home constants point at the NEW locations. All five
+  sanity gates plus the two legacy verifiers pass on the patched tree.
+  `./run.sh <script>.py` works again and accepts either a bare script
+  name (searched across the subfolders) or a `subfolder/script.py`
+  path — the Part 1 §3 and §9 commands below run as written.
+- **Results**: `output/` was regrouped and renamed; the old→new mapping
+  table and the list of deleted homes (Pareto_front, the old r-sweep
+  home, calibration test, several logs/backups) are in
+  `output/README.md`. The `*_ZH` documents moved to `Zh/`;
+  `EXPERIMENTS(_ZH).md` and `Python_Change.md/` were deleted (git
+  history has them).
+
+Section 9's commands run as written (the runners now write/read the
+NEW homes); §10's table keeps the pre-reorg names as historical
+identifiers — resolve actual locations through `output/README.md`.
+
+Two standing references for this part:
+
+- `CODE_MAP.md` (this directory; until Aug 25 it was
+  `Original_py/README.md`) — the complete per-file map of ALL code
+  generations, the import-layer diagram, and why `Original_py/` stays
+  flat.
+- The authoritative record of each experiment is the `README.md` inside
+  its `output/` home plus the dated `Note/` file of the session that ran
+  it. This manual gives the commands and points there; it does not
+  duplicate result numbers.
+
+If `EXPERIMENTS.md` (referenced throughout Part 1) is absent from the
+working tree, recover it from git history — it is the only full report
+of the July plateau/crossover results.
+
+## 7. Tracks, file generations, and the measurement rule
+
+Filename suffixes encode the code generations (full tables in
+`CODE_MAP.md`):
+
+| suffix | generation |
+|---|---|
+| *(none)* | original reference implementation; checkpoints scored by the external fixed 256-start yardstick |
+| `_without_256_checkpoints` | the ACTIVE measurement track (July 8 →): identical trajectories, but checkpoints record the method's own most recent λ-search value |
+| `_fast` | July 15 acceleration set: Gram cache, two-tier λ-search with stop-verify, Momentum-SVRG inner loop, delivery-time pruning |
+| `_ccp` | Aug 9 λ-solver replacement: multistart convex–concave procedure (CCP) instead of IPOPT |
+
+Standing measurement rule (July 8 onward): ALL experiments live on the
+without-256 track. There is no external 256-start yardstick anywhere;
+the family's own strict 64-start λ-search is the instrument for
+certificates, stops, audits and shared-axis curves. Where audits are
+load-bearing they are reported as the monotone lower-bound envelope
+(every audit is a lower bound of an NP-hard max and can under-report; a
+prefix GN\* is non-increasing). The August campaigns additionally use
+the method-symmetric two-instrument audit
+`audit_v2 = max(strict-64 IPOPT, heavy CCP)` — see section 9.7.
+
+## 8. Environment additions
+
+- Same venv and `KMP_DUPLICATE_LIB_OK=TRUE` rule as Part 1 §2. The
+  convenience wrapper is `Original_py/run.sh`:
+  `./run.sh <script.py> [args]` runs any script in that directory with
+  the venv interpreter and the flag set.
+- `highspy` (HiGHS) is auto-detected by `ccp_lambda_solver.py` for its
+  game LP and is strongly preferred (warm-started LP is the CCP inner
+  step); without it the solver falls back to `scipy.optimize.linprog`.
+  CCP legs do NOT need IPOPT. IPOPT is still required for the `ts*`
+  (IPOPT strict-tier) legs and for the IPOPT half of `audit_v2`.
+- Any run whose wall-clock lands on a CPU axis must run SERIALLY on an
+  otherwise idle machine (checkpoint/audit time is kept off-axis by the
+  runners, but the decision time on the CPU axis is real).
+- Reproducibility caveat (session-12 finding, July 27): MLP torch runs
+  are NOT bit-reproducible in this environment — treat each stored MLP
+  trajectory as one realization, verify stored `summary.json` files
+  rather than re-running for identity. Bandit numpy runs ARE
+  bit-reproducible.
+
+## 9. Reproducing the post-July-9 experiments
+
+Conventions: every runner has `--smoke` (a tiny run into a separate
+`*_SMOKE`/`smoke` home — run it first); campaign runners refuse to
+overwrite a completed leg unless `--force` is given. All commands are
+run from `Original_py/` as `./run.sh <script> [args]`.
+
+### 9.1 July additions on the original engine
+
+| experiment | command | output home |
+|---|---|---|
+| Certified Pareto fronts, K=2 (July 8) | `./run.sh run_pareto_certified_without_256_checkpoints.py` | `output/Pareto_front/pareto_certified_without_256_checkpoints{,_r20}/` |
+| λ-path figure, K=3 (July 9) | `./run.sh run_lambda_path_without_256_checkpoints.py` | `output/lambda_path_K3/` |
+| Measurement-variant A/B rerun (K5 plateau + 96×96 crossover) | `./run.sh run_experiments_without_256_checkpoints.py` | `output/without_256_checkpoints/` |
+| K=6 reference trial, B=180,180 (July 11) | `./run.sh run_trial_K6_without_256_checkpoints.py` | `output/trial_K6_…_B180180_without_256_checkpoints/` — do NOT move; the fast trials compare against these stored curves |
+
+### 9.2 Fast-engine trials (July 15–16, session 12 probe July 27)
+
+Gate first: `./run.sh sanity_checks_fast.py` — must print 8/8 PASS.
+
+```bash
+./run.sh run_trial_K6_fast_without_256_checkpoints.py \
+  --tier-mode strict --rel-target 0.1 --max-outer 300 --variant-tag v4_strict_rel0.1
+```
+
+Home: `output/fast_method_trials/`. The v1/v2/v3 folders are earlier
+flag-sets of the same runner (each folder README records its exact
+identity); v4 (the command above) is the honest strict-instrument
+probe. `v3`'s plotted cheap-tier meter was later proven dishonest ~2x —
+keep the folder, do not quote its curve.
+
+### 9.3 Baseline r-sweep at fixed node_tol + between-node gap (July 20–26)
+
+```bash
+./run.sh run_baseline_svrg_r_sweep_without_256_checkpoints.py \
+  --r-list 10,12,15,20 --node-tol 0.02 \
+  --out-dirname baseline_svrg_multi_r_vs_fast_v2_without_256_checkpoints/tol0.02 \
+  --fast-ref "../output/fast_method_trials/trial_K6_…_v4_strict_rel0.1/summary.json" \
+  --save-grams
+```
+
+(`--node-tol 0.01` for the tol0.01 home.) Old July-25-style home
+`output/baseline_svrg_multi_r_vs_fast_without_256_checkpoints/` is
+frozen; the v2 home `…_v2_without_256_checkpoints/` is the comparison
+home of record (`original/` inside it is a verbatim copy of the old
+one). Gap figures: `./run.sh plot_between_node_gap_without_256_checkpoints.py`.
+The v3-stall diagnostic that motivated the strict instrument:
+`./run.sh diag_v3_plateau_without_256_checkpoints.py` →
+`…_v2_…/diag_v3_plateau/diag.json`.
+
+### 9.4 Fixed-budget K=6 (July 26; protocol 5e)
+
+```bash
+./run.sh run_fixed_budget_K6_without_256_checkpoints.py \
+  --budget 80912 --rel-target 0.05 --targeting-starts 24 --eval-every 2000
+```
+
+Home: `…_v2_…/fixed_budget_B80912/` (`--replot` redraws from stored
+data; `--smoke` → `fixed_budget_B600_SMOKE/`). Baseline points on its
+figures come from the completed r-sweep runs of 9.3.
+
+### 9.5 PURE fixed-budget protocol (July 27 K=6, July 30 K=2) — the headline protocol
+
+No tolerance parameter exists anywhere in this protocol: shared segment
+unit, shared `s`, chain warm start, stop = budget; the ONLY difference
+between legs is the next-λ policy. One leg per invocation, serial:
+
+```bash
+./run.sh run_pure_budget_K6_without_256_checkpoints.py --run adaptive --s 5 --budget 80912 --targeting-starts 24
+```
+
+```bash
+./run.sh run_pure_budget_K6_without_256_checkpoints.py --run baseline --r 10 --s 1
+```
+
+Recorded legs: adaptive s5; baseline r ∈ {10,12,15,20} at s=5 plus
+r10/r15 at s=1. `--backfill-audits` adds strict 64-start prefix audits
+to finished baseline legs; `--figure` redraws the campaign figures.
+Home: `…_v2_…/pure_budget_B80912/`.
+
+K=2 version with the EXACT 1-D quality meter (no multistart search in
+any measurement; `--decision-grid 2001`, `--audit-grid 200001`):
+
+```bash
+./run.sh run_pure_budget_K2_without_256_checkpoints.py --run adaptive --s 5 --budget 20000 --targeting-starts 24
+```
+
+baseline legs `--run baseline --r 10|20|40|80 --s 5`; the CCP targeting
+leg is its own runner (same executor, only the next-λ policy swapped):
+
+```bash
+./run.sh run_pure_budget_K2_ccp_without_256_checkpoints.py --s 5 --budget 20000
+```
+
+Home: `output/pure_budget_K2_without_256_checkpoints/B20000/`.
+Post-hoc ε-Pareto front metrics for the K=6 campaign:
+`./run.sh front_metrics_K6_pure_budget_without_256_checkpoints.py`.
+
+### 9.6 SURF bandit toys (July 26 K=2/K=5, July 31 mean-variance)
+
+Gates: `./run.sh sanity_checks_bandit_toy.py` (9/9),
+`sanity_checks_bandit_toy_K5.py` (9/9), `sanity_checks_bandit_toy_mv.py`.
+
+```bash
+./run.sh run_bandit_toy_without_256_checkpoints.py --epsilon 1e-2 --eval-every 0
+```
+
+`--eval-every 0` = per-segment recording, the precise-readout mode
+(session 13). The eps1e-3/1e-4 folders still carry the coarse July-26
+cadence; re-run with `--eval-every 0` before quoting their
+first-crossing numbers. K=5: `run_bandit_toy_K5_without_256_checkpoints.py
+--epsilon …`. Mean-variance (nonconvex):
+`run_bandit_toy_mv_without_256_checkpoints.py --epsilon …`
+(`--gamma-scan` picks γ, `--rebuild-reference` rebuilds the untimed
+multistart ground-truth table). Homes:
+`output/bandit_toy_{surf,K5,mv}_without_256_checkpoints/eps*/`.
+
+### 9.7 CCP campaign (Aug 8–10): Experiment 1, the MNIST K=10 trial, studies A/B
+
+Gate first: `./run.sh sanity_checks_ccp.py` — all checks must PASS.
+
+- **Study A — seed-sampler ablation** (decides `CCPConfig.seed_sampler`):
+  `./run.sh run_ccp_smoke_sampler_without_256_checkpoints.py --reps 50`
+  → `output/ccp_smoke_sampler/`.
+- **Study B — controlled λ-solver benchmark** (2a paired-start polish +
+  2b 60-second fixed-time race, on the frozen Gram snapshots in
+  `output/ccp_compare_…/lambda_solver_bench/snapshots/`):
+  `./run.sh run_lambda_solver_bench_without_256_checkpoints.py --T 60 --batches 20`.
+- **Experiment 1 (K=2 and K=6)** — each command runs ALL its legs
+  serially into `output/ccp_compare_without_256_checkpoints/{K2_B20000,K6_B80912}/`:
+
+```bash
+./run.sh run_ccp_compare_K2_without_256_checkpoints.py --smoke
+```
+
+```bash
+./run.sh run_ccp_compare_K2_without_256_checkpoints.py
+```
+
+  (same pattern with `run_ccp_compare_K6_without_256_checkpoints.py`).
+- **Audits:** `./run.sh audit_v2_K6_without_256_checkpoints.py`
+  (`--quick` for a 3-stack spot check) writes `audit_v2.json` into every
+  K6 leg — the two-instrument quality meter of section 7.
+- **Figures:** `./run.sh plot_ccp_compare_without_256_checkpoints.py --which K2`
+  (and `--which K6`).
+- **MNIST K=10 trial** (the report's "Experiment 2"; older in-repo
+  documents numbered it 3 — same experiment). Reads the idx files in
+  `data/mnist/`; two adaptive legs only (CCP vs IPOPT ts24):
+
+```bash
+./run.sh run_ccp_compare_K10_mnist_without_256_checkpoints.py --budget 55000 --per-class 1000 --batch 1024 --s 5 --ts 24
+```
+
+  then `./run.sh plot_ccp_compare_K10_mnist_without_256_checkpoints.py`.
+
+### 9.8 Experiment 4 — K=2 MNIST digit-pair campaign (Aug 13)
+
+Pair selection first (ranks 5 candidate pairs by conflict):
+
+```bash
+./run.sh run_conflict_smoke_K2_mnist_pairs_without_256_checkpoints.py
+```
+
+then one campaign per chosen pair (baseline r ∈ {10,20,40} + adaptive
+CCP, B = 20,000, exact 1-D meter, train+test fronts):
+
+```bash
+./run.sh run_pure_budget_K2_mnist_pair_without_256_checkpoints.py --pair 3 5
+```
+
+(`--pair 7 9` for the second pair; `--smoke` → `SMOKE/pair_3v5_B800/`.)
+Figures: `./run.sh plot_K2_mnist_pair_without_256_checkpoints.py`.
+Home: `output/K2_mnist_pair_without_256_checkpoints/`.
+
+## 10. Output map — post-July homes at a glance
+
+| output home | experiment (record) |
+|---|---|
+| `Pareto_front/` | certified Pareto fronts K=2, main r=10 + r=20 re-run (its READMEs + `FINDINGS_ZH.md`) |
+| `lambda_path_K3/` | K=3 λ-path figure (its README + quarters analysis) |
+| `without_256_checkpoints/` | measurement-variant A/B rerun (its `FINDINGS.md`) |
+| `trial_K6_…_B180180_…/` | K=6 reference trial (frozen reference curves) |
+| `calibration_speed_test_B2000/` | pre-run speed calibration for the trial — not an experiment result |
+| `fast_method_trials/` | fast-engine series v1/v2/v3/v4 + stopped cert attempt |
+| `baseline_svrg_multi_r_vs_fast_without_256_checkpoints/` | July-25 r-sweep home (frozen figures) |
+| `baseline_svrg_multi_r_vs_fast_v2_without_256_checkpoints/` | comparison home of record: `original/`, `tol0.02/`, `tol0.01/`, `adaptive_extended/`, `diag_v3_plateau/`, `fixed_budget_B80912/`, `pure_budget_B80912/` (+SMOKEs) |
+| `bandit_toy_surf_…/`, `bandit_toy_K5_…/`, `bandit_toy_mv_…/` | SURF bandit toys K=2 / K=5 / mean-variance, eps rungs + smoke |
+| `pure_budget_K2_…/B20000/` | K=2 pure fixed budget with the exact 1-D meter (`REPORT_ZH.md`) |
+| `ccp_compare_…/K2_B20000/`, `…/K6_B80912/` | Experiment 1 (CCP vs IPOPT vs grids) |
+| `ccp_compare_…/K10_mnist10k_B55000/` | MNIST K=10 trial (report "Experiment 2", earlier "3") |
+| `ccp_compare_…/lambda_solver_bench/` | Study B: controlled λ-solver benchmark |
+| `ccp_smoke_sampler/` | Study A: Exp(1) vs Sobol seed-sampler ablation |
+| `K2_mnist_pair_…/` | Experiment 4: digit-pair conflict smoke + pair_3v5 / pair_7v9 campaigns |
+
+Per-leg file conventions: `summary.json` (full curves + parameters +
+health flags) and `grams.npz` (delivered points' Gram matrices) in every
+leg; `thetas.npz` (parameter vectors) only in the MNIST-pair legs;
+`raw_histories.npz` in bandit runs; `audit_v2.json` in the audited K6 /
+K10 legs; `campaign_manifest.json` + `*.log` at campaign level.
+
+## 11. Verification gates — current full list
+
+| gate | expectation |
+|---|---|
+| `./run.sh sanity_checks_fast.py` | 8/8 PASS (Gram path ≡ einsum, MSVRG degeneration bit-identical, pruning bitwise-safe, …) |
+| `./run.sh sanity_checks_ccp.py` | all PASS (LP warm ≡ fresh, monotone ascent, K=2 ≡ exact envelope, …) |
+| `./run.sh sanity_checks_bandit_toy.py` | 9/9 |
+| `./run.sh sanity_checks_bandit_toy_K5.py` | 9/9 |
+| `./run.sh sanity_checks_bandit_toy_mv.py` | all PASS |
+| legacy `verify_fixes.py` / `prefix_repro.py` (outside the repo, Part 1 §5) | 10 passed / duplicates: 39 |
+
+Run the relevant gate before touching any engine file; every check must
+print PASS. Stored-result spot checks (exact JSON expectations) live in
+the session ledger outside the repository.

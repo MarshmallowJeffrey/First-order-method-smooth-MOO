@@ -1,0 +1,24 @@
+   reference built + cached: /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/bandit_toy_mv_without_256_checkpoints/reference_gamma1_n5000.npz
+   reference ready in 174.6s | plugin: bimodal pool 1.00, front jump 0.765 @ w=0.665
+   L calibrated: 0.1481, 0.1002 (909 Hessians, safety 1.5)
+
+== MV bandit toy | gamma=1 | eps=0.01 | out: /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/bandit_toy_mv_without_256_checkpoints/eps1e-2
+   baseline done: global_stop_gn, served 12/12, censored 0, grads 32.4, wall 0.28s
+   adaptive done: epsilon_certified, bundle 12 -> 2 after prune, grads 67.1, wall 0.42s
+
+== MV bandit toy | gamma=1 | eps=0.001 | out: /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/bandit_toy_mv_without_256_checkpoints/eps1e-3
+   baseline done: global_stop_gn, served 12/12, censored 0, grads 72.9, wall 0.31s
+   adaptive done: epsilon_certified, bundle 27 -> 2 after prune, grads 158.5, wall 1.07s
+   reference refresh: no method point beat the multi-start reference anywhere
+
+== summary (eps=0.01, gamma=1) ==
+   baseline  final GN* 2.770e-03 | cpu-to-eps 0.0019540786743164062 | grads-to-eps 16.192 | total (0.28s, 32 grads)
+   adaptive  final GN* 4.499e-03 | cpu-to-eps 0.06504988670349121 | grads-to-eps 18.288 | total (0.42s, 67 grads)
+   eps_value final: baseline 6.363e-01, adaptive 3.849e-01
+   figures + summary.json + raw_histories.npz -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/bandit_toy_mv_without_256_checkpoints/eps1e-2
+
+== summary (eps=0.001, gamma=1) ==
+   baseline  final GN* 6.297e-04 | cpu-to-eps 0.005789995193481445 | grads-to-eps 56.672 | total (0.31s, 73 grads)
+   adaptive  final GN* 6.659e-04 | cpu-to-eps 0.7609710693359375 | grads-to-eps 140.208 | total (1.07s, 158 grads)
+   eps_value final: baseline 6.363e-01, adaptive 3.291e-01
+   figures + summary.json + raw_histories.npz -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/bandit_toy_mv_without_256_checkpoints/eps1e-3

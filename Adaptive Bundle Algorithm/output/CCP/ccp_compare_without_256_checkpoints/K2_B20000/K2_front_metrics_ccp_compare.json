@@ -1,0 +1,17 @@
+{
+  "adaptive_ccp": {
+    "n_points": 81,
+    "igd_to_union": 0.5527417549318143,
+    "max_dist_to_union": 6.621928198710817
+  },
+  "adaptive": {
+    "n_points": 88,
+    "igd_to_union": 0.36521493420929835,
+    "max_dist_to_union": 5.203828932966709
+  },
+  "baseline_r10": {
+    "n_points": 35,
+    "igd_to_union": 0.08653552213667474,
+    "max_dist_to_union": 2.237567135770612
+  }
+}

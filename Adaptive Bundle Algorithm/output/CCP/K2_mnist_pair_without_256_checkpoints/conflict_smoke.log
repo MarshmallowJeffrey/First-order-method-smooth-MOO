@@ -1,0 +1,12 @@
+[4v9] built in 2.6s (n=11684 d=8098 per_class=5842 L=[1.449,1.001] wiring rel=5.1e-15)
+[4v9] S_int=0.7274 (A 0.3422 + B 0.3852) | vertex diag=65.0 mono_viol=0 c_int=6.207 c_vtx=4.103 formula_ok=True
+[3v5] built in 2.2s (n=10842 d=8098 per_class=5421 L=[1.319,1.021] wiring rel=6.2e-15)
+[3v5] S_int=0.9007 (A 0.3290 + B 0.5717) | vertex diag=62.9 mono_viol=0 c_int=6.156 c_vtx=4.078 formula_ok=True
+[7v9] built in 2.6s (n=11898 d=8098 per_class=5949 L=[1.254,1.002] wiring rel=5.5e-15)
+[7v9] S_int=0.8425 (A 0.3334 + B 0.5092) | vertex diag=70.1 mono_viol=0 c_int=6.131 c_vtx=4.066 formula_ok=True
+[3v8] built in 2.4s (n=11702 d=8098 per_class=5851 L=[1.320,1.177] wiring rel=5.4e-15)
+[3v8] S_int=0.8099 (A 0.3297 + B 0.4802) | vertex diag=64.7 mono_viol=0 c_int=6.200 c_vtx=4.100 formula_ok=True
+[5v8] built in 2.2s (n=10842 d=8098 per_class=5421 L=[1.217,1.175] wiring rel=4.6e-15)
+[5v8] S_int=0.7247 (A 0.3002 + B 0.4246) | vertex diag=63.2 mono_viol=0 c_int=6.156 c_vtx=4.078 formula_ok=True
+[smoke] DONE in 96s -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/K2_mnist_pair_without_256_checkpoints/conflict_smoke
+[smoke] top2 = [[3, 5], [7, 9]]

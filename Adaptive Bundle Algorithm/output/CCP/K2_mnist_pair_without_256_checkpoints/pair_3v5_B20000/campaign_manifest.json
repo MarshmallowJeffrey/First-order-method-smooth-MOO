@@ -1,0 +1,48 @@
+{
+  "campaign": "K2 MNIST pair 3v5 pure budget (baseline r[10, 20, 40] + adaptive CCP)",
+  "machine": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "smoke": false,
+  "legs": [
+    {
+      "leg": "baseline_r10_s5",
+      "wall_seconds": 900.5683920383453,
+      "decision_seconds": 0.0026237964630126953,
+      "final_audit": 0.00017331221133765062,
+      "final_test_err": [
+        0.0049504950495049506,
+        0.016816143497757848
+      ]
+    },
+    {
+      "leg": "baseline_r20_s5",
+      "wall_seconds": 889.1803240776062,
+      "decision_seconds": 0.002393007278442383,
+      "final_audit": 9.063114810786699e-05,
+      "final_test_err": [
+        0.0049504950495049506,
+        0.021300448430493273
+      ]
+    },
+    {
+      "leg": "baseline_r40_s5",
+      "wall_seconds": 886.5522031784058,
+      "decision_seconds": 0.0024673938751220703,
+      "final_audit": 8.89967517121998e-05,
+      "final_test_err": [
+        0.01089108910891089,
+        0.006726457399103139
+      ]
+    },
+    {
+      "leg": "adaptive_s5_ccp",
+      "wall_seconds": 962.1906449794769,
+      "decision_seconds": 87.83685898780823,
+      "final_audit": 1.2344813767217744e-05,
+      "final_test_err": [
+        0.0039603960396039604,
+        0.02466367713004484
+      ]
+    }
+  ],
+  "total_wall_seconds": 3638.5298252105713
+}

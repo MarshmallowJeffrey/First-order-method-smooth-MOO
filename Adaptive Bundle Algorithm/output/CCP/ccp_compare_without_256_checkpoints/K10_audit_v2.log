@@ -1,0 +1,3 @@
+[audit_v2] adaptive_s5_ccp      stacks=38 final v2=7.620913e-02 (strict64 7.427907e-02 / ccp 7.620913e-02; ccp instrument tighter on 32/38) 583s
+[audit_v2] adaptive_s5_ts24     stacks=38 final v2=2.525696e-01 (strict64 1.811705e-01 / ccp 2.525696e-01; ccp instrument tighter on 35/38) 474s
+[audit_v2] done
