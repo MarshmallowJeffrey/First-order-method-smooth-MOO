@@ -1,0 +1,31 @@
+{
+  "campaign": "K3 MNIST triple 3v5v8 pure budget, ridge mu=0.0001 (baseline r[4] + adaptive CCP)",
+  "mu": 0.0001,
+  "machine": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "smoke": true,
+  "legs": [
+    {
+      "leg": "baseline_r04_s2",
+      "wall_seconds": 10.460790872573853,
+      "decision_seconds": 0.0001456737518310547,
+      "final_audit": 0.6780345541220044,
+      "final_test_err": [
+        0.18514851485148515,
+        0.14798206278026907,
+        0.10882956878850103
+      ]
+    },
+    {
+      "leg": "adaptive_s2_ccp",
+      "wall_seconds": 11.166524887084961,
+      "decision_seconds": 0.353503942489624,
+      "final_audit": 0.07839086493984285,
+      "final_test_err": [
+        0.3920792079207921,
+        0.06390134529147982,
+        0.20739219712525667
+      ]
+    }
+  ],
+  "total_wall_seconds": 21.670164346694946
+}

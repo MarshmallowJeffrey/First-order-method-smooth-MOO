@@ -1,0 +1,40 @@
+{
+  "gate": 1,
+  "pair": [
+    4,
+    9
+  ],
+  "arms": [
+    {
+      "stepper": "bb",
+      "finite": true,
+      "L_scale_final": 8.0,
+      "L_scale_bounded": true,
+      "safeguard_retries": 3,
+      "audit_monotone": true,
+      "progress": true,
+      "final_audit_norm": 0.11318185664465903
+    },
+    {
+      "stepper": "adagrad_mult3",
+      "finite": true,
+      "L_scale_final": 2.0,
+      "L_scale_bounded": true,
+      "safeguard_retries": 1,
+      "audit_monotone": true,
+      "progress": true,
+      "final_audit_norm": 0.07429001004272073
+    },
+    {
+      "stepper": "adam_alpha0.0003_beta20.99",
+      "finite": true,
+      "L_scale_final": 1.0,
+      "L_scale_bounded": true,
+      "safeguard_retries": 0,
+      "audit_monotone": true,
+      "progress": true,
+      "final_audit_norm": 0.5793379459944613
+    }
+  ],
+  "pass": true
+}

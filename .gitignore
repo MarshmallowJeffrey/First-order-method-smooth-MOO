@@ -6,3 +6,7 @@ mlp_adaptive_smoke.png
 
 # Experiment-4 parameter dumps: 190-206 MB each, over GitHub 100 MB limit (kept on disk only)
 Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/pair_*_B20000/*/thetas.npz
+
+# Parameter dumps of every campaign leg (thetas.npz, 97-298 MB each, 180 files / 12.4 GB on Sep 3 2026):
+# over GitHub's 100 MB limit -- kept on disk only; summaries/grams/figures are committed
+Adaptive Bundle Algorithm/output/**/thetas.npz

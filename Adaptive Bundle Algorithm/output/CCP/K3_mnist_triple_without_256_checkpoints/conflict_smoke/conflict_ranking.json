@@ -1,0 +1,278 @@
+{
+  "campaign": "K3 MNIST triple conflict smoke (Smoke A)",
+  "machine": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "n_seg": 15,
+  "batch": 1024,
+  "n_probes": 10,
+  "chain_specs": [
+    {
+      "label": "V0",
+      "lam": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "group": "vertex"
+    },
+    {
+      "label": "V1",
+      "lam": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "group": "vertex"
+    },
+    {
+      "label": "V2",
+      "lam": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "group": "vertex"
+    },
+    {
+      "label": "E01",
+      "lam": [
+        0.5,
+        0.5,
+        0.0
+      ],
+      "group": "edge"
+    },
+    {
+      "label": "E02",
+      "lam": [
+        0.5,
+        0.0,
+        0.5
+      ],
+      "group": "edge"
+    },
+    {
+      "label": "E12",
+      "lam": [
+        0.0,
+        0.5,
+        0.5
+      ],
+      "group": "edge"
+    },
+    {
+      "label": "F0",
+      "lam": [
+        0.6,
+        0.2,
+        0.2
+      ],
+      "group": "favor"
+    },
+    {
+      "label": "F1",
+      "lam": [
+        0.2,
+        0.6,
+        0.2
+      ],
+      "group": "favor"
+    },
+    {
+      "label": "F2",
+      "lam": [
+        0.2,
+        0.2,
+        0.6
+      ],
+      "group": "favor"
+    },
+    {
+      "label": "C",
+      "lam": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333
+      ],
+      "group": "centroid"
+    }
+  ],
+  "score_def": "PRIMARY score_interior: part_k = mean_{j!=k} F_k(favor-j end) - F_k(favor-k end), S_int = sum(parts)/ln3; favor lambdas (.6,.2,.2)-perm keep every class alive (3:1 as K=2's (.75,.25)). Vertex analogue kept as diagnostic only (unregularised ignored classes diverge). Shape check: F_k(favor-k) <= F_k(centroid) <= F_k(favor-j), 9 comparisons, tol 1e-3.",
+  "ranking": [
+    {
+      "triple": [
+        3,
+        5,
+        8
+      ],
+      "score_interior": 0.8317415720993575,
+      "parts_interior": [
+        0.3312306038527091,
+        0.3023525782502702,
+        0.2801783300015075
+      ],
+      "score_vertex": 50.29007142289947,
+      "shape_violations": 0,
+      "vertex_diverge_max": 25.48726528397816,
+      "edge_diverge_max": 15.358921720133388,
+      "n": 16263,
+      "per_class": 5421,
+      "epoch_len": 16,
+      "b_k": [
+        342,
+        341,
+        341
+      ],
+      "c_interior": 9.044641210108836,
+      "c_edge": 7.029760806739223,
+      "c_vertex": 5.014880403369612,
+      "c_matches_formula": true,
+      "L": [
+        1.2508770664219162,
+        1.4401339781852953,
+        1.5812485086174632
+      ]
+    },
+    {
+      "triple": [
+        4,
+        7,
+        9
+      ],
+      "score_interior": 0.7854585168099548,
+      "parts_interior": [
+        0.23864660558300876,
+        0.2722096139744279,
+        0.35205815924900685
+      ],
+      "score_vertex": 50.65219759598674,
+      "shape_violations": 0,
+      "vertex_diverge_max": 24.826036670851757,
+      "edge_diverge_max": 16.124907807322202,
+      "n": 17526,
+      "per_class": 5842,
+      "epoch_len": 18,
+      "b_k": [
+        342,
+        341,
+        341
+      ],
+      "c_interior": 9.310167750770285,
+      "c_edge": 7.206778500513522,
+      "c_vertex": 5.103389250256761,
+      "c_matches_formula": true,
+      "L": [
+        1.4267135532265145,
+        1.315330152569003,
+        1.5691081213673175
+      ]
+    },
+    {
+      "triple": [
+        2,
+        3,
+        8
+      ],
+      "score_interior": 0.6293600943119877,
+      "parts_interior": [
+        0.20688494426189996,
+        0.2340772412169254,
+        0.2504605481296448
+      ],
+      "score_vertex": 49.96487204037659,
+      "shape_violations": 0,
+      "vertex_diverge_max": 24.566440372305998,
+      "edge_diverge_max": 14.89194328873297,
+      "n": 17553,
+      "per_class": 5851,
+      "epoch_len": 18,
+      "b_k": [
+        342,
+        341,
+        341
+      ],
+      "c_interior": 9.30046145957956,
+      "c_edge": 7.200307639719707,
+      "c_vertex": 5.1001538198598535,
+      "c_matches_formula": true,
+      "L": [
+        1.213614471774985,
+        1.4914289248870956,
+        1.5816634529353448
+      ]
+    },
+    {
+      "triple": [
+        3,
+        8,
+        9
+      ],
+      "score_interior": 0.583730048052895,
+      "parts_interior": [
+        0.24760227628351794,
+        0.23899547826884632,
+        0.1546952495033724
+      ],
+      "score_vertex": 50.426172640932144,
+      "shape_violations": 0,
+      "vertex_diverge_max": 24.276949410645393,
+      "edge_diverge_max": 15.438502105287101,
+      "n": 17553,
+      "per_class": 5851,
+      "epoch_len": 18,
+      "b_k": [
+        342,
+        341,
+        341
+      ],
+      "c_interior": 9.30046145957956,
+      "c_edge": 7.200307639719707,
+      "c_vertex": 5.1001538198598535,
+      "c_matches_formula": true,
+      "L": [
+        1.2526385232523392,
+        1.5573154333995807,
+        1.5689351969136667
+      ]
+    },
+    {
+      "triple": [
+        5,
+        6,
+        8
+      ],
+      "score_interior": 0.52679887710335,
+      "parts_interior": [
+        0.2245656556024049,
+        0.15322459025990603,
+        0.20095747417999077
+      ],
+      "score_vertex": 48.501680809245016,
+      "shape_violations": 0,
+      "vertex_diverge_max": 24.812320312603205,
+      "edge_diverge_max": 14.65945169373224,
+      "n": 16263,
+      "per_class": 5421,
+      "epoch_len": 16,
+      "b_k": [
+        342,
+        341,
+        341
+      ],
+      "c_interior": 9.044641210108836,
+      "c_edge": 7.029760806739223,
+      "c_vertex": 5.014880403369612,
+      "c_matches_formula": true,
+      "L": [
+        1.2651638995105496,
+        1.5049663898430932,
+        1.5812485086174632
+      ]
+    }
+  ],
+  "top1": [
+    3,
+    5,
+    8
+  ],
+  "total_wall_seconds": 315.07966804504395
+}

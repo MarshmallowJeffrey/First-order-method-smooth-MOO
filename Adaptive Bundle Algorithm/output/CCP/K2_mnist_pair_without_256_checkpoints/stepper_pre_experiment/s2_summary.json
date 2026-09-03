@@ -1,0 +1,180 @@
+{
+  "pair": [
+    4,
+    9
+  ],
+  "budget": 2500.0,
+  "seeds": [
+    41,
+    141,
+    241
+  ],
+  "board": [
+    {
+      "config": "adam_alpha0.001_beta20.9",
+      "final_worst_gn_norm_mean": 0.010567913493585263,
+      "final_worst_gn_norm_per_seed": [
+        0.01056343516365089,
+        0.010816132727785106,
+        0.010324172589319797
+      ],
+      "wall_seconds_mean": 94.93183930714925,
+      "safeguard_retries": [
+        27,
+        32,
+        33
+      ]
+    },
+    {
+      "config": "adagrad_mult10",
+      "final_worst_gn_norm_mean": 0.011324109520253057,
+      "final_worst_gn_norm_per_seed": [
+        0.01168558491149228,
+        0.010250343029003075,
+        0.012036400620263819
+      ],
+      "wall_seconds_mean": 93.58809860547383,
+      "safeguard_retries": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "config": "adagrad_mult3",
+      "final_worst_gn_norm_mean": 0.014072351441774392,
+      "final_worst_gn_norm_per_seed": [
+        0.01396400940336258,
+        0.014858989578824014,
+        0.013394055343136577
+      ],
+      "wall_seconds_mean": 94.48083074887593,
+      "safeguard_retries": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "config": "adam_alpha0.001_beta20.99",
+      "final_worst_gn_norm_mean": 0.014537098796194234,
+      "final_worst_gn_norm_per_seed": [
+        0.0143980585262089,
+        0.015255384365944043,
+        0.013957853496429758
+      ],
+      "wall_seconds_mean": 94.23273873329163,
+      "safeguard_retries": [
+        24,
+        17,
+        17
+      ]
+    },
+    {
+      "config": "adam_alpha0.0003_beta20.9",
+      "final_worst_gn_norm_mean": 0.026687863209886906,
+      "final_worst_gn_norm_per_seed": [
+        0.025786673833583542,
+        0.026463926082221815,
+        0.027812989713855363
+      ],
+      "wall_seconds_mean": 94.04405395189922,
+      "safeguard_retries": [
+        20,
+        20,
+        23
+      ]
+    },
+    {
+      "config": "adagrad_mult1",
+      "final_worst_gn_norm_mean": 0.027406665396254793,
+      "final_worst_gn_norm_per_seed": [
+        0.02889282959420292,
+        0.027153444176837727,
+        0.026173722417723738
+      ],
+      "wall_seconds_mean": 94.08783562978108,
+      "safeguard_retries": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "config": "const",
+      "final_worst_gn_norm_mean": 0.028266134971880862,
+      "final_worst_gn_norm_per_seed": [
+        0.028835918532513206,
+        0.028178809922625496,
+        0.02778367646050388
+      ],
+      "wall_seconds_mean": 94.77939756711324,
+      "safeguard_retries": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "config": "adam_alpha0.0003_beta20.99",
+      "final_worst_gn_norm_mean": 0.030476305394366115,
+      "final_worst_gn_norm_per_seed": [
+        0.029781477355423344,
+        0.029008877751520838,
+        0.03263856107615416
+      ],
+      "wall_seconds_mean": 93.86890959739685,
+      "safeguard_retries": [
+        19,
+        19,
+        20
+      ]
+    },
+    {
+      "config": "bb",
+      "final_worst_gn_norm_mean": 0.03125859811138346,
+      "final_worst_gn_norm_per_seed": [
+        0.03519274027744386,
+        0.03293532589117619,
+        0.02564772816553032
+      ],
+      "wall_seconds_mean": 93.99363660812378,
+      "safeguard_retries": [
+        3,
+        3,
+        2
+      ]
+    },
+    {
+      "config": "adam_alpha0.0001_beta20.9",
+      "final_worst_gn_norm_mean": 0.0671031995111439,
+      "final_worst_gn_norm_per_seed": [
+        0.06736054087178173,
+        0.06612547913611819,
+        0.06782357852553175
+      ],
+      "wall_seconds_mean": 94.79111456871033,
+      "safeguard_retries": [
+        25,
+        22,
+        27
+      ]
+    },
+    {
+      "config": "adam_alpha0.0001_beta20.99",
+      "final_worst_gn_norm_mean": 0.11250292583798582,
+      "final_worst_gn_norm_per_seed": [
+        0.11093078857144253,
+        0.12396751740344962,
+        0.10261047153906531
+      ],
+      "wall_seconds_mean": 97.08295361200969,
+      "safeguard_retries": [
+        15,
+        13,
+        14
+      ]
+    }
+  ],
+  "total_wall_seconds": 3610.548258781433
+}

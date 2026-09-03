@@ -1,0 +1,22 @@
+{
+  "gate": 0,
+  "pair": [
+    4,
+    9
+  ],
+  "checks": {
+    "gram_stack": true,
+    "fvals": true,
+    "lam_history": true,
+    "seg_grads": true,
+    "theta_stack": true,
+    "test_ce": true,
+    "grad_equiv_total": true,
+    "L_scale_final": true,
+    "safeguard_retries": true,
+    "ck_m": true,
+    "ck_grads": true,
+    "audited_gn_history": true
+  },
+  "pass": true
+}

@@ -1,0 +1,53 @@
+{
+  "campaign": "K3 MNIST triple 4v7v9 pure budget, ridge mu=0.0001 (baseline r[10, 20, 30] + adaptive CCP)",
+  "mu": 0.0001,
+  "machine": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "smoke": false,
+  "legs": [
+    {
+      "leg": "baseline_r10_s5",
+      "wall_seconds": 2308.6935698986053,
+      "decision_seconds": 0.004712581634521484,
+      "final_audit": 0.010274218446456884,
+      "final_test_err": [
+        0.012219959266802444,
+        0.009727626459143969,
+        0.024777006937561942
+      ]
+    },
+    {
+      "leg": "baseline_r20_s5",
+      "wall_seconds": 2179.022020816803,
+      "decision_seconds": 0.004949808120727539,
+      "final_audit": 0.007876759171010302,
+      "final_test_err": [
+        0.003054989816700611,
+        0.0029182879377431907,
+        0.1288404360753221
+      ]
+    },
+    {
+      "leg": "baseline_r30_s5",
+      "wall_seconds": 2156.696707010269,
+      "decision_seconds": 0.005341768264770508,
+      "final_audit": 0.009641793113511706,
+      "final_test_err": [
+        0.016293279022403257,
+        0.01848249027237354,
+        0.02973240832507433
+      ]
+    },
+    {
+      "leg": "adaptive_s5_ccp",
+      "wall_seconds": 2272.0437231063843,
+      "decision_seconds": 170.8508632183075,
+      "final_audit": 0.00035446205206002794,
+      "final_test_err": [
+        0.038696537678207736,
+        0.029182879377431907,
+        0.005946481665014866
+      ]
+    }
+  ],
+  "total_wall_seconds": 8916.512702941895
+}

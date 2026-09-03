@@ -1,0 +1,20 @@
+{
+  "triple": [
+    4,
+    7,
+    9
+  ],
+  "mu": 0.0001,
+  "r_star": {
+    "adagrad_x10": 10,
+    "adam_1e-3_b0.9": 10
+  },
+  "final_worst_gn_norm": {
+    "adam_1e-3_b0.9/uniform_r10": 0.07405444598154469,
+    "adam_1e-3_b0.9/uniform_r20": 0.07185541107854218,
+    "adam_1e-3_b0.9/uniform_r30": 0.09273956746764356,
+    "adam_1e-3_b0.9/adaptive": 0.013749833711848012,
+    "const/adaptive_s5_ccp": 0.01882716261309781,
+    "const/baseline_r20_s5": 0.08875110799877545
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "adaptive CCP": {
+    "n_points": 4388,
+    "n_front_train": 460,
+    "n_front_test": 1941,
+    "n_front_test_err": 373,
+    "igd_to_union_train": 0.5246354552587552,
+    "maxdist_to_union_train": 15.350804486904018,
+    "igd_central_train": 0.033132508083512306,
+    "maxdist_central_train": 0.3612559203260929,
+    "hv_central_train": 1.2560805493963731,
+    "hv_central_test": 1.308506996286581
+  },
+  "baseline r=10": {
+    "n_points": 4841,
+    "n_front_train": 371,
+    "n_front_test": 1792,
+    "n_front_test_err": 356,
+    "igd_to_union_train": 0.08228592532202475,
+    "maxdist_to_union_train": 13.093071489550061,
+    "igd_central_train": 0.006188963866299769,
+    "maxdist_central_train": 0.2376755102946539,
+    "hv_central_train": 1.259392265402945,
+    "hv_central_test": 1.2961683097014032
+  },
+  "baseline r=20": {
+    "n_points": 4573,
+    "n_front_train": 879,
+    "n_front_test": 2264,
+    "n_front_test_err": 351,
+    "igd_to_union_train": 0.29387011063344953,
+    "maxdist_to_union_train": 14.107929561340844,
+    "igd_central_train": 0.1283597094886235,
+    "maxdist_central_train": 1.0076743747267987,
+    "hv_central_train": 1.2552686347495186,
+    "hv_central_test": 1.2915319444758386
+  },
+  "baseline r=30": {
+    "n_points": 4477,
+    "n_front_train": 1397,
+    "n_front_test": 1822,
+    "n_front_test_err": 575,
+    "igd_to_union_train": 0.2929236823325832,
+    "maxdist_to_union_train": 14.400547613491531,
+    "igd_central_train": 0.12282913470846982,
+    "maxdist_central_train": 0.9735345447152242,
+    "hv_central_train": 1.2536886572320478,
+    "hv_central_test": 1.2827794863060893
+  },
+  "_hv_gap_test_slice_check": {
+    "adaptive_minus_best_baseline": 0.017466347345922423,
+    "note": "integral of the 2-D slice-area difference over z (hv_slices_test.png); equals the difference of the two hv_central_test values up to z-grid discretisation"
+  },
+  "_conventions": {
+    "central_bound": 1.0986122886681098,
+    "hv_reference": [
+      1.0986122886681098,
+      1.0986122886681098,
+      1.0986122886681098
+    ],
+    "note": "central = all three losses <= ln 3 (guess-level CE of the balanced triple); union/reference from TRAIN fronts of all legs; 3-D HV by z-sweep over the 2-D staircase; test values on ALL official t10k rows"
+  }
+}

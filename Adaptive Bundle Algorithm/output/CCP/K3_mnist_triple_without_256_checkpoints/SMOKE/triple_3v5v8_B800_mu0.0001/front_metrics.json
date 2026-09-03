@@ -1,0 +1,39 @@
+{
+  "adaptive CCP": {
+    "n_points": 107,
+    "n_front_train": 38,
+    "n_front_test": 43,
+    "n_front_test_err": 47,
+    "igd_to_union_train": 0.8591143234675627,
+    "maxdist_to_union_train": 12.614013835901389,
+    "igd_central_train": 0.1856094240506214,
+    "maxdist_central_train": 0.447065633257303,
+    "hv_central_train": 0.32210131293451294,
+    "hv_central_test": 0.24435241023492832
+  },
+  "baseline r=4": {
+    "n_points": 106,
+    "n_front_train": 39,
+    "n_front_test": 46,
+    "n_front_test_err": 51,
+    "igd_to_union_train": 0.3451759761803873,
+    "maxdist_to_union_train": 7.61252297634764,
+    "igd_central_train": 0.14619295490677425,
+    "maxdist_central_train": 0.6799547734701172,
+    "hv_central_train": 0.560678673849353,
+    "hv_central_test": 0.48765211121413354
+  },
+  "_hv_gap_test_slice_check": {
+    "adaptive_minus_best_baseline": -0.2428471227228293,
+    "note": "integral of the 2-D slice-area difference over z (hv_slices_test.png); equals the difference of the two hv_central_test values up to z-grid discretisation"
+  },
+  "_conventions": {
+    "central_bound": 1.0986122886681098,
+    "hv_reference": [
+      1.0986122886681098,
+      1.0986122886681098,
+      1.0986122886681098
+    ],
+    "note": "central = all three losses <= ln 3 (guess-level CE of the balanced triple); union/reference from TRAIN fronts of all legs; 3-D HV by z-sweep over the 2-D staircase; test values on ALL official t10k rows"
+  }
+}

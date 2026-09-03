@@ -1,0 +1,52 @@
+{
+  "campaign": "K3 MNIST triple 3v5v8 pure budget (baseline r[10, 20, 30] + adaptive CCP)",
+  "machine": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "smoke": false,
+  "legs": [
+    {
+      "leg": "baseline_r10_s5",
+      "wall_seconds": 2063.332088947296,
+      "decision_seconds": 0.004741668701171875,
+      "final_audit": 0.0009104959860499689,
+      "final_test_err": [
+        0.041584158415841586,
+        0.014573991031390135,
+        0.011293634496919919
+      ]
+    },
+    {
+      "leg": "baseline_r20_s5",
+      "wall_seconds": 2064.575124979019,
+      "decision_seconds": 0.004437685012817383,
+      "final_audit": 0.0013082566299881518,
+      "final_test_err": [
+        0.019801980198019802,
+        0.016816143497757848,
+        0.02566735112936345
+      ]
+    },
+    {
+      "leg": "baseline_r30_s5",
+      "wall_seconds": 1986.3104348182678,
+      "decision_seconds": 0.0042383670806884766,
+      "final_audit": 0.003909933708647694,
+      "final_test_err": [
+        0.01287128712871287,
+        0.028026905829596414,
+        0.014373716632443531
+      ]
+    },
+    {
+      "leg": "adaptive_s5_ccp",
+      "wall_seconds": 2168.7478420734406,
+      "decision_seconds": 202.61589527130127,
+      "final_audit": 7.390116878551329e-05,
+      "final_test_err": [
+        0.02277227722772277,
+        0.01569506726457399,
+        0.01026694045174538
+      ]
+    }
+  ],
+  "total_wall_seconds": 8283.00396323204
+}

@@ -1,0 +1,21 @@
+{
+  "gate": 0,
+  "triple": [
+    4,
+    7,
+    9
+  ],
+  "mu": 0.0001,
+  "checks": {
+    "gram_stack": true,
+    "fvals": true,
+    "lam_history": true,
+    "seg_grads": true,
+    "theta_stack": true,
+    "grad_equiv_total": true,
+    "L_scale_final": true,
+    "ck_m": true,
+    "audited_gn_history": true
+  },
+  "pass": true
+}

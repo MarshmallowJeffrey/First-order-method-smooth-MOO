@@ -1,0 +1,127 @@
+{
+  "protocol": "pure fixed budget at K=2 (MNIST digit pair, patch-softplus): shared segment unit, shared s, chain warm start; ONLY the next-lambda policy differs; no tolerance anywhere; stop = budget; EXACT 1-D meter for audits; theta snapshots + official-test evaluation are Aug-13 additions, both off-axis",
+  "policy": "adaptive_ccp",
+  "pair": [
+    4,
+    9
+  ],
+  "config_instance": {
+    "per_class": 300,
+    "msvrg_batch": 256,
+    "msvrg_step_const": 0.1,
+    "msvrg_momentum": 0.5,
+    "n_probes": 5
+  },
+  "budget": 800.0,
+  "s": 2,
+  "eval_every": 100.0,
+  "audit_grid": 20001,
+  "meter": "exact-1d (audits); test split = ALL official t10k rows",
+  "extra": {
+    "role": "gate0 reference (v1 executor)"
+  },
+  "K": 2,
+  "d": 8098,
+  "n": 600,
+  "per_class": 300,
+  "n_test": [
+    982,
+    1009
+  ],
+  "L_calibrated": [
+    1.4412952966124675,
+    0.9393392101768187
+  ],
+  "grad_equiv_total": 794.32,
+  "joint_calls": 113,
+  "wall_seconds": 2.6672239303588867,
+  "decision_seconds": 0.41494250297546387,
+  "segments_total": 113,
+  "m_final": 114,
+  "n_decisions": 57,
+  "n_distinct_lambdas": 34,
+  "L_scale_final": 1.0,
+  "safeguard_retries": 0,
+  "ck_grads": [
+    0.0,
+    103.68,
+    210.48,
+    317.28,
+    424.08,
+    530.88,
+    637.6800000000001,
+    744.48,
+    794.32
+  ],
+  "ck_cpu": [
+    0.0,
+    0.35231494903564453,
+    0.7088239192962646,
+    1.0590088367462158,
+    1.4127988815307617,
+    1.7617321014404297,
+    2.126152753829956,
+    2.4867968559265137,
+    2.6672239303588867
+  ],
+  "ck_m": [
+    1,
+    17,
+    32,
+    47,
+    62,
+    77,
+    92,
+    107,
+    114
+  ],
+  "final_audit": 0.01239493967963945,
+  "final_audit_upper": 0.01239723479694114,
+  "audited_gn_history": [
+    104.07628808670685,
+    0.1681896729459449,
+    0.039224060507024205,
+    0.026641439650092025,
+    0.01921995433204149,
+    0.01921995433204149,
+    0.016774421106992676,
+    0.014569276109174467,
+    0.01239493967963945
+  ],
+  "audited_gn_upper_history": [
+    104.07628873271103,
+    0.1682549705424098,
+    0.03923771570298443,
+    0.026668689755047503,
+    0.019223516194081157,
+    0.019223516194081157,
+    0.01677950757105568,
+    0.014569433675505155,
+    0.01239723479694114
+  ],
+  "audit_w_history": [
+    0.0,
+    0.3351731337893921,
+    0.9681913398438625,
+    0.9732301524035346,
+    0.5495872319517424,
+    0.5495872319517424,
+    0.5453685383928285,
+    0.6118501859520628,
+    0.6729539833897901
+  ],
+  "w_star": 0.6729539833897901,
+  "audit_seconds": 0.08069300651550293,
+  "test_seconds": 0.5273170471191406,
+  "final_test_ce": [
+    0.3220179580480842,
+    0.107694720658817
+  ],
+  "final_test_err": [
+    0.12932790224032586,
+    0.036669970267591674
+  ],
+  "init_seed": 8,
+  "sampler_seed": 41,
+  "probe_seed": 7
+}

@@ -1,0 +1,10 @@
+{
+  "core": "adam_1e-3_b0.9",
+  "best_uniform_r": 20,
+  "final_worst_gn_norm": {
+    "adaptive": 0.013749833711848012,
+    "uniform_r10": 0.07405444598154469,
+    "uniform_r20": 0.07185541107854218,
+    "uniform_r30": 0.09273956746764356
+  }
+}

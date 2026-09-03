@@ -1,0 +1,35 @@
+{
+  "adaptive CCP": {
+    "n_points": 106,
+    "n_front_train": 40,
+    "n_front_test": 41,
+    "n_front_test_err": 49,
+    "igd_to_union_train": 1.0164357354986133,
+    "maxdist_to_union_train": 12.62846070934067,
+    "igd_central_train": 0.16753365016834082,
+    "maxdist_central_train": 0.49253560047005535,
+    "hv_central_train": 0.373244145782953,
+    "hv_central_test": 0.26179171734041184
+  },
+  "baseline r=4": {
+    "n_points": 106,
+    "n_front_train": 40,
+    "n_front_test": 46,
+    "n_front_test_err": 51,
+    "igd_to_union_train": 0.489317397921449,
+    "maxdist_to_union_train": 7.613231479233141,
+    "igd_central_train": 0.19314585076537252,
+    "maxdist_central_train": 0.634929436840812,
+    "hv_central_train": 0.5993687540576614,
+    "hv_central_test": 0.48867495442714237
+  },
+  "_conventions": {
+    "central_bound": 1.0986122886681098,
+    "hv_reference": [
+      1.0986122886681098,
+      1.0986122886681098,
+      1.0986122886681098
+    ],
+    "note": "central = all three losses <= ln 3 (guess-level CE of the balanced triple); union/reference from TRAIN fronts of all legs; 3-D HV by z-sweep over the 2-D staircase; test values on ALL official t10k rows"
+  }
+}

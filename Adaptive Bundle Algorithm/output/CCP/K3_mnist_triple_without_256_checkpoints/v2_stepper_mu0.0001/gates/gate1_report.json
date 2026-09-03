@@ -1,0 +1,22 @@
+{
+  "gate": 1,
+  "arms": [
+    {
+      "core": "adagrad_x10",
+      "finite": true,
+      "L_scale_final": 4.0,
+      "retries": 2,
+      "progress": true,
+      "final_norm": 0.16317207208387782
+    },
+    {
+      "core": "adam_1e-3_b0.9",
+      "finite": true,
+      "L_scale_final": 2048.0,
+      "retries": 11,
+      "progress": true,
+      "final_norm": 1.2425674980034653
+    }
+  ],
+  "pass": true
+}
