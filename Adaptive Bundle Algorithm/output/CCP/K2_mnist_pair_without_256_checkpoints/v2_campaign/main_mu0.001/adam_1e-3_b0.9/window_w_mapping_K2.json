@@ -1,0 +1,498 @@
+{
+ "window": 0.27,
+ "note": "per run: training weights of deliveries vs the [0,0.27]^2 window; HV_all uses every delivered model, HV_inner only models trained at w in [0.05,0.95]",
+ "adaptive_ccp_seed41": {
+  "deliveries": 3230,
+  "deliveries_w_in_inner": 2320,
+  "frac_inner_deliveries_in_window": 0.9431034482758621,
+  "w_range_of_in_window_deliveries": [
+   0.007703205678075362,
+   0.9937935367288769
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.04933320182805303,
+   "F4_F9": [
+    0.20508226089997827,
+    0.034009282646932544
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9506408879756176,
+   "F4_F9": [
+    0.033356311938087344,
+    0.23115759051630033
+   ]
+  },
+  "hv_knee_all_points": 0.052360486794079356,
+  "hv_knee_inner_trained_only": 0.052290540942080826,
+  "rel_change_pct": 0.13358518279940476
+ },
+ "surf_N10_seed41": {
+  "deliveries": 3222,
+  "deliveries_w_in_inner": 3222,
+  "frac_inner_deliveries_in_window": 0.7693978895096214,
+  "w_range_of_in_window_deliveries": [
+   0.05,
+   0.8945037121373139
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05,
+   "F4_F9": [
+    0.258741503336468,
+    0.030534425560939937
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9500000000000001,
+   "F4_F9": [
+    0.03043809572778018,
+    0.28883876097577443
+   ]
+  },
+  "hv_knee_all_points": 0.049913950036956284,
+  "hv_knee_inner_trained_only": 0.049913950036956284,
+  "rel_change_pct": 0.0
+ },
+ "surf_N120_seed41": {
+  "deliveries": 3222,
+  "deliveries_w_in_inner": 3222,
+  "frac_inner_deliveries_in_window": 0.06083178150217256,
+  "w_range_of_in_window_deliveries": [
+   0.18236475758181636,
+   0.7946503610592784
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05,
+   "F4_F9": [
+    0.8214301072370456,
+    0.0999843139716433
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9500000000000001,
+   "F4_F9": [
+    0.05733232527828164,
+    0.5218080665602239
+   ]
+  },
+  "hv_knee_all_points": 0.017562457880340065,
+  "hv_knee_inner_trained_only": 0.017562457880340065,
+  "rel_change_pct": 0.0
+ },
+ "surf_N140_seed41": {
+  "deliveries": 3222,
+  "deliveries_w_in_inner": 3222,
+  "frac_inner_deliveries_in_window": 0.03941651148355059,
+  "w_range_of_in_window_deliveries": [
+   0.2685058666733359,
+   0.76753765605894
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05,
+   "F4_F9": [
+    1.0414392177648284,
+    0.11420651378254991
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9500000000000001,
+   "F4_F9": [
+    0.07003766290525285,
+    0.6056083757849444
+   ]
+  },
+  "hv_knee_all_points": 0.012349932749038835,
+  "hv_knee_inner_trained_only": 0.012349932749038835,
+  "rel_change_pct": 0.0
+ },
+ "surf_N20_seed41": {
+  "deliveries": 3222,
+  "deliveries_w_in_inner": 3222,
+  "frac_inner_deliveries_in_window": 0.7209807572936064,
+  "w_range_of_in_window_deliveries": [
+   0.09946330815752724,
+   0.9006142473323335
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05,
+   "F4_F9": [
+    0.28185117894332773,
+    0.030791775267551065
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9500000000000001,
+   "F4_F9": [
+    0.030496689585089762,
+    0.3204514598074344
+   ]
+  },
+  "hv_knee_all_points": 0.04930715740225398,
+  "hv_knee_inner_trained_only": 0.04930715740225398,
+  "rel_change_pct": 0.0
+ },
+ "surf_N30_seed41": {
+  "deliveries": 3222,
+  "deliveries_w_in_inner": 3222,
+  "frac_inner_deliveries_in_window": 0.6554934823091247,
+  "w_range_of_in_window_deliveries": [
+   0.09859717030781498,
+   0.9004569675940272
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05,
+   "F4_F9": [
+    0.3148697265511886,
+    0.03223550375028047
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9500000000000001,
+   "F4_F9": [
+    0.030760905367410538,
+    0.32702518744859116
+   ]
+  },
+  "hv_knee_all_points": 0.04852227348033383,
+  "hv_knee_inner_trained_only": 0.04852227348033383,
+  "rel_change_pct": 0.0
+ },
+ "surf_N40_seed41": {
+  "deliveries": 3222,
+  "deliveries_w_in_inner": 3222,
+  "frac_inner_deliveries_in_window": 0.5726256983240223,
+  "w_range_of_in_window_deliveries": [
+   0.0973349180572109,
+   0.9005587917643055
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05,
+   "F4_F9": [
+    0.3445745903933992,
+    0.03575949851426069
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9500000000000001,
+   "F4_F9": [
+    0.031057770941068277,
+    0.340847833676071
+   ]
+  },
+  "hv_knee_all_points": 0.04648968015579798,
+  "hv_knee_inner_trained_only": 0.04648968015579798,
+  "rel_change_pct": 0.0
+ },
+ "surf_N50_seed41": {
+  "deliveries": 3222,
+  "deliveries_w_in_inner": 3222,
+  "frac_inner_deliveries_in_window": 0.48820608317815023,
+  "w_range_of_in_window_deliveries": [
+   0.09718597315709593,
+   0.8985560601198121
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05,
+   "F4_F9": [
+    0.3953507174809918,
+    0.040647739651413266
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9500000000000001,
+   "F4_F9": [
+    0.0310322546516471,
+    0.3696371019905058
+   ]
+  },
+  "hv_knee_all_points": 0.04410478708538857,
+  "hv_knee_inner_trained_only": 0.04410478708538857,
+  "rel_change_pct": 0.0
+ },
+ "surf_N70_seed41": {
+  "deliveries": 3222,
+  "deliveries_w_in_inner": 3222,
+  "frac_inner_deliveries_in_window": 0.3218497827436375,
+  "w_range_of_in_window_deliveries": [
+   0.09686765083353771,
+   0.9003753724302592
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05,
+   "F4_F9": [
+    0.4819127812041428,
+    0.05720104121467276
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9500000000000001,
+   "F4_F9": [
+    0.03403243409420794,
+    0.42248091779809155
+   ]
+  },
+  "hv_knee_all_points": 0.03728545867848083,
+  "hv_knee_inner_trained_only": 0.03728545867848083,
+  "rel_change_pct": 0.0
+ },
+ "surf_N90_seed41": {
+  "deliveries": 3222,
+  "deliveries_w_in_inner": 3222,
+  "frac_inner_deliveries_in_window": 0.17908131595282434,
+  "w_range_of_in_window_deliveries": [
+   0.12128078056469059,
+   0.8699854234355612
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05,
+   "F4_F9": [
+    0.6114795759079685,
+    0.07373714127678507
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9500000000000001,
+   "F4_F9": [
+    0.042446455473051536,
+    0.4660417504084478
+   ]
+  },
+  "hv_knee_all_points": 0.029027921731558187,
+  "hv_knee_inner_trained_only": 0.029027921731558187,
+  "rel_change_pct": 0.0
+ },
+ "uniform_r10_seed41": {
+  "deliveries": 3434,
+  "deliveries_w_in_inner": 2809,
+  "frac_inner_deliveries_in_window": 0.9519401922392311,
+  "w_range_of_in_window_deliveries": [
+   0.0,
+   0.9
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.0,
+   "F4_F9": [
+    3.9842323651285327,
+    0.022859145310934078
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9,
+   "F4_F9": [
+    0.03938311216025779,
+    0.1516486239280812
+   ]
+  },
+  "hv_knee_all_points": 0.0512349887647492,
+  "hv_knee_inner_trained_only": 0.05115807594449258,
+  "rel_change_pct": 0.150117765439105
+ },
+ "uniform_r120_seed41": {
+  "deliveries": 3240,
+  "deliveries_w_in_inner": 2910,
+  "frac_inner_deliveries_in_window": 0.9443298969072165,
+  "w_range_of_in_window_deliveries": [
+   0.05,
+   0.9666666666666667
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05,
+   "F4_F9": [
+    0.32750591489312436,
+    0.028879602313840236
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.95,
+   "F4_F9": [
+    0.03479101907772765,
+    0.2386597246911937
+   ]
+  },
+  "hv_knee_all_points": 0.0501058081775775,
+  "hv_knee_inner_trained_only": 0.050081729970931736,
+  "rel_change_pct": 0.04805472164111672
+ },
+ "uniform_r140_seed41": {
+  "deliveries": 3237,
+  "deliveries_w_in_inner": 2922,
+  "frac_inner_deliveries_in_window": 0.9455852156057495,
+  "w_range_of_in_window_deliveries": [
+   0.05,
+   0.9714285714285714
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05,
+   "F4_F9": [
+    0.3614152526345222,
+    0.027725047467194928
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.95,
+   "F4_F9": [
+    0.03541471811763517,
+    0.2374600020083788
+   ]
+  },
+  "hv_knee_all_points": 0.04973415602963264,
+  "hv_knee_inner_trained_only": 0.04971023202823794,
+  "rel_change_pct": 0.04810376470537471
+ },
+ "uniform_r20_seed41": {
+  "deliveries": 3329,
+  "deliveries_w_in_inner": 3014,
+  "frac_inner_deliveries_in_window": 0.916058394160584,
+  "w_range_of_in_window_deliveries": [
+   0.0,
+   0.95
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05,
+   "F4_F9": [
+    0.3230398322345356,
+    0.030845967017411574
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.95,
+   "F4_F9": [
+    0.033206879024900944,
+    0.2287163589894174
+   ]
+  },
+  "hv_knee_all_points": 0.05116619963021647,
+  "hv_knee_inner_trained_only": 0.05116619963021647,
+  "rel_change_pct": 0.0
+ },
+ "uniform_r30_seed41": {
+  "deliveries": 3295,
+  "deliveries_w_in_inner": 2865,
+  "frac_inner_deliveries_in_window": 0.9479930191972077,
+  "w_range_of_in_window_deliveries": [
+   0.0,
+   0.9666666666666667
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.06666666666666667,
+   "F4_F9": [
+    0.2665269374047592,
+    0.030994396788700626
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9333333333333333,
+   "F4_F9": [
+    0.03543714448371551,
+    0.20037326512846532
+   ]
+  },
+  "hv_knee_all_points": 0.051215680921702283,
+  "hv_knee_inner_trained_only": 0.051139478348537194,
+  "rel_change_pct": 0.1487875818376534
+ },
+ "uniform_r40_seed41": {
+  "deliveries": 3274,
+  "deliveries_w_in_inner": 2960,
+  "frac_inner_deliveries_in_window": 0.9354729729729729,
+  "w_range_of_in_window_deliveries": [
+   0.0,
+   0.975
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05,
+   "F4_F9": [
+    0.30986166188776526,
+    0.029217315655136793
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.95,
+   "F4_F9": [
+    0.03272199650894192,
+    0.24735844860607473
+   ]
+  },
+  "hv_knee_all_points": 0.050870555038642226,
+  "hv_knee_inner_trained_only": 0.050868790500713953,
+  "rel_change_pct": 0.0034686822798224146
+ },
+ "uniform_r50_seed41": {
+  "deliveries": 3264,
+  "deliveries_w_in_inner": 2889,
+  "frac_inner_deliveries_in_window": 0.9546555901696089,
+  "w_range_of_in_window_deliveries": [
+   0.06,
+   0.96
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.06,
+   "F4_F9": [
+    0.26801594051755945,
+    0.030643360294647454
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.94,
+   "F4_F9": [
+    0.03399377119298294,
+    0.23055404518644465
+   ]
+  },
+  "hv_knee_all_points": 0.050810002900469824,
+  "hv_knee_inner_trained_only": 0.05077009553324582,
+  "rel_change_pct": 0.07854234392031079
+ },
+ "uniform_r70_seed41": {
+  "deliveries": 3254,
+  "deliveries_w_in_inner": 2874,
+  "frac_inner_deliveries_in_window": 0.9523312456506611,
+  "w_range_of_in_window_deliveries": [
+   0.05714285714285714,
+   0.9714285714285714
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05714285714285714,
+   "F4_F9": [
+    0.266977905893253,
+    0.03068102265522131
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9428571428571428,
+   "F4_F9": [
+    0.03512465562765535,
+    0.2158047724840399
+   ]
+  },
+  "hv_knee_all_points": 0.05080488488421966,
+  "hv_knee_inner_trained_only": 0.05075344827374285,
+  "rel_change_pct": 0.10124343474850876
+ },
+ "uniform_r90_seed41": {
+  "deliveries": 3247,
+  "deliveries_w_in_inner": 2872,
+  "frac_inner_deliveries_in_window": 0.9543871866295265,
+  "w_range_of_in_window_deliveries": [
+   0.0,
+   0.9666666666666667
+  ],
+  "last_delivery_nearest_w0.05": {
+   "w": 0.05555555555555555,
+   "F4_F9": [
+    0.30408224057648137,
+    0.02917705285279655
+   ]
+  },
+  "last_delivery_nearest_w0.95": {
+   "w": 0.9444444444444444,
+   "F4_F9": [
+    0.03472784167718634,
+    0.22722480206990162
+   ]
+  },
+  "hv_knee_all_points": 0.05066318395826985,
+  "hv_knee_inner_trained_only": 0.05064318856913732,
+  "rel_change_pct": 0.03946729670405897
+ }
+}

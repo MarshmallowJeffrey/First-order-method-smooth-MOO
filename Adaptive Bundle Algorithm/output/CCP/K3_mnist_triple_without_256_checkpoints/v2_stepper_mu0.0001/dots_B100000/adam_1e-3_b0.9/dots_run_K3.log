@@ -1,0 +1,30 @@
+[dots-K3] triple=(4, 7, 9) mu=0.0001 core=adam_1e-3_b0.9 B=100000 eval_every=1250 s=5 seed=41 rs=[10, 20, 25, 30, 35, 40] -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K3_mnist_triple_without_256_checkpoints/v2_stepper_mu0.0001/dots_B100000/adam_1e-3_b0.9
+[adaptive_ccp|4v7v9|adam] instance in 21.8s (n=17526 d=8195 per_class=5842 mu=0.0001 epoch_len=18 L=[1.666,1.536,1.569] seed=41)
+[adaptive_ccp|4v7v9|adam] budget spent: 99993.5 of 100000.0 | segments=10799 | wall=5987.5s | decision=1437.6s | L_scale=inf
+[adaptive_ccp|4v7v9|adam] final audit = 7.307774e-05 (norm 8.548552e-03, grid 6.756563e-05) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K3_mnist_triple_without_256_checkpoints/v2_stepper_mu0.0001/dots_B100000/adam_1e-3_b0.9/adaptive_ccp_seed41
+[dots-K3] adaptive: final worst GN (norm) = 8.5486e-03   leg 6509s, total 6509s
+[baseline|4v7v9|adam] instance in 21.4s (n=17526 d=8195 per_class=5842 mu=0.0001 epoch_len=18 L=[1.666,1.536,1.569] seed=41)
+[baseline|4v7v9|adam] budget spent: 99991.7 of 100000.0 | segments=12106 | wall=4574.4s | decision=0.0s | L_scale=2.3920328665319055e+198
+[baseline|4v7v9|adam] final audit = 5.466835e-03 (norm 7.393805e-02, grid 5.394260e-03) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K3_mnist_triple_without_256_checkpoints/v2_stepper_mu0.0001/dots_B100000/adam_1e-3_b0.9/uniform_r10_seed41
+[dots-K3] uniform r= 10 (66 nodes): final worst GN (norm) = 7.3938e-02   leg 5431s, total 11940s
+[baseline|4v7v9|adam] instance in 21.6s (n=17526 d=8195 per_class=5842 mu=0.0001 epoch_len=18 L=[1.666,1.536,1.569] seed=41)
+[baseline|4v7v9|adam] budget spent: 99991.3 of 100000.0 | segments=11437 | wall=4501.1s | decision=0.0s | L_scale=inf
+[baseline|4v7v9|adam] final audit = 3.464952e-03 (norm 5.886384e-02, grid 3.310122e-03) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K3_mnist_triple_without_256_checkpoints/v2_stepper_mu0.0001/dots_B100000/adam_1e-3_b0.9/uniform_r20_seed41
+[dots-K3] uniform r= 20 (231 nodes): final worst GN (norm) = 5.8864e-02   leg 5275s, total 17215s
+[baseline|4v7v9|adam] instance in 21.8s (n=17526 d=8195 per_class=5842 mu=0.0001 epoch_len=18 L=[1.666,1.536,1.569] seed=41)
+[baseline|4v7v9|adam] budget spent: 99993.4 of 100000.0 | segments=11313 | wall=4511.6s | decision=0.0s | L_scale=inf
+[baseline|4v7v9|adam] final audit = 3.366593e-03 (norm 5.802235e-02, grid 3.185332e-03) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K3_mnist_triple_without_256_checkpoints/v2_stepper_mu0.0001/dots_B100000/adam_1e-3_b0.9/uniform_r25_seed41
+[dots-K3] uniform r= 25 (351 nodes): final worst GN (norm) = 5.8022e-02   leg 5305s, total 22521s
+[baseline|4v7v9|adam] instance in 21.6s (n=17526 d=8195 per_class=5842 mu=0.0001 epoch_len=18 L=[1.666,1.536,1.569] seed=41)
+[baseline|4v7v9|adam] budget spent: 99993.6 of 100000.0 | segments=11217 | wall=4478.6s | decision=0.0s | L_scale=inf
+[baseline|4v7v9|adam] final audit = 2.862072e-03 (norm 5.349833e-02, grid 2.858547e-03) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K3_mnist_triple_without_256_checkpoints/v2_stepper_mu0.0001/dots_B100000/adam_1e-3_b0.9/uniform_r30_seed41
+[dots-K3] uniform r= 30 (496 nodes): final worst GN (norm) = 5.3498e-02   leg 5239s, total 27759s
+[baseline|4v7v9|adam] instance in 21.8s (n=17526 d=8195 per_class=5842 mu=0.0001 epoch_len=18 L=[1.666,1.536,1.569] seed=41)
+[baseline|4v7v9|adam] budget spent: 99994.3 of 100000.0 | segments=11164 | wall=4468.8s | decision=0.0s | L_scale=inf
+[baseline|4v7v9|adam] final audit = 2.620165e-03 (norm 5.118755e-02, grid 2.406325e-03) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K3_mnist_triple_without_256_checkpoints/v2_stepper_mu0.0001/dots_B100000/adam_1e-3_b0.9/uniform_r35_seed41
+[dots-K3] uniform r= 35 (666 nodes): final worst GN (norm) = 5.1188e-02   leg 5198s, total 32957s
+[baseline|4v7v9|adam] instance in 21.5s (n=17526 d=8195 per_class=5842 mu=0.0001 epoch_len=18 L=[1.666,1.536,1.569] seed=41)
+[baseline|4v7v9|adam] budget spent: 99991.0 of 100000.0 | segments=11097 | wall=4454.3s | decision=0.0s | L_scale=inf
+[baseline|4v7v9|adam] final audit = 2.841109e-03 (norm 5.330205e-02, grid 2.673838e-03) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K3_mnist_triple_without_256_checkpoints/v2_stepper_mu0.0001/dots_B100000/adam_1e-3_b0.9/uniform_r40_seed41
+[dots-K3] uniform r= 40 (861 nodes): final worst GN (norm) = 5.3302e-02   leg 5179s, total 38136s
+[dots-K3] ALL DONE in 38136s

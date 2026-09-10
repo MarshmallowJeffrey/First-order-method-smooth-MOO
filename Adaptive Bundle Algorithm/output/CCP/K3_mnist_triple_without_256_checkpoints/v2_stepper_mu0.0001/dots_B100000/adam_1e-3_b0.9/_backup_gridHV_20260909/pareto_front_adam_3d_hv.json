@@ -1,0 +1,61 @@
+{
+  "home": "/Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K3_mnist_triple_without_256_checkpoints/v2_stepper_mu0.0001/dots_B100000/adam_1e-3_b0.9",
+  "space": "train",
+  "zref": [
+    1.0986122886681098,
+    1.0986122886681098,
+    1.0986122886681098
+  ],
+  "best_uniform": "uniform_r30_seed41",
+  "legs": {
+    "adaptive_ccp_seed41": {
+      "final_worst_gn": 0.008548551819159292,
+      "delivered_points": 10800,
+      "nondominated_points": 941,
+      "nondominated_in_window": 934,
+      "hypervolume": 1.2766041254666074
+    },
+    "uniform_r10_seed41": {
+      "final_worst_gn": 0.07393804579245092,
+      "delivered_points": 12107,
+      "nondominated_points": 1461,
+      "nondominated_in_window": 1012,
+      "hypervolume": 1.2803161927289761
+    },
+    "uniform_r20_seed41": {
+      "final_worst_gn": 0.05886384125110921,
+      "delivered_points": 11438,
+      "nondominated_points": 1968,
+      "nondominated_in_window": 1601,
+      "hypervolume": 1.2819214904334164
+    },
+    "uniform_r25_seed41": {
+      "final_worst_gn": 0.058022346545602524,
+      "delivered_points": 11314,
+      "nondominated_points": 1424,
+      "nondominated_in_window": 1237,
+      "hypervolume": 1.2826460945477742
+    },
+    "uniform_r30_seed41": {
+      "final_worst_gn": 0.053498334210402,
+      "delivered_points": 11218,
+      "nondominated_points": 1831,
+      "nondominated_in_window": 1585,
+      "hypervolume": 1.282939623924114
+    },
+    "uniform_r35_seed41": {
+      "final_worst_gn": 0.05118754979376152,
+      "delivered_points": 11165,
+      "nondominated_points": 2148,
+      "nondominated_in_window": 1876,
+      "hypervolume": 1.282323500385799
+    },
+    "uniform_r40_seed41": {
+      "final_worst_gn": 0.05330205114635859,
+      "delivered_points": 11098,
+      "nondominated_points": 1872,
+      "nondominated_in_window": 1610,
+      "hypervolume": 1.2829148609337833
+    }
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "home": "/Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K3_mnist_triple_without_256_checkpoints/v2_stepper_mu0.0001/dots_B100000/adam_1e-3_b0.9",
+  "space": "test",
+  "zref": [
+    1.0986122886681098,
+    1.0986122886681098,
+    1.0986122886681098
+  ],
+  "hv_method": "exact sweep over the third coordinate with 2-D staircase slabs (_hv_3d); non-dominated set of all delivered points; reference box below zref",
+  "display_window": "figure: coordinates <= ln 3 (envelope binning for the sheets only); HV: full reference box, independent of the display",
+  "representative_rule": "largest exact hypervolume in the training loss space (same r for train and test)",
+  "best_uniform": "uniform_r40_seed41",
+  "legs": {
+    "adaptive_ccp_seed41": {
+      "final_worst_gn": 0.008548551819159292,
+      "hv_train": 1.2759748634662995,
+      "delivered_points_train": 10800,
+      "nondominated_points_train": 941,
+      "nondominated_in_window_train": 934,
+      "hv_test": 1.3075717675778966,
+      "delivered_points_test": 10800,
+      "nondominated_points_test": 1248,
+      "nondominated_in_window_test": 1200,
+      "hypervolume": 1.3075717675778966,
+      "nondominated_points": 1248,
+      "nondominated_in_window": 1200
+    },
+    "uniform_r10_seed41": {
+      "final_worst_gn": 0.07393804579245092,
+      "hv_train": 1.2800061759382588,
+      "delivered_points_train": 12107,
+      "nondominated_points_train": 1461,
+      "nondominated_in_window_train": 1012,
+      "hv_test": 1.2901831577562004,
+      "delivered_points_test": 12107,
+      "nondominated_points_test": 1646,
+      "nondominated_in_window_test": 840,
+      "hypervolume": 1.2901831577562004,
+      "nondominated_points": 1646,
+      "nondominated_in_window": 840
+    },
+    "uniform_r20_seed41": {
+      "final_worst_gn": 0.05886384125110921,
+      "hv_train": 1.282137955230956,
+      "delivered_points_train": 11438,
+      "nondominated_points_train": 1968,
+      "nondominated_in_window_train": 1601,
+      "hv_test": 1.295423874514053,
+      "delivered_points_test": 11438,
+      "nondominated_points_test": 1157,
+      "nondominated_in_window_test": 755,
+      "hypervolume": 1.295423874514053,
+      "nondominated_points": 1157,
+      "nondominated_in_window": 755
+    },
+    "uniform_r25_seed41": {
+      "final_worst_gn": 0.058022346545602524,
+      "hv_train": 1.281625864173844,
+      "delivered_points_train": 11314,
+      "nondominated_points_train": 1424,
+      "nondominated_in_window_train": 1237,
+      "hv_test": 1.2868995117140143,
+      "delivered_points_test": 11314,
+      "nondominated_points_test": 1227,
+      "nondominated_in_window_test": 823,
+      "hypervolume": 1.2868995117140143,
+      "nondominated_points": 1227,
+      "nondominated_in_window": 823
+    },
+    "uniform_r30_seed41": {
+      "final_worst_gn": 0.053498334210402,
+      "hv_train": 1.2818543817900985,
+      "delivered_points_train": 11218,
+      "nondominated_points_train": 1831,
+      "nondominated_in_window_train": 1585,
+      "hv_test": 1.2882277475094166,
+      "delivered_points_test": 11218,
+      "nondominated_points_test": 1636,
+      "nondominated_in_window_test": 1166,
+      "hypervolume": 1.2882277475094166,
+      "nondominated_points": 1636,
+      "nondominated_in_window": 1166
+    },
+    "uniform_r35_seed41": {
+      "final_worst_gn": 0.05118754979376152,
+      "hv_train": 1.282076637052385,
+      "delivered_points_train": 11165,
+      "nondominated_points_train": 2148,
+      "nondominated_in_window_train": 1876,
+      "hv_test": 1.2959899035306193,
+      "delivered_points_test": 11165,
+      "nondominated_points_test": 1703,
+      "nondominated_in_window_test": 1309,
+      "hypervolume": 1.2959899035306193,
+      "nondominated_points": 1703,
+      "nondominated_in_window": 1309
+    },
+    "uniform_r40_seed41": {
+      "final_worst_gn": 0.05330205114635859,
+      "hv_train": 1.282452091311579,
+      "delivered_points_train": 11098,
+      "nondominated_points_train": 1872,
+      "nondominated_in_window_train": 1610,
+      "hv_test": 1.2941219642998827,
+      "delivered_points_test": 11098,
+      "nondominated_points_test": 1496,
+      "nondominated_in_window_test": 1144,
+      "hypervolume": 1.2941219642998827,
+      "nondominated_points": 1496,
+      "nondominated_in_window": 1144
+    }
+  }
+}

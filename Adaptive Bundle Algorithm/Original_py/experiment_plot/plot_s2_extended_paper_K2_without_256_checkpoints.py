@@ -90,10 +90,12 @@ def main():
         ax.set_yscale("log")
         ax.grid(True, which="both", lw=0.3, alpha=0.5)
     axes[0].legend(fontsize=8, ncol=2)
-    axes[0].set_title(f"MNIST {PAIR[0]} vs {PAIR[1]}, ridge mu={S2_EXT_MU:g}, "
-                      f"B={int(S2_EXT_BUDGET):,}, mean of {len(S2_SEEDS)} seeds",
-                      fontsize=10)
+    # user request Sep 10: one title centred over both panels
+    fig.suptitle(f"MNIST {PAIR[0]} vs {PAIR[1]}, ridge mu={S2_EXT_MU:g}, "
+                 f"B={int(S2_EXT_BUDGET):,}, mean of {len(S2_SEEDS)} seeds",
+                 fontsize=11, y=0.975)
     fig.tight_layout()
+    fig.subplots_adjust(top=0.91)
     out = HOME / "s2_extended_curves_paper.png"
     fig.savefig(out, dpi=150)
     plt.close(fig)

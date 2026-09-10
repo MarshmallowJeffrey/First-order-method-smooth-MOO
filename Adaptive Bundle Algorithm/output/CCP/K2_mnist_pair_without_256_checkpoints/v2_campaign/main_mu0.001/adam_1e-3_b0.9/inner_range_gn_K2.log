@@ -1,0 +1,44 @@
+  adaptive_ccp_seed41    full 5.802713e-03 (w*=0.9701)  inner 5.737502e-03 (w*=0.6546)  stored 5.802713e-03  [33s]
+  uniform_r10_seed41     full 4.644281e-02 (w*=0.9890)  inner 3.256452e-02 (w*=0.1241)  stored 4.644281e-02  [70s]
+  uniform_r20_seed41     full 6.857816e-02 (w*=0.9967)  inner 2.331929e-02 (w*=0.0658)  stored 6.857816e-02  [105s]
+  uniform_r30_seed41     full 7.402828e-02 (w*=0.9901)  inner 1.495434e-02 (w*=0.0504)  stored 7.402828e-02  [139s]
+  uniform_r40_seed41     full 8.849786e-02 (w*=0.9961)  inner 9.118732e-03 (w*=0.1961)  stored 8.849786e-02  [172s]
+  uniform_r50_seed41     full 9.114100e-02 (w*=0.9963)  inner 9.144080e-03 (w*=0.0597)  stored 9.114100e-02  [204s]
+  uniform_r70_seed41     full 3.995900e-02 (w*=0.9977)  inner 8.236849e-03 (w*=0.1765)  stored 3.995900e-02  [236s]
+  uniform_r90_seed41     full 4.414884e-02 (w*=0.9982)  inner 8.144997e-03 (w*=0.3401)  stored 4.414884e-02  [268s]
+  uniform_r120_seed41    full 4.689303e-02 (w*=0.9979)  inner 8.396964e-03 (w*=0.4853)  stored 4.689303e-02  [300s]
+  uniform_r140_seed41    full 3.882168e-02 (w*=0.9983)  inner 8.242036e-03 (w*=0.1588)  stored 3.882168e-02  [332s]
+  surf_N10_seed41        full 1.877702e-01 (w*=1.0000)  inner 6.734429e-02 (w*=0.9296)  stored 1.877702e-01  [364s]
+  surf_N20_seed41        full 1.834925e-01 (w*=1.0000)  inner 5.853364e-02 (w*=0.0672)  stored 1.834925e-01  [395s]
+  surf_N30_seed41        full 1.809683e-01 (w*=1.0000)  inner 5.136459e-02 (w*=0.9284)  stored 1.809683e-01  [427s]
+  surf_N40_seed41        full 1.829103e-01 (w*=1.0000)  inner 6.697286e-02 (w*=0.0653)  stored 1.829103e-01  [459s]
+  surf_N50_seed41        full 1.831595e-01 (w*=1.0000)  inner 7.481223e-02 (w*=0.9282)  stored 1.831595e-01  [491s]
+  surf_N70_seed41        full 1.846592e-01 (w*=1.0000)  inner 7.171426e-02 (w*=0.9253)  stored 1.846592e-01  [523s]
+  surf_N90_seed41        full 1.870193e-01 (w*=1.0000)  inner 8.814974e-02 (w*=0.0621)  stored 1.870193e-01  [555s]
+  surf_N120_seed41       full 1.787058e-01 (w*=1.0000)  inner 8.483005e-02 (w*=0.9244)  stored 1.787058e-01  [587s]
+  surf_N140_seed41       full 1.843178e-01 (w*=1.0000)  inner 8.139180e-02 (w*=0.9402)  stored 1.843178e-01  [618s]
+figure -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/worst_gn_full_vs_inner.png
+| Method | G_full (norm) | certified upper | worst w (full) | G_inner (norm) | certified upper | worst w (inner) | G_full / CCP | G_inner / CCP |
+|---|---|---|---|---|---|---|---|---|
+| Adaptive λ-bundle | 5.8027e-03 | 5.8070e-03 | 0.9701 | 5.7375e-03 | 5.7389e-03 | 0.6546 | 1.0× | 1.0× |
+| Uniform grid, r = 10 | 4.6443e-02 | 4.6450e-02 | 0.9890 | 3.2565e-02 | 3.2565e-02 | 0.1241 | 8.0× | 5.7× |
+| Uniform grid, r = 20 | 6.8578e-02 | 6.8598e-02 | 0.9967 | 2.3319e-02 | 2.3321e-02 | 0.0658 | 11.8× | 4.1× |
+| Uniform grid, r = 30 | 7.4028e-02 | 7.4038e-02 | 0.9901 | 1.4954e-02 | 1.4960e-02 | 0.0504 | 12.8× | 2.6× |
+| Uniform grid, r = 40 | 8.8498e-02 | 8.8512e-02 | 0.9961 | 9.1187e-03 | 9.1205e-03 | 0.1961 | 15.3× | 1.6× |
+| Uniform grid, r = 50 | 9.1141e-02 | 9.1145e-02 | 0.9963 | 9.1441e-03 | 9.1492e-03 | 0.0597 | 15.7× | 1.6× |
+| Uniform grid, r = 70 | 3.9959e-02 | 3.9986e-02 | 0.9977 | 8.2368e-03 | 8.2389e-03 | 0.1765 | 6.9× | 1.4× |
+| Uniform grid, r = 90 | 4.4149e-02 | 4.4161e-02 | 0.9982 | 8.1450e-03 | 8.1473e-03 | 0.3401 | 7.6× | 1.4× |
+| Uniform grid, r = 120 | 4.6893e-02 | 4.6909e-02 | 0.9979 | 8.3970e-03 | 8.3971e-03 | 0.4853 | 8.1× | 1.5× |
+| Uniform grid, r = 140 | 3.8822e-02 | 3.8860e-02 | 0.9983 | 8.2420e-03 | 8.2466e-03 | 0.1588 | 6.7× | 1.4× |
+| SURF, N = 10 | 1.8777e-01 | 1.8777e-01 | 1.0000 | 6.7344e-02 | 6.7346e-02 | 0.9296 | 32.4× | 11.7× |
+| SURF, N = 20 | 1.8349e-01 | 1.8349e-01 | 1.0000 | 5.8534e-02 | 5.8542e-02 | 0.0672 | 31.6× | 10.2× |
+| SURF, N = 30 | 1.8097e-01 | 1.8097e-01 | 1.0000 | 5.1365e-02 | 5.1369e-02 | 0.9284 | 31.2× | 9.0× |
+| SURF, N = 40 | 1.8291e-01 | 1.8291e-01 | 1.0000 | 6.6973e-02 | 6.6976e-02 | 0.0653 | 31.5× | 11.7× |
+| SURF, N = 50 | 1.8316e-01 | 1.8316e-01 | 1.0000 | 7.4812e-02 | 7.4817e-02 | 0.9282 | 31.6× | 13.0× |
+| SURF, N = 70 | 1.8466e-01 | 1.8466e-01 | 1.0000 | 7.1714e-02 | 7.1718e-02 | 0.9253 | 31.8× | 12.5× |
+| SURF, N = 90 | 1.8702e-01 | 1.8702e-01 | 1.0000 | 8.8150e-02 | 8.8167e-02 | 0.0621 | 32.2× | 15.4× |
+| SURF, N = 120 | 1.7871e-01 | 1.7871e-01 | 1.0000 | 8.4830e-02 | 8.4832e-02 | 0.9244 | 30.8× | 14.8× |
+| SURF, N = 140 | 1.8432e-01 | 1.8432e-01 | 1.0000 | 8.1392e-02 | 8.1394e-02 | 0.9402 | 31.8× | 14.2× |
+
+B = 20,000, seed 41; G_full = max over w in [0, 1], G_inner = max over w in [0.05, 0.95], both of min over the complete delivered bundle of ‖w∇F4 + (1−w)∇F9‖ (ridge objectives, μ = 1e-3); values are true envelope values (lower bounds), 'certified upper' the proven upper bound of the exact 1-D meter on a 200,001-point grid; ratios use the CCP value of the same range.
+

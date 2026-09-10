@@ -1,0 +1,44 @@
+{
+  "core": "adam_1e-3_b0.9",
+  "space": "test",
+  "window": 0.27,
+  "zref": [
+    0.6931471805599453,
+    0.6931471805599453
+  ],
+  "legs": {
+    "surf": {
+      "dir": "surf_N20_seed41",
+      "param": 20,
+      "final_worst_gn": 0.1834924990261008,
+      "delivered_points": 3223,
+      "nondominated_points": 120,
+      "nondominated_in_window": 108,
+      "hypervolume": 0.4586609585232161,
+      "min_f1": 0.010073084576735902,
+      "min_f2": 0.008011662515082585
+    },
+    "uniform": {
+      "dir": "uniform_r70_seed41",
+      "param": 70,
+      "final_worst_gn": 0.03995899675567254,
+      "delivered_points": 3255,
+      "nondominated_points": 277,
+      "nondominated_in_window": 208,
+      "hypervolume": 0.4629264721279159,
+      "min_f1": 1.353841003936673e-12,
+      "min_f2": 1.4287746809341914e-08
+    },
+    "adaptive_ccp": {
+      "dir": "adaptive_ccp_seed41",
+      "param": null,
+      "final_worst_gn": 0.005802712621322093,
+      "delivered_points": 3231,
+      "nondominated_points": 258,
+      "nondominated_in_window": 175,
+      "hypervolume": 0.46944713431782725,
+      "min_f1": 2.107799116790771e-07,
+      "min_f2": 7.013478647745926e-09
+    }
+  }
+}

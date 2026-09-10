@@ -1,0 +1,61 @@
+{
+  "home": "/Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K3_mnist_triple_without_256_checkpoints/v2_stepper_mu0.0001/dots_B100000/adam_1e-3_b0.9",
+  "space": "test",
+  "zref": [
+    1.0986122886681098,
+    1.0986122886681098,
+    1.0986122886681098
+  ],
+  "best_uniform": "uniform_r30_seed41",
+  "legs": {
+    "adaptive_ccp_seed41": {
+      "final_worst_gn": 0.008548551819159292,
+      "delivered_points": 10800,
+      "nondominated_points": 1248,
+      "nondominated_in_window": 1200,
+      "hypervolume": 1.3079791995475527
+    },
+    "uniform_r10_seed41": {
+      "final_worst_gn": 0.07393804579245092,
+      "delivered_points": 12107,
+      "nondominated_points": 1646,
+      "nondominated_in_window": 840,
+      "hypervolume": 1.2904790808984357
+    },
+    "uniform_r20_seed41": {
+      "final_worst_gn": 0.05886384125110921,
+      "delivered_points": 11438,
+      "nondominated_points": 1157,
+      "nondominated_in_window": 755,
+      "hypervolume": 1.2958421712031485
+    },
+    "uniform_r25_seed41": {
+      "final_worst_gn": 0.058022346545602524,
+      "delivered_points": 11314,
+      "nondominated_points": 1227,
+      "nondominated_in_window": 823,
+      "hypervolume": 1.2886123108784986
+    },
+    "uniform_r30_seed41": {
+      "final_worst_gn": 0.053498334210402,
+      "delivered_points": 11218,
+      "nondominated_points": 1636,
+      "nondominated_in_window": 1166,
+      "hypervolume": 1.287183064836402
+    },
+    "uniform_r35_seed41": {
+      "final_worst_gn": 0.05118754979376152,
+      "delivered_points": 11165,
+      "nondominated_points": 1703,
+      "nondominated_in_window": 1309,
+      "hypervolume": 1.2969977297733384
+    },
+    "uniform_r40_seed41": {
+      "final_worst_gn": 0.05330205114635859,
+      "delivered_points": 11098,
+      "nondominated_points": 1496,
+      "nondominated_in_window": 1144,
+      "hypervolume": 1.2923002115527502
+    }
+  }
+}

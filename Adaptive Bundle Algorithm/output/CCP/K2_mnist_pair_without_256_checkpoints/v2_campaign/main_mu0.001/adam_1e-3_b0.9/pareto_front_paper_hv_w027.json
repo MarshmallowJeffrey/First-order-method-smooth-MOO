@@ -1,0 +1,37 @@
+{
+  "core": "adam_1e-3_b0.9",
+  "window": 0.27,
+  "zref": [
+    0.6931471805599453,
+    0.6931471805599453
+  ],
+  "legs": {
+    "surf": {
+      "dir": "surf_N30_seed41",
+      "delivered_points": 3223,
+      "nondominated_points": 123,
+      "nondominated_in_window": 109,
+      "hypervolume": 0.42948536058392744,
+      "min_f1": 0.029520483141909495,
+      "min_f2": 0.03165634042339886
+    },
+    "uniform": {
+      "dir": "uniform_r40_seed41",
+      "delivered_points": 3275,
+      "nondominated_points": 309,
+      "nondominated_in_window": 253,
+      "hypervolume": 0.4347745365698208,
+      "min_f1": 0.01640324005590034,
+      "min_f2": 0.014220300514216409
+    },
+    "adaptive_ccp": {
+      "dir": "adaptive_ccp_seed41",
+      "delivered_points": 3231,
+      "nondominated_points": 252,
+      "nondominated_in_window": 199,
+      "hypervolume": 0.43822331062014735,
+      "min_f1": 0.014545676102732028,
+      "min_f2": 0.014565770977813395
+    }
+  }
+}

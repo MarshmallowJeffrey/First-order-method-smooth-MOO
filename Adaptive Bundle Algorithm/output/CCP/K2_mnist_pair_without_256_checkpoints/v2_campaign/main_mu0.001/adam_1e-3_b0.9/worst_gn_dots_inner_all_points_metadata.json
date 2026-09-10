@@ -1,0 +1,168 @@
+{
+  "source": "inner_range_gn_K2.json",
+  "selection": "Each baseline: minimum stored inner_norm over checkpoints; x is first checkpoint attaining that minimum. Adaptive: cumulative minimum. No coordinate jitter, omitted points or smoothing.",
+  "rows": [
+    {
+      "run": "uniform_r10_seed41",
+      "family": "uniform",
+      "param": 10,
+      "gn": 0.032564519564114984,
+      "budget": 13353.029784320439,
+      "time": 499.7147128582001,
+      "checkpoint": 53
+    },
+    {
+      "run": "uniform_r20_seed41",
+      "family": "uniform",
+      "param": 20,
+      "gn": 0.02331929115184564,
+      "budget": 19677.045532351935,
+      "time": 722.3258399963379,
+      "checkpoint": 78
+    },
+    {
+      "run": "uniform_r30_seed41",
+      "family": "uniform",
+      "param": 30,
+      "gn": 0.014954340661135268,
+      "budget": 16235.03937007874,
+      "time": 593.3474509716034,
+      "checkpoint": 64
+    },
+    {
+      "run": "uniform_r40_seed41",
+      "family": "uniform",
+      "param": 40,
+      "gn": 0.009117208068459132,
+      "budget": 19032.91680931188,
+      "time": 708.3544399738312,
+      "checkpoint": 75
+    },
+    {
+      "run": "uniform_r50_seed41",
+      "family": "uniform",
+      "param": 50,
+      "gn": 0.009144079741182434,
+      "budget": 19046.364258815476,
+      "time": 691.0359089374542,
+      "checkpoint": 75
+    },
+    {
+      "run": "uniform_r70_seed41",
+      "family": "uniform",
+      "param": 70,
+      "gn": 0.008236849069738737,
+      "budget": 19997.03526189661,
+      "time": 745.1216869354248,
+      "checkpoint": 79
+    },
+    {
+      "run": "uniform_r90_seed41",
+      "family": "uniform",
+      "param": 90,
+      "gn": 0.008144997224355046,
+      "budget": 18042.933926737416,
+      "time": 659.9412939548492,
+      "checkpoint": 71
+    },
+    {
+      "run": "uniform_r120_seed41",
+      "family": "uniform",
+      "param": 120,
+      "gn": 0.008396964005222593,
+      "budget": 19069.465936323177,
+      "time": 695.3522539138794,
+      "checkpoint": 75
+    },
+    {
+      "run": "uniform_r140_seed41",
+      "family": "uniform",
+      "param": 140,
+      "gn": 0.00824203583724016,
+      "budget": 19071.879493324202,
+      "time": 692.6702611446381,
+      "checkpoint": 75
+    },
+    {
+      "run": "surf_N10_seed41",
+      "family": "surf",
+      "param": 10,
+      "gn": 0.06734429080952853,
+      "budget": 7888.815474152688,
+      "time": 286.853798866272,
+      "checkpoint": 31
+    },
+    {
+      "run": "surf_N20_seed41",
+      "family": "surf",
+      "param": 20,
+      "gn": 0.05853364168966561,
+      "budget": 18067.932214994864,
+      "time": 656.5332391262054,
+      "checkpoint": 71
+    },
+    {
+      "run": "surf_N30_seed41",
+      "family": "surf",
+      "param": 30,
+      "gn": 0.05136459238324018,
+      "budget": 18322.41013351592,
+      "time": 683.4997861385345,
+      "checkpoint": 72
+    },
+    {
+      "run": "surf_N40_seed41",
+      "family": "surf",
+      "param": 40,
+      "gn": 0.06697286095561988,
+      "budget": 18322.41013351592,
+      "time": 667.8992409706116,
+      "checkpoint": 72
+    },
+    {
+      "run": "surf_N50_seed41",
+      "family": "surf",
+      "param": 50,
+      "gn": 0.07481223181447488,
+      "budget": 18831.36597055803,
+      "time": 687.4295401573181,
+      "checkpoint": 74
+    },
+    {
+      "run": "surf_N70_seed41",
+      "family": "surf",
+      "param": 70,
+      "gn": 0.0717142606234446,
+      "budget": 18576.88805203697,
+      "time": 678.6954021453857,
+      "checkpoint": 73
+    },
+    {
+      "run": "surf_N90_seed41",
+      "family": "surf",
+      "param": 90,
+      "gn": 0.08814974288260834,
+      "budget": 10688.072577884286,
+      "time": 393.6095049381256,
+      "checkpoint": 42
+    },
+    {
+      "run": "surf_N120_seed41",
+      "family": "surf",
+      "param": 120,
+      "gn": 0.08483005120968698,
+      "budget": 17304.4984594317,
+      "time": 636.116779088974,
+      "checkpoint": 68
+    },
+    {
+      "run": "surf_N140_seed41",
+      "family": "surf",
+      "param": 140,
+      "gn": 0.08139179633254023,
+      "budget": 15523.15302978432,
+      "time": 571.5780987739563,
+      "checkpoint": 61
+    }
+  ]
+}

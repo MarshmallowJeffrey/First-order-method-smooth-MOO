@@ -1,0 +1,70 @@
+[dots] core=adam_1e-3_b0.9 mu=0.001 w_min=0.05 B=20000 eval_every=250 audit_grid=200001 s=5 seed=41
+[baseline|4v9|adam] instance in 10.9s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[baseline|4v9|adam] budget spent: 19999.5 of 20000.0 | segments=3434 | wall=770.0s | decision=0.0s | L_scale=1.3349918974505688e+95
+[baseline|4v9|adam] final EXACT audit = 2.156934e-03 (norm 4.644281e-02) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/uniform_r10_seed41
+[dots] uniform r= 10: final worst GN (norm) = 4.6443e-02   leg 959s, total 959s
+[baseline|4v9|adam] instance in 10.8s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[baseline|4v9|adam] budget spent: 19999.8 of 20000.0 | segments=3329 | wall=734.1s | decision=0.0s | L_scale=5.78358058743443e+222
+[baseline|4v9|adam] final EXACT audit = 4.702965e-03 (norm 6.857816e-02) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/uniform_r20_seed41
+[dots] uniform r= 20: final worst GN (norm) = 6.8578e-02   leg 903s, total 1863s
+[baseline|4v9|adam] instance in 10.6s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[baseline|4v9|adam] budget spent: 19999.1 of 20000.0 | segments=3295 | wall=730.4s | decision=0.0s | L_scale=1.352433999707303e+272
+[baseline|4v9|adam] final EXACT audit = 5.480186e-03 (norm 7.402828e-02) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/uniform_r30_seed41
+[dots] uniform r= 30: final worst GN (norm) = 7.4028e-02   leg 906s, total 2769s
+[skip] uniform_r40_seed41 (resume)
+[dots] uniform r= 40: final worst GN (norm) = 8.8498e-02   leg 0s, total 2769s
+[baseline|4v9|adam] instance in 10.9s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[baseline|4v9|adam] budget spent: 19996.0 of 20000.0 | segments=3264 | wall=725.3s | decision=0.0s | L_scale=inf
+[baseline|4v9|adam] final EXACT audit = 8.306682e-03 (norm 9.114100e-02) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/uniform_r50_seed41
+[dots] uniform r= 50: final worst GN (norm) = 9.1141e-02   leg 903s, total 3672s
+[baseline|4v9|adam] instance in 10.8s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[baseline|4v9|adam] budget spent: 19997.0 of 20000.0 | segments=3254 | wall=745.1s | decision=0.0s | L_scale=inf
+[baseline|4v9|adam] final EXACT audit = 1.596721e-03 (norm 3.995900e-02) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/uniform_r70_seed41
+[dots] uniform r= 70: final worst GN (norm) = 3.9959e-02   leg 916s, total 4588s
+[baseline|4v9|adam] instance in 10.7s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[baseline|4v9|adam] budget spent: 19995.7 of 20000.0 | segments=3247 | wall=770.2s | decision=0.0s | L_scale=inf
+[baseline|4v9|adam] final EXACT audit = 1.949120e-03 (norm 4.414884e-02) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/uniform_r90_seed41
+[dots] uniform r= 90: final worst GN (norm) = 4.4149e-02   leg 948s, total 5536s
+[baseline|4v9|adam] instance in 10.1s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[baseline|4v9|adam] budget spent: 19994.3 of 20000.0 | segments=3240 | wall=728.9s | decision=0.0s | L_scale=inf
+[baseline|4v9|adam] final EXACT audit = 2.198956e-03 (norm 4.689303e-02) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/uniform_r120_seed41
+[dots] uniform r=120: final worst GN (norm) = 4.6893e-02   leg 911s, total 6447s
+[baseline|4v9|adam] instance in 10.9s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[baseline|4v9|adam] budget spent: 19996.7 of 20000.0 | segments=3237 | wall=726.1s | decision=0.0s | L_scale=inf
+[baseline|4v9|adam] final EXACT audit = 1.507123e-03 (norm 3.882168e-02) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/uniform_r140_seed41
+[dots] uniform r=140: final worst GN (norm) = 3.8822e-02   leg 907s, total 7354s
+[surf_N10|4v9|adam] instance in 10.9s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[surf_N10|4v9|adam] budget spent: 19998.2 of 20000.0 | segments=3222 | rounds=292 | wall=725.0s | overhead=0.13s | L_scale=35184372088832.0
+[surf_N10|4v9|adam] final EXACT audit = 3.525766e-02 (norm 1.877702e-01) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/surf_N10_seed41
+[dots] surf N= 10: final worst GN (norm) = 1.8777e-01   leg 901s, total 8255s
+[surf_N20|4v9|adam] instance in 10.9s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[surf_N20|4v9|adam] budget spent: 19998.2 of 20000.0 | segments=3222 | rounds=153 | wall=726.4s | overhead=0.06s | L_scale=2.9514790517935283e+20
+[surf_N20|4v9|adam] final EXACT audit = 3.366950e-02 (norm 1.834925e-01) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/surf_N20_seed41
+[dots] surf N= 20: final worst GN (norm) = 1.8349e-01   leg 904s, total 9159s
+[skip] surf_N30_seed41 (resume)
+[dots] surf N= 30: final worst GN (norm) = 1.8097e-01   leg 0s, total 9159s
+[surf_N40|4v9|adam] instance in 11.0s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[surf_N40|4v9|adam] budget spent: 19998.2 of 20000.0 | segments=3222 | rounds=78 | wall=728.5s | overhead=0.03s | L_scale=8192.0
+[surf_N40|4v9|adam] final EXACT audit = 3.345618e-02 (norm 1.829103e-01) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/surf_N40_seed41
+[dots] surf N= 40: final worst GN (norm) = 1.8291e-01   leg 907s, total 10066s
+[surf_N50|4v9|adam] instance in 10.9s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[surf_N50|4v9|adam] budget spent: 19998.2 of 20000.0 | segments=3222 | rounds=63 | wall=729.6s | overhead=0.03s | L_scale=2.0
+[surf_N50|4v9|adam] final EXACT audit = 3.354740e-02 (norm 1.831595e-01) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/surf_N50_seed41
+[dots] surf N= 50: final worst GN (norm) = 1.8316e-01   leg 912s, total 10978s
+[surf_N70|4v9|adam] instance in 10.9s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[surf_N70|4v9|adam] budget spent: 19998.2 of 20000.0 | segments=3222 | rounds=45 | wall=730.1s | overhead=0.02s | L_scale=2.0
+[surf_N70|4v9|adam] final EXACT audit = 3.409902e-02 (norm 1.846592e-01) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/surf_N70_seed41
+[dots] surf N= 70: final worst GN (norm) = 1.8466e-01   leg 911s, total 11889s
+[surf_N90|4v9|adam] instance in 10.8s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[surf_N90|4v9|adam] budget spent: 19998.2 of 20000.0 | segments=3222 | rounds=35 | wall=732.0s | overhead=0.01s | L_scale=2.0
+[surf_N90|4v9|adam] final EXACT audit = 3.497621e-02 (norm 1.870193e-01) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/surf_N90_seed41
+[dots] surf N= 90: final worst GN (norm) = 1.8702e-01   leg 911s, total 12800s
+[surf_N120|4v9|adam] instance in 11.0s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[surf_N120|4v9|adam] budget spent: 19998.2 of 20000.0 | segments=3222 | rounds=26 | wall=734.1s | overhead=0.01s | L_scale=2.0
+[surf_N120|4v9|adam] final EXACT audit = 3.193575e-02 (norm 1.787058e-01) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/surf_N120_seed41
+[dots] surf N=120: final worst GN (norm) = 1.7871e-01   leg 911s, total 13712s
+[surf_N140|4v9|adam] instance in 11.0s (n=11684 d=8098 per_class=5842 epoch_len=12 L=[1.450,1.374] seed=41)
+[surf_N140|4v9|adam] budget spent: 19998.2 of 20000.0 | segments=3222 | rounds=22 | wall=734.5s | overhead=0.01s | L_scale=2.0
+[surf_N140|4v9|adam] final EXACT audit = 3.397306e-02 (norm 1.843178e-01) -> /Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K2_mnist_pair_without_256_checkpoints/v2_campaign/main_mu0.001/adam_1e-3_b0.9/surf_N140_seed41
+[dots] surf N=140: final worst GN (norm) = 1.8432e-01   leg 915s, total 14627s
+[dots] ALL DONE in 14627s
