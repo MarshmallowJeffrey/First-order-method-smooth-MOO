@@ -1,0 +1,27 @@
+{
+  "home": "/Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K10_mnist_without_256_checkpoints/SMOKE",
+  "seed": 41,
+  "tol": 0.05,
+  "adaptive": {
+    "dir": "adaptive_ccp_seed41",
+    "final_worst_gn": 5.190903827465395,
+    "budget": 775.12,
+    "cpu_s": 3.023568868637085
+  },
+  "rows": [
+    {
+      "family": "uniform",
+      "param": 2,
+      "symbol": "r",
+      "final_worst_gn": 6.650149195500242,
+      "dot_grads": 759.36,
+      "dot_cpu_s": 2.7620980739593506,
+      "drift_last_quarter": 0.3598536908163099,
+      "still_improving": true,
+      "adaptive_at_dot": 5.39100725114706,
+      "ratio_equal_budget": 1.2335633928307685,
+      "adaptive_budget_to_reach": 434.88,
+      "ratio_equal_gn": 1.7461368653421634
+    }
+  ]
+}

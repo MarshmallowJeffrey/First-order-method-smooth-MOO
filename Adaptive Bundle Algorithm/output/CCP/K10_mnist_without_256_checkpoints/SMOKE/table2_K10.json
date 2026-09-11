@@ -1,0 +1,22 @@
+[
+  {
+    "leg": "adaptive_ccp_seed41",
+    "hv": 0.0,
+    "hv_se": 0.0,
+    "frac_inside_box": 0.0,
+    "n_nondominated_inside": 0,
+    "n_points": 58,
+    "best_max_class_ce": 4.479343340050887,
+    "seconds": 6.604194641113281e-05
+  },
+  {
+    "leg": "uniform_r2_seed41",
+    "hv": 0.0,
+    "hv_se": 0.0,
+    "frac_inside_box": 0.0,
+    "n_nondominated_inside": 0,
+    "n_points": 58,
+    "best_max_class_ce": 5.275175876698356,
+    "seconds": 2.5987625122070312e-05
+  }
+]

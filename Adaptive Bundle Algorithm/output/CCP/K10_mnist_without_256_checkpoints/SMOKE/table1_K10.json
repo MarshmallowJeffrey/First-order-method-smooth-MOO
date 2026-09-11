@@ -1,0 +1,24 @@
+[
+  {
+    "method": "adaptive \u03bb-bundle (CCP)",
+    "r": null,
+    "nodes": null,
+    "passes": null,
+    "final_worst_gn": 5.190903827465395,
+    "ratio": 1.0,
+    "segments": 57,
+    "decision_share": 0.06851064208954477,
+    "wall_seconds": 3.023568868637085
+  },
+  {
+    "method": "uniform grid",
+    "r": 2,
+    "nodes": 55,
+    "passes": 0.5124006359300478,
+    "per_pass_budget": 1509.5999999999997,
+    "final_worst_gn": 6.650149195500242,
+    "ratio": 1.2811158550682231,
+    "segments": 57,
+    "wall_seconds": 2.813378095626831
+  }
+]

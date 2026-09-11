@@ -1,0 +1,45 @@
+{
+  "campaign": "K10 MNIST all-digits dots campaign",
+  "legs": [
+    {
+      "leg": "adaptive_ccp_seed41",
+      "leg_wall_seconds": 3.641601085662842,
+      "wall_seconds": 3.023568868637085,
+      "decision_seconds": 0.20714664459228516,
+      "segments": 57,
+      "m_final": 58,
+      "finished_at": "2026-09-10 18:11:03"
+    },
+    {
+      "leg": "uniform_r2_seed41",
+      "leg_wall_seconds": 3.347799777984619,
+      "wall_seconds": 2.813378095626831,
+      "decision_seconds": 5.459785461425781e-05,
+      "segments": 57,
+      "m_final": 58,
+      "finished_at": "2026-09-10 18:11:06"
+    }
+  ],
+  "budget": 800.0,
+  "s": 2,
+  "n_checkpoints": 8,
+  "eval_every": 100.0,
+  "rs": [
+    2
+  ],
+  "seed": 41,
+  "mu": 0.0001,
+  "per_class": 300,
+  "core": "adam_1e-3_b0.9",
+  "machine": {
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "python": "3.13.7",
+    "torch": "2.9.0",
+    "device": "cpu (6 torch threads)",
+    "cpu_count": 10,
+    "torch_threads": 6,
+    "git_commit": "52e6425",
+    "hostname": "Mac.attlocal.net"
+  },
+  "home": "/Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/K10_mnist_without_256_checkpoints/SMOKE"
+}

@@ -1,0 +1,33 @@
+{
+  "leg": "/Users/shirch/vscode101/.venv/First-order-method-smooth-MOO/Adaptive Bundle Algorithm/output/CCP/ccp_compare_without_256_checkpoints/K10_mnist10k_B55000/adaptive_s5_ccp",
+  "K": 10,
+  "carry_basis": true,
+  "lp_level": {
+    "n_lps": 1371,
+    "rows_min": 751,
+    "rows_max": 996,
+    "max_rel_dt": 8.681944052568724e-13,
+    "n_nonoptimal_lambdas": 0,
+    "n_lps_with_different_lambda": 0,
+    "pass": true,
+    "seconds": 29.005999088287354
+  },
+  "sequence_level": {
+    "decisions": 475,
+    "wall_original_s": 202.1259250640869,
+    "wall_bulk_s": 52.65582489967346,
+    "first_divergent_decision": 170,
+    "identical_prefix_fraction": 0.35789473684210527,
+    "rel_phi_diff_mean": 0.008355457860989597,
+    "rel_phi_diff_median": 2.1606977019869683e-16,
+    "rel_phi_diff_max_abs": 0.2052917234407915,
+    "share_bulk_at_least_as_high": 0.9284210526315789,
+    "final_phi_original": 0.07902358845206521,
+    "final_phi_bulk": 0.07784594910716354,
+    "last_decision_seconds_original": 1.4419097919017076,
+    "last_decision_seconds_bulk": 0.2379788749385625,
+    "warm_solves": 13388,
+    "cold_solves": 1
+  },
+  "pass": true
+}
