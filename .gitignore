@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.venv/
+.mplconfig/
+
+# raw run folders (summary.json + grams.npz, about 6 MB per leg); results/ holds what the figures and tables need
+runs/
+
+# local experiment data, not part of this repository
+output/
+data/mnist/t10k-*
