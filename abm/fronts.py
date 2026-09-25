@@ -48,19 +48,31 @@ def mean_front_2d(fronts, window, n_grid=600):
     return grid, vals.mean(axis=0)
 
 
-def envelope_3d(fr, nbins=18):
-    """Lower envelope of a K = 3 front for drawing: on a log grid of (F_1, F_2) cells, the point with the smallest
-    F_3 in each cell."""
-    lo = max(1e-3, 0.9 * float(fr[:, :2].min()))
-    edges = np.geomspace(lo, LN3, nbins + 1)
-    xi = np.clip(np.searchsorted(edges, fr[:, 0]) - 1, 0, nbins - 1)
-    yi = np.clip(np.searchsorted(edges, fr[:, 1]) - 1, 0, nbins - 1)
+def log_cells(fronts, nbins=18):
+    """Edges of a log grid in (F_1, F_2) from just below the smallest value of the given K = 3 fronts up to ln 3."""
+    lo = max(1e-3, 0.9 * min(float(F[:, :2].min()) for F in fronts))
+    return np.geomspace(lo, LN3, nbins + 1)
+
+
+def cell_minima(F, edges):
+    """Per grid cell in (F_1, F_2): the point of the front F with the smallest F_3.  Returns {cell: point}."""
+    nb = len(edges) - 1
+    xi = np.clip(np.searchsorted(edges, F[:, 0]) - 1, 0, nb - 1)
+    yi = np.clip(np.searchsorted(edges, F[:, 1]) - 1, 0, nb - 1)
     best = {}
-    for k in range(fr.shape[0]):
+    for k in range(F.shape[0]):
         key = (int(xi[k]), int(yi[k]))
-        if key not in best or fr[k, 2] < fr[best[key], 2]:
+        if key not in best or F[k, 2] < F[best[key], 2]:
             best[key] = k
-    return fr[np.array(sorted(best.values()))]
+    return {key: F[k] for key, k in best.items()}
+
+
+def mean_front_3d(fronts, edges):
+    """Seed-mean of K = 3 fronts for drawing: in every grid cell where each front has a point, the average of the
+    fronts' lowest points (smallest F_3)."""
+    cells = [cell_minima(np.asarray(F, float), edges) for F in fronts]
+    keys = sorted(set.intersection(*[set(c) for c in cells]))
+    return np.array([np.mean([c[k] for c in cells], axis=0) for k in keys])
 
 
 def dominated_share(A, B, chunk=400):

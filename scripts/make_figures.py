@@ -4,7 +4,7 @@
     figures/mnist_worst_gn_k2.pdf    worst-case gradient norm vs gradient calls and time, {4,9}
     figures/mnist_worst_gn_k3.pdf    the same for {4,7,9}
     figures/mnist_front_k2.pdf       linear scalarization fronts, {4,9} (mean of three seeds)
-    figures/mnist_front_k3.pdf       linear scalarization fronts, {4,7,9} (seed 41, the box where both fronts exist)
+    figures/mnist_front_k3.pdf       linear scalarization fronts, {4,7,9} (mean of three seeds, the box where both exist)
     figures/mnist_step_rules_k2.pdf  step-rule experiment, {4,9}
 
     python scripts/make_figures.py
@@ -30,7 +30,7 @@ sys.path.insert(0, str(ROOT))
 
 from abm import config as C  # noqa: E402
 from abm.analysis import fit_trend, suffix_max, trend_curve  # noqa: E402
-from abm.fronts import dominated_share, envelope_3d, mean_front_2d  # noqa: E402
+from abm.fronts import dominated_share, log_cells, mean_front_2d, mean_front_3d  # noqa: E402
 from abm.labels import place  # noqa: E402
 
 RESULTS, FIGURES = ROOT / "results", ROOT / "figures"
@@ -184,26 +184,33 @@ def _sheet(ax, env, col, edge_max, alpha):
 
 
 def front_k3():
-    """Fronts of the adaptive method and uniform discretization (r = 24), seed 41, inside the box where both exist;
-    also prints the share of each front dominated by the other."""
+    """Fronts of the adaptive method and uniform discretization (r = 24), each the mean of the three seeds (see
+    abm.fronts.mean_front_3d), inside the box where both exist; also prints, per seed, the share of each front
+    dominated by the other."""
     fr = json.loads((RESULTS / "k3_fronts.json").read_text())
-    r = C.FRONT_LEGS[3]["uniform"]
-    data = {"adaptive": np.asarray(fr["adaptive_seed41"]), "uniform": np.asarray(fr[f"uniform_r{r}_seed41"])}
-    lo = np.maximum(data["adaptive"].min(axis=0), data["uniform"].min(axis=0))
-    hi = np.minimum(data["adaptive"].max(axis=0), data["uniform"].max(axis=0))
-    box = {k: v[(v >= lo).all(axis=1) & (v <= hi).all(axis=1)] for k, v in data.items()}
-    ideal = np.min(np.vstack([box["adaptive"], box["uniform"]]), axis=0)
-    print(f"  K=3 fronts in the common box: {len(box['adaptive'])} adaptive, {len(box['uniform'])} uniform points; "
-          f"dominated: uniform by adaptive {100 * dominated_share(box['uniform'], box['adaptive']):.1f} %, "
-          f"adaptive by uniform {100 * dominated_share(box['adaptive'], box['uniform']):.1f} %")
+    spec = C.FRONT_LEGS[3]
+    r, seeds = spec["uniform"], spec["seeds"]
+    data = {"adaptive": [np.asarray(fr[f"adaptive_seed{s}"]) for s in seeds],
+            "uniform": [np.asarray(fr[f"uniform_r{r}_seed{s}"]) for s in seeds]}
+    allA, allU = np.vstack(data["adaptive"]), np.vstack(data["uniform"])
+    lo, hi = np.maximum(allA.min(axis=0), allU.min(axis=0)), np.minimum(allA.max(axis=0), allU.max(axis=0))
+    box = {k: [F[(F >= lo).all(axis=1) & (F <= hi).all(axis=1)] for F in v] for k, v in data.items()}
+    for i, s in enumerate(seeds):
+        print(f"  K=3 fronts, seed {s}, common box: {len(box['adaptive'][i])} adaptive, {len(box['uniform'][i])} uniform "
+              f"points; dominated: uniform by adaptive {100 * dominated_share(box['uniform'][i], box['adaptive'][i]):.1f} %, "
+              f"adaptive by uniform {100 * dominated_share(box['adaptive'][i], box['uniform'][i]):.1f} %")
+    edges = log_cells(box["adaptive"] + box["uniform"])
+    env = {k: mean_front_3d(v, edges) for k, v in box.items()}
+    ideal = np.mean([np.minimum(box["adaptive"][i].min(axis=0), box["uniform"][i].min(axis=0))
+                     for i in range(len(seeds))], axis=0)
     fig = plt.figure(figsize=(3.4, 3.2))
     ax = fig.add_axes([0.0, 0.0, 0.9, 1.0], projection="3d")
     ax.set_box_aspect(None, zoom=0.92)
     for key in ("uniform", "adaptive"):
-        env = envelope_3d(box[key])
-        ax.scatter(env[:, 0], env[:, 1], env[:, 2], color=COL[key], s=2, alpha=0.25, depthshade=False, linewidths=0,
+        pts = env[key]
+        ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], color=COL[key], s=2, alpha=0.25, depthshade=False, linewidths=0,
                    rasterized=True)
-        _sheet(ax, env, COL[key], 0.18, alpha=(0.35 if key == "adaptive" else 0.6))
+        _sheet(ax, pts, COL[key], 0.18, alpha=(0.35 if key == "adaptive" else 0.6))
     ax.scatter([ideal[0]], [ideal[1]], [ideal[2]], color="#2ca02c", s=22, marker="o", depthshade=False, zorder=10)
     ax.view_init(elev=24, azim=-55)
     d = C.DIGITS[3]

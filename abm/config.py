@@ -46,7 +46,7 @@ FIGURE_SURF_N = [3, 6, 8, 10, 15, 20, 25, 30, 37, 38]
 
 # linear scalarization fronts: the best configurations that plateau in at least two of three seeds
 FRONT_LEGS = {2: {"uniform": 60, "surf": 38, "seeds": (41, 42, 43)},
-              3: {"uniform": 24, "seeds": (41,)}}
+              3: {"uniform": 24, "seeds": (41, 42, 43)}}
 FRONT_WINDOW = {2: 0.13, 3: 0.5}
 
 # the best configuration of each baseline (Table in Section 4.1)
