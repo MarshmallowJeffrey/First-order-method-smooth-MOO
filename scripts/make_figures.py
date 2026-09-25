@@ -4,7 +4,7 @@
     figures/mnist_worst_gn_k2.pdf    worst-case gradient norm vs gradient calls and time, {4,9}
     figures/mnist_worst_gn_k3.pdf    the same for {4,7,9}
     figures/mnist_front_k2.pdf       linear scalarization fronts, {4,9} (mean of three seeds)
-    figures/mnist_front_k3.pdf       linear scalarization fronts, {4,7,9} (mean of three seeds, the box where both exist)
+    figures/mnist_front_k3.pdf       linear scalarization fronts, {4,7,9}: seed 41 and the mean of three seeds
     figures/mnist_step_rules_k2.pdf  step-rule experiment, {4,9}
 
     python scripts/make_figures.py
@@ -183,50 +183,62 @@ def _sheet(ax, env, col, edge_max, alpha):
                         shade=True, rasterized=True)
 
 
-def front_k3():
-    """Fronts of the adaptive method and uniform discretization (r = 24), each the mean of the three seeds (see
-    abm.fronts.mean_front_3d), inside the box where both exist; also prints, per seed, the share of each front
-    dominated by the other."""
-    fr = json.loads((RESULTS / "k3_fronts.json").read_text())
-    spec = C.FRONT_LEGS[3]
-    r, seeds = spec["uniform"], spec["seeds"]
+def _k3_panel(fr, seeds, r):
+    """Mean front of each method over the given seeds (see abm.fronts.mean_front_3d) inside the box where both
+    methods' fronts exist, the ideal point (mean over the seeds), and the boxed fronts per seed."""
     data = {"adaptive": [np.asarray(fr[f"adaptive_seed{s}"]) for s in seeds],
             "uniform": [np.asarray(fr[f"uniform_r{r}_seed{s}"]) for s in seeds]}
     allA, allU = np.vstack(data["adaptive"]), np.vstack(data["uniform"])
     lo, hi = np.maximum(allA.min(axis=0), allU.min(axis=0)), np.minimum(allA.max(axis=0), allU.max(axis=0))
     box = {k: [F[(F >= lo).all(axis=1) & (F <= hi).all(axis=1)] for F in v] for k, v in data.items()}
-    for i, s in enumerate(seeds):
-        print(f"  K=3 fronts, seed {s}, common box: {len(box['adaptive'][i])} adaptive, {len(box['uniform'][i])} uniform "
-              f"points; dominated: uniform by adaptive {100 * dominated_share(box['uniform'][i], box['adaptive'][i]):.1f} %, "
-              f"adaptive by uniform {100 * dominated_share(box['adaptive'][i], box['uniform'][i]):.1f} %")
     edges = log_cells(box["adaptive"] + box["uniform"])
     env = {k: mean_front_3d(v, edges) for k, v in box.items()}
     ideal = np.mean([np.minimum(box["adaptive"][i].min(axis=0), box["uniform"][i].min(axis=0))
                      for i in range(len(seeds))], axis=0)
-    fig = plt.figure(figsize=(3.4, 3.2))
-    ax = fig.add_axes([0.0, 0.0, 0.9, 1.0], projection="3d")
-    ax.set_box_aspect(None, zoom=0.92)
-    for key in ("uniform", "adaptive"):
-        pts = env[key]
-        ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], color=COL[key], s=2, alpha=0.25, depthshade=False, linewidths=0,
-                   rasterized=True)
-        _sheet(ax, pts, COL[key], 0.18, alpha=(0.35 if key == "adaptive" else 0.6))
-    ax.scatter([ideal[0]], [ideal[1]], [ideal[2]], color="#2ca02c", s=22, marker="o", depthshade=False, zorder=10)
-    ax.view_init(elev=24, azim=-55)
+    return env, ideal, box
+
+
+def front_k3():
+    """Fronts of the adaptive method and uniform discretization (r = 24) inside the box where both exist: seed 41
+    (left) and the mean of the three seeds (right).  Also prints, per seed, the share of each front dominated by
+    the other."""
+    fr = json.loads((RESULTS / "k3_fronts.json").read_text())
+    spec = C.FRONT_LEGS[3]
+    r, seeds = spec["uniform"], spec["seeds"]
+    _, _, box = _k3_panel(fr, seeds, r)
+    for i, s in enumerate(seeds):
+        print(f"  K=3 fronts, seed {s}, common box: {len(box['adaptive'][i])} adaptive, {len(box['uniform'][i])} uniform "
+              f"points; dominated: uniform by adaptive {100 * dominated_share(box['uniform'][i], box['adaptive'][i]):.1f} %, "
+              f"adaptive by uniform {100 * dominated_share(box['adaptive'][i], box['uniform'][i]):.1f} %")
     d = C.DIGITS[3]
-    ax.set_xlabel(f"$F_{d[0]}$", fontsize=10, labelpad=-2)
-    ax.set_ylabel(f"$F_{d[1]}$", fontsize=10, labelpad=-2)
-    ax.zaxis.set_rotate_label(False)
-    ax.set_zlabel(f"$F_{d[2]}$", fontsize=10, labelpad=2, rotation=0)
-    ax.tick_params(labelsize=6.5, pad=-1)
+    fig = plt.figure(figsize=(7.2, 3.6))
+    zlabels = []
+    for i, (title, ss) in enumerate(((f"Seed {spec['single_seed']}", (spec["single_seed"],)),
+                                     ("Mean of seeds " + ", ".join(str(v) for v in seeds), seeds))):
+        env, ideal, _ = _k3_panel(fr, ss, r)
+        ax = fig.add_axes([0.5 * i, 0.0, 0.47, 0.86], projection="3d")
+        ax.set_box_aspect(None, zoom=0.92)
+        for key in ("uniform", "adaptive"):
+            pts = env[key]
+            ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], color=COL[key], s=2, alpha=0.25, depthshade=False,
+                       linewidths=0, rasterized=True)
+            _sheet(ax, pts, COL[key], 0.18, alpha=(0.35 if key == "adaptive" else 0.6))
+        ax.scatter([ideal[0]], [ideal[1]], [ideal[2]], color="#2ca02c", s=22, marker="o", depthshade=False, zorder=10)
+        ax.view_init(elev=24, azim=-55)
+        ax.set_xlabel(f"$F_{d[0]}$", fontsize=10, labelpad=-2)
+        ax.set_ylabel(f"$F_{d[1]}$", fontsize=10, labelpad=-2)
+        ax.zaxis.set_rotate_label(False)
+        ax.set_zlabel(f"$F_{d[2]}$", fontsize=10, labelpad=2, rotation=0)
+        ax.tick_params(labelsize=6.5, pad=-1)
+        ax.set_title(title, fontsize=9, y=0.97)
+        zlabels.append(ax.zaxis.label)
     handles = [Patch(facecolor=COL["adaptive"], alpha=0.5, label=NAME["adaptive"]),
                Patch(facecolor=COL["uniform"], alpha=0.6, label=f"{NAME['uniform']} (r={r})"),
                Line2D([], [], marker="o", ls="", color="#2ca02c", ms=4, label="Ideal point")]
-    fig.legend(handles=handles, loc="upper center", ncol=2, fontsize=7, frameon=False, bbox_to_anchor=(0.47, 0.97),
-               columnspacing=1.2, handlelength=1.8)
-    # the tight bounding box of a 3-D axes misses the z label: include it explicitly
-    _save(fig, "mnist_front_k3", pdf_dpi=300, bbox_inches="tight", pad_inches=0.03,
-          bbox_extra_artists=[ax.zaxis.label])
+    leg = fig.legend(handles=handles, loc="upper center", ncol=3, fontsize=8, frameon=False, bbox_to_anchor=(0.5, 0.905),
+                     columnspacing=1.5, handlelength=1.8)
+    # the tight bounding box of a 3-D axes misses the z label: include the z labels and the legend explicitly
+    _save(fig, "mnist_front_k3", pdf_dpi=300, bbox_inches="tight", pad_inches=0.03, bbox_extra_artists=zlabels + [leg])
 
 
 STEP_RULE_NAME = {"const": "Constant step", "bb": "Barzilai--Borwein"}
