@@ -4,7 +4,7 @@
     figures/mnist_worst_gn_k2.pdf    worst-case gradient norm vs gradient calls and time, {4,9}
     figures/mnist_worst_gn_k3.pdf    the same for {4,7,9}
     figures/mnist_front_k2.pdf       linear scalarization fronts, {4,9} (mean of three seeds)
-    figures/mnist_front_k3.pdf       linear scalarization fronts, {4,7,9}: seed 41 and the mean of three seeds
+    figures/mnist_front_k3.pdf       linear scalarization fronts, {4,7,9}, mean of three seeds, two views
     figures/mnist_step_rules_k2.pdf  step-rule experiment, {4,9}
 
     python scripts/make_figures.py
@@ -199,8 +199,8 @@ def _k3_panel(fr, seeds, r):
 
 
 def front_k3():
-    """Fronts of the adaptive method and uniform discretization (r = 24) inside the box where both exist: seed 41
-    (left) and the mean of the three seeds (right).  Also prints, per seed, the share of each front dominated by
+    """Fronts of the adaptive method and uniform discretization (r = 24), each the mean of the three seeds, inside
+    the box where both exist, seen from two angles.  Also prints, per seed, the share of each front dominated by
     the other."""
     fr = json.loads((RESULTS / "k3_fronts.json").read_text())
     spec = C.FRONT_LEGS[3]
@@ -213,10 +213,9 @@ def front_k3():
     d = C.DIGITS[3]
     fig = plt.figure(figsize=(7.2, 3.6))
     zlabels = []
-    for i, (title, ss) in enumerate(((f"Seed {spec['single_seed']}", (spec["single_seed"],)),
-                                     ("Mean of seeds " + ", ".join(str(v) for v in seeds), seeds))):
-        env, ideal, _ = _k3_panel(fr, ss, r)
-        ax = fig.add_axes([0.5 * i, 0.0, 0.47, 0.86], projection="3d")
+    env, ideal, _ = _k3_panel(fr, seeds, r)
+    for i, (elev, azim) in enumerate(((24, -55), (24, 35))):
+        ax = fig.add_axes([0.0 if i == 0 else 0.53, 0.0, 0.47, 0.86], projection="3d")
         ax.set_box_aspect(None, zoom=0.92)
         for key in ("uniform", "adaptive"):
             pts = env[key]
@@ -224,13 +223,12 @@ def front_k3():
                        linewidths=0, rasterized=True)
             _sheet(ax, pts, COL[key], 0.18, alpha=(0.35 if key == "adaptive" else 0.6))
         ax.scatter([ideal[0]], [ideal[1]], [ideal[2]], color="#2ca02c", s=22, marker="o", depthshade=False, zorder=10)
-        ax.view_init(elev=24, azim=-55)
+        ax.view_init(elev=elev, azim=azim)
         ax.set_xlabel(f"$F_{d[0]}$", fontsize=10, labelpad=-2)
         ax.set_ylabel(f"$F_{d[1]}$", fontsize=10, labelpad=-2)
         ax.zaxis.set_rotate_label(False)
-        ax.set_zlabel(f"$F_{d[2]}$", fontsize=10, labelpad=2, rotation=0)
+        ax.set_zlabel(f"$F_{d[2]}$", fontsize=10, labelpad=(2 if i == 0 else -3), rotation=0)
         ax.tick_params(labelsize=6.5, pad=-1)
-        ax.set_title(title, fontsize=9, y=0.97)
         zlabels.append(ax.zaxis.label)
     handles = [Patch(facecolor=COL["adaptive"], alpha=0.5, label=NAME["adaptive"]),
                Patch(facecolor=COL["uniform"], alpha=0.6, label=f"{NAME['uniform']} (r={r})"),
