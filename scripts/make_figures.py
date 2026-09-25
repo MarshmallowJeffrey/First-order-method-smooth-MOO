@@ -50,9 +50,22 @@ def _save(fig, stem, pdf_dpi=None, **kw):
     print("saved", FIGURES / f"{stem}.pdf")
 
 
+def adaptive_curve(res):
+    """The adaptive method over the seeds: at every checkpoint (the same budgets in every seed) the geometric mean
+    of the seeds' audited worst-case gradient norms (each repaired by its suffix maximum) and of their wall-clock
+    times.  Returns (gradient calls, wall-clock seconds, worst-case gradient norm)."""
+    runs = sorted((r for r in res["runs"].values() if r["method"] == "adaptive"), key=lambda r: r["seed"])
+    if any(r["ck_grads"] != runs[0]["ck_grads"] for r in runs):
+        raise ValueError("the adaptive runs have different checkpoints")
+    G = np.array([suffix_max(r["audit_gn"]) for r in runs])
+    W = np.array([r["ck_wall"] for r in runs], dtype=float)
+    wall = np.where((W > 0).all(axis=0), np.exp(np.log(np.where(W > 0, W, 1.0)).mean(axis=0)), 0.0)
+    return np.asarray(runs[0]["ck_grads"], float), wall, np.exp(np.log(G).mean(axis=0))
+
+
 def worst_gn(K):
     """Markers: the drawn configurations (geometric means over the seeds); dashed: fitted trends; curve: the
-    adaptive method, seed 41."""
+    adaptive method (geometric mean over the seeds)."""
     res = json.loads((RESULTS / f"k{K}.json").read_text())
     fams = ("uniform", "surf") if K == 2 else ("uniform",)
     drawn = {"uniform": C.FIGURE_UNIFORM_R[K], "surf": C.FIGURE_SURF_N}
@@ -64,8 +77,7 @@ def worst_gn(K):
         keys = sorted(k for k in big if k[0] == f)
         for axis in ("budget", "wall_seconds"):
             fits[(f, axis)] = fit_trend([big[k][axis] for k in keys], [big[k]["norm"] for k in keys])
-    ad = res["runs"]["adaptive_seed41"]
-    ad_x, ad_w, ad_y = np.asarray(ad["ck_grads"]), np.asarray(ad["ck_wall"]), suffix_max(ad["audit_gn"])
+    ad_x, ad_w, ad_y = adaptive_curve(res)
 
     FS = dict(label=16, tick=14, legend=14, num=11)
     fig, axs = plt.subplots(1, 2, figsize=(12.0, 4.6), sharey=True)
