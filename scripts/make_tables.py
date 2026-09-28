@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT))
 from abm import config as C  # noqa: E402
 
 RESULTS, TABLES = ROOT / "results", ROOT / "tables"
-DAGGER = "{}^{\\dagger}"
+DAGGER = "\\rlap{\\,$^{\\dagger}$}"          # after the number and without width: marked numbers stay aligned
 STEP_RULE_NAME = {"const": "Constant step (incumbent)", "bb": "Barzilai--Borwein"}
 for _m in (1, 3, 10):
     STEP_RULE_NAME[f"adagrad_mult{_m}"] = f"AdaGrad ($\\alpha_{{\\mathrm{{mult}}}}={_m}$)"
@@ -37,7 +37,7 @@ for _al, _als in (("0.001", "10^{-3}"), ("0.0003", "3\\times10^{-4}"), ("0.0001"
 def sci(v, dagger=False):
     mant, exp = f"{v:.2e}".split("e")
     body = mant if int(exp) == 0 else f"{mant}\\times10^{{{int(exp)}}}"
-    return f"${body}{DAGGER if dagger else ''}$"
+    return f"${body}$" + (DAGGER if dagger else "")
 
 
 def thousands(v):
@@ -75,25 +75,28 @@ def full_k2(res):
 
     def cells(fam, p):
         if (fam, p) not in stats:
-            return "-- & -- & --"
+            return "\\multicolumn{1}{c}{--} & \\multicolumn{2}{c}{--} & --"
         s = stats[(fam, p)]
         drawn = p in (C.FIGURE_UNIFORM_R[2] if fam == "uniform" else C.FIGURE_SURF_N)
-        return (f"{sci(s['y_geomean'], dagger=not drawn)} & {thousands(s['x_geomean'])} / {thousands(s['x_median'])} "
+        return (f"{sci(s['y_geomean'], dagger=not drawn)} & {thousands(s['x_geomean'])} & {thousands(s['x_median'])} "
                 f"& {s['n_plateau']}/{len(s['seeds'])}")
-    lines = ["\\begin{tabular}{r ccc ccc}", "\\toprule",
-             " & \\multicolumn{3}{c}{Unif Discrtztn ($r$)} & \\multicolumn{3}{c}{SURF ($N$)} \\\\",
-             "\\cmidrule(lr){2-4}\\cmidrule(lr){5-7}",
-             "$r$ or $N$ & $\\max\\mathrm{GN}$ & $x$ & plateau & $\\max\\mathrm{GN}$ & $x$ & plateau \\\\", "\\midrule"]
+    # x = geometric mean / median, split at the slash so that both numbers line up
+    lines = ["\\begin{tabular}{r r@{\\hspace{16pt}}r@{\\ /\\ }l c r@{\\hspace{16pt}}r@{\\ /\\ }l c}", "\\toprule",
+             " & \\multicolumn{4}{c}{Unif Discrtztn ($r$)} & \\multicolumn{4}{c}{SURF ($N$)} \\\\",
+             "\\cmidrule(lr){2-5}\\cmidrule(lr){6-9}",
+             "$r$ or $N$ & $\\max\\mathrm{GN}$ & \\multicolumn{2}{c}{$x$} & plateau & $\\max\\mathrm{GN}$ & "
+             "\\multicolumn{2}{c}{$x$} & plateau \\\\", "\\midrule"]
     lines += [f"{p} & {cells('uniform', p)} & {cells('surf', p)} \\\\" for p in params]
     write("mnist_k2_full.tex", lines + ["\\bottomrule", "\\end{tabular}"])
 
 
 def full_k3(res):
-    lines = ["\\begin{tabular}{rrccc}", "\\toprule", "$r$ & nodes & $\\max\\mathrm{GN}$ & $x$ & plateau \\\\", "\\midrule"]
+    lines = ["\\begin{tabular}{r r r@{\\hspace{16pt}}r@{\\ /\\ }l c}", "\\toprule",
+             "$r$ & nodes & $\\max\\mathrm{GN}$ & \\multicolumn{2}{c}{$x$} & plateau \\\\", "\\midrule"]
     for s in sorted(res["configs"], key=lambda s: s["param"]):
         r = s["param"]
         lines.append(f"{r} & {(r + 1) * (r + 2) // 2} & {sci(s['y_geomean'], dagger=r not in C.FIGURE_UNIFORM_R[3])} & "
-                     f"{thousands(s['x_geomean'])} / {thousands(s['x_median'])} & {s['n_plateau']}/{len(s['seeds'])} \\\\")
+                     f"{thousands(s['x_geomean'])} & {thousands(s['x_median'])} & {s['n_plateau']}/{len(s['seeds'])} \\\\")
     write("mnist_k3_full.tex", lines + ["\\bottomrule", "\\end{tabular}"])
 
 
