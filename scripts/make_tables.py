@@ -6,7 +6,7 @@
     tables/mnist_k3_full.tex      {4,7,9}: all configurations
     tables/step_rules_k2.tex      step-rule experiment
     tables/screening_pairs.tex    screening, top six pairs
-    tables/screening_triples.tex  screening, top three triples
+    tables/screening_triples.tex  screening, top six triples
 
     python scripts/make_tables.py
 """
@@ -106,15 +106,15 @@ def step_rules(res):
 
 
 def screening(pairs, triples):
-    lines = ["\\begin{tabular}{rlcc}", "\\toprule", "Rank & Pair & $C_{\\mathrm{bal}}$ & $C_{\\mathrm{mean}}$ \\\\", "\\midrule"]
-    for i, r in enumerate(pairs[:6], 1):
-        lines.append(f"{i} & $\\{{{r['digits'][0]},{r['digits'][1]}\\}}$ & {r['C_bal']:.3f} & {r['C_mean']:.3f} \\\\")
-    write("screening_pairs.tex", lines + ["\\bottomrule", "\\end{tabular}"])
-    lines = ["\\begin{tabular}{rlcc}", "\\toprule", "Rank & Triple & $C_{\\mathrm{bal}}$ & $c_j$ \\\\", "\\midrule"]
-    for i, r in enumerate(triples[:3], 1):
-        d = ",".join(str(v) for v in r["digits"])
-        lines.append(f"{i} & $\\{{{d}\\}}$ & {r['C_bal']:.3f} & " + " / ".join(f"{c:.2f}" for c in r["c_j"]) + " \\\\")
-    write("screening_triples.tex", lines + ["\\bottomrule", "\\end{tabular}"])
+    """Top six of each: C_bal, C_mean and c_j for each digit (in the listed order)."""
+    for name, kind, records in (("screening_pairs.tex", "Pair", pairs), ("screening_triples.tex", "Triple", triples)):
+        lines = ["\\begin{tabular}{rlccc}", "\\toprule",
+                 f"Rank & {kind} & $C_{{\\mathrm{{bal}}}}$ & $C_{{\\mathrm{{mean}}}}$ & $c_j$ \\\\", "\\midrule"]
+        for i, r in enumerate(records[:6], 1):
+            d = ",".join(str(v) for v in r["digits"])
+            lines.append(f"{i} & $\\{{{d}\\}}$ & {r['C_bal']:.3f} & {r['C_mean']:.3f} & "
+                         + " / ".join(f"{c:.2f}" for c in r["c_j"]) + " \\\\")
+        write(name, lines + ["\\bottomrule", "\\end{tabular}"])
 
 
 def main():
