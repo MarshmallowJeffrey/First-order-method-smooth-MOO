@@ -6,7 +6,7 @@
 
 Each leg writes runs/k<K>/<leg>/summary.json (checkpoints, audited worst-case gradient norm, timings) and grams.npz
 (Gram matrices, objective values, budget and lambda of every bundle point).  A leg whose summary.json exists is
-skipped.  ``--legs all`` runs every leg of the paper (K = 2: 111 legs, K = 3: 54 legs); on one RTX A5000 a K = 2 leg
+skipped.  ``--legs all`` runs every leg of the paper (K = 2: 111 legs, K = 3: 48 legs); on one RTX A5000 a K = 2 leg
 takes 1 hour (adaptive: 5 hours), a K = 3 leg 1 to 3 hours plus the audits.
 """
 

@@ -71,9 +71,9 @@ that the numbers quoted in the paper follow from `results/`.
        python scripts/run.py --K 2 --legs adaptive,uniform:60,surf:38 --seeds 41 --device cuda
 
    K = 2 has 111 legs (uniform r in {2, ..., 64}: 21 values, SURF N in {2, ..., 40}: 15 values, adaptive; three
-   seeds each), K = 3 has 54 legs (uniform r in {2, ..., 24}: 17 values, adaptive).  On one RTX A5000 a K = 2 leg
+   seeds each), K = 3 has 48 legs (uniform r in {4, ..., 24}: 15 values, adaptive).  On one RTX A5000 a K = 2 leg
    takes about 1 hour (adaptive: 5 hours; the CCP lambda-search runs on the CPU), a K = 3 leg about 1.7 hours
-   (adaptive: 3.8 hours) including the audits: about 120 and 95 GPU-hours in total.  Legs are independent and can
+   (adaptive: 3.8 hours) including the audits: about 120 and 86 GPU-hours in total.  Legs are independent and can
    run in parallel; finished legs are skipped.
 
 4. Analysis, figures and tables:

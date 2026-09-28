@@ -5,13 +5,14 @@ non-increasing in t (the bundle only grows) and every audit is a lower bound of 
 within its certified upper bound), so a later audit proves every earlier one low: the series is repaired by its
 suffix maximum.
 
-Plateau: a run of budget B has plateaued if g(B/4) <= 1.05 g(B/2) and g(B/2) <= 1.05 g(B) (less than 5 % gained in
-each of the last two budget doublings); g(L) is the value at the last checkpoint at or before L.  The levels B/8,
-B/4, B/2 are tested as well and B_run is the smallest level from which all larger levels pass (None: the run has
-not plateaued).  The figures draw only configurations of which at least two of three seeds plateau (the drawn sets
-are listed in config.py).
+Plateau: a run of budget B has plateaued if g(B/4) <= 1.05 g(B) (less than 5 % gained over the last two budget
+doublings); g(L) is the value at the last checkpoint at or before L.  The levels B/8, B/4, B/2 are tested as well
+and B_run is the smallest level from which all larger levels pass (None: the run has not plateaued); each level
+record also keeps g(L/2).  The figures draw only configurations of which at least two of three seeds plateau (the
+drawn sets are listed in config.py).
 
-Marker of a run: y = g(B) and x = the first budget with g <= 1.05 y.  For K = 3, x is the first such checkpoint.
+Marker of a run: y = g(B) and x = the first budget with g <= 1.05 y, so on the checkpoints a run plateaus exactly
+when its marker is at or before B/4.  For K = 3, x is the first such checkpoint.
 For K = 2, x is located to one segment by bisection over the bundle prefixes (exact meter on 20,001 weights), and
 y = the exact meter on 200,001 weights of the whole bundle.  A configuration's marker is the geometric mean over its
 seeds (x, y and the wall-clock time at x).
@@ -52,8 +53,7 @@ def level_test(x, g, L, tol=TOL):
     gq, gh, gl = value_at(x, g, L / 4.0), value_at(x, g, L / 2.0), value_at(x, g, L)
     if gl is None:
         return None
-    return {"L": L, "g_quarter": gq, "g_half": gh, "g_L": gl,
-            "pass": bool(gq <= (1.0 + tol) * gh and gh <= (1.0 + tol) * gl)}
+    return {"L": L, "g_quarter": gq, "g_half": gh, "g_L": gl, "pass": bool(gq <= (1.0 + tol) * gl)}
 
 
 def plateau(x, g, budget, tol=TOL):
