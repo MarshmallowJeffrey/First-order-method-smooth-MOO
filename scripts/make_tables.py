@@ -116,14 +116,14 @@ WARM_START_ROWS = {"A": ("last accepted point", "kept while $\\lambda$ is unchan
 
 
 def warm_start(res):
-    """Final worst-case gradient norm x 10^3: mean (range) over the seeds, per start rule and K."""
+    """Final worst-case gradient norm x 10^3: mean over the seeds, per start rule and K."""
     lines = ["\\begin{tabular}{lllcc}", "\\toprule",
              " & Start of a decision & Adam state & $\\{4,9\\}$ & $\\{4,7,9\\}$ \\\\", "\\midrule"]
     for v, (start, state) in WARM_START_ROWS.items():
         cells = []
         for K in (2, 3):
             f = np.asarray(res[K]["variants"][v]["final_per_seed"]) * 1e3
-            cells.append(f"${f.mean():.2f}$ (${f.min():.2f}$--${f.max():.2f}$)")
+            cells.append(f"${f.mean():.2f}$")
         lines.append(f"{v} & {start} & {state} & {cells[0]} & {cells[1]} \\\\")
     write("warm_start.tex", lines + ["\\bottomrule", "\\end{tabular}"])
 
