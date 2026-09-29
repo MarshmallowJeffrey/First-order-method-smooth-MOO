@@ -1,7 +1,7 @@
 # Results of the paper's runs
 
-Written by `scripts/analyze.py`, `scripts/step_rules.py` and `scripts/screening.py` from the runs of the paper
-(NVIDIA RTX A5000, float64); read by `scripts/make_figures.py` and `scripts/make_tables.py`.
+Written by `scripts/analyze.py`, `scripts/step_rules.py`, `scripts/warm_start.py` and `scripts/screening.py` from
+the runs of the paper (NVIDIA RTX A5000, float64); read by `scripts/make_figures.py` and `scripts/make_tables.py`.
 
 `k2.json`, `k3.json` ({4,9} and {4,7,9}, B = 480,000 gradient calls)
 * `runs.<leg>`: `method` (adaptive, uniform, surf), `param` (r or N), `seed`, `budget`; the checkpoints `ck_grads`
@@ -18,6 +18,10 @@ Written by `scripts/analyze.py`, `scripts/step_rules.py` and `scripts/screening.
 
 `step_rules_k2.json` ({4,9}): per step rule the mean curve over the three seeds (`ck_grads`, `ck_wall_mean`,
 `gn_mean`), the final values per seed and their mean; `ranking` from the lowest mean.
+
+`warm_start_k2.json`, `warm_start_k3.json`: per start rule A-D of the adaptive method (`start`, `reset`) the mean
+curve over the three seeds, the final values per seed and their mean, rejections, and the number of decisions that
+did not start at the last accepted point.
 
 `screening_k2.json`, `screening_k3.json`: one record per digit pair or triple (most conflicting first): the
 lookahead affinities `Z` at the checkpoints, `C`, `c_j`, `C_bal` and `C_mean`.

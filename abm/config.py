@@ -38,6 +38,10 @@ STEP_RULE_BUDGET = 10_000.0
 STEP_RULE_CADENCE = 200.0
 STEP_RULE_AUDIT_GRID = 20_001
 
+# warm-start ablation (adaptive method, four starts; Adam and the seeds and audit grid of the step-rule experiment)
+WARM_START_BUDGET = {2: 10_000.0, 3: 20_000.0}
+WARM_START_CADENCE = {2: 200.0, 3: 400.0}
+
 # drawn (and fitted) in the worst-case gradient norm figure; the other configurations are listed in the appendix
 # tables (marked with a dagger)
 FIGURE_UNIFORM_R = {2: [2, 3, 4, 6, 8, 10, 15, 20, 25, 30, 36, 45, 52, 60, 64],

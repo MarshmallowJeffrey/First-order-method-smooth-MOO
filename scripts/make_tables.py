@@ -5,6 +5,7 @@
     tables/mnist_k2_full.tex      {4,9}: all configurations
     tables/mnist_k3_full.tex      {4,7,9}: all configurations
     tables/step_rules_k2.tex      step-rule experiment
+    tables/warm_start.tex         warm start of the adaptive method, {4,9} and {4,7,9}
     tables/screening_pairs.tex    screening, top six pairs
     tables/screening_triples.tex  screening, top six triples
 
@@ -108,6 +109,25 @@ def step_rules(res):
     write("step_rules_k2.tex", lines + ["\\bottomrule", "\\end{tabular}"])
 
 
+WARM_START_ROWS = {"A": ("last accepted point", "kept while $\\lambda$ is unchanged"),
+                   "B": ("last accepted point", "new at every decision"),
+                   "C": ("lowest $F_\\lambda$ in the bundle", "new at every decision"),
+                   "D": ("rule of Algorithms~2--6", "new at every decision")}
+
+
+def warm_start(res):
+    """Final worst-case gradient norm x 10^3: mean (range) over the seeds, per start rule and K."""
+    lines = ["\\begin{tabular}{lllcc}", "\\toprule",
+             " & Start of a decision & Adam state & $\\{4,9\\}$ & $\\{4,7,9\\}$ \\\\", "\\midrule"]
+    for v, (start, state) in WARM_START_ROWS.items():
+        cells = []
+        for K in (2, 3):
+            f = np.asarray(res[K]["variants"][v]["final_per_seed"]) * 1e3
+            cells.append(f"${f.mean():.2f}$ (${f.min():.2f}$--${f.max():.2f}$)")
+        lines.append(f"{v} & {start} & {state} & {cells[0]} & {cells[1]} \\\\")
+    write("warm_start.tex", lines + ["\\bottomrule", "\\end{tabular}"])
+
+
 def screening(pairs, triples):
     """Top six of each: C_bal, C_mean and c_j for each digit (in the listed order)."""
     for name, kind, records in (("screening_pairs.tex", "Pair", pairs), ("screening_triples.tex", "Triple", triples)):
@@ -126,6 +146,7 @@ def main():
     full_k2(res[2])
     full_k3(res[3])
     step_rules(json.loads((RESULTS / "step_rules_k2.json").read_text()))
+    warm_start({K: json.loads((RESULTS / f"warm_start_k{K}.json").read_text()) for K in (2, 3)})
     screening(json.loads((RESULTS / "screening_k2.json").read_text()),
               json.loads((RESULTS / "screening_k3.json").read_text()))
 

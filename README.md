@@ -20,7 +20,7 @@ compared with uniform discretization and SURF on multiclass classification, with
 |---|---|
 | `abm/` | the package: data, network, objectives, step rules, SVRG segments, CCP lambda-search, the three methods, the worst-case gradient norm meter, analysis, fronts, screening |
 | `scripts/` | command-line entry points (below) |
-| `results/` | the numbers of the paper's runs: per run the audited worst-case gradient norm at every checkpoint, the plateau test and the marker; configuration statistics; front points; step-rule and screening results |
+| `results/` | the numbers of the paper's runs: per run the audited worst-case gradient norm at every checkpoint, the plateau test and the marker; configuration statistics; front points; step-rule, warm-start and screening results |
 | `figures/`, `tables/` | the figures (PDF, PNG) and tables (LaTeX) of the paper, generated from `results/` |
 | `tests/` | short reproduction checks |
 | `data/mnist/` | the MNIST training files (downloaded if missing) |
@@ -51,6 +51,7 @@ that the numbers quoted in the paper follow from `results/`.
 | Table: best configuration of each baseline | `tables/mnist_main.tex` |
 | Appendix: screening of pairs and triples | `tables/screening_pairs.tex`, `tables/screening_triples.tex` |
 | Appendix: step rules (table and figure) | `tables/step_rules_k2.tex`, `figures/mnist_step_rules_k2.pdf` |
+| Appendix: warm start of the adaptive method | `tables/warm_start.tex` |
 | Appendix: all runs, {4,9} and {4,7,9} | `tables/mnist_k2_full.tex`, `tables/mnist_k3_full.tex` |
 
 ## Rerun the experiments
@@ -64,7 +65,13 @@ that the numbers quoted in the paper follow from `results/`.
 
        python scripts/step_rules.py --device cuda
 
-3. Main runs.  One leg = one method, one resolution, one seed:
+3. Warm start of the adaptive method (four starts A-D, three seeds each; 12 short runs per K, about 20 and 45
+   minutes on one RTX A5000):
+
+       python scripts/warm_start.py --K 2 --device cuda
+       python scripts/warm_start.py --K 3 --device cuda
+
+4. Main runs.  One leg = one method, one resolution, one seed:
 
        python scripts/run.py --K 2 --legs all --device cuda
        python scripts/run.py --K 3 --legs all --device cuda
@@ -76,7 +83,7 @@ that the numbers quoted in the paper follow from `results/`.
    (adaptive: 3.8 hours) including the audits: about 120 and 86 GPU-hours in total.  Legs are independent and can
    run in parallel; finished legs are skipped.
 
-4. Analysis, figures and tables:
+5. Analysis, figures and tables:
 
        python scripts/analyze.py --K 2 --workers 6
        python scripts/analyze.py --K 3

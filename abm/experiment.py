@@ -22,8 +22,9 @@ def leg_name(method: str, param, seed: int, step_rule: str | None = None) -> str
 
 
 def run_leg(K, method, param, seed, out_dir, *, budget=C.BUDGET, step_rule=C.STEP_RULE, schedule=None,
-            audit_grid=C.AUDIT_GRID_K2, device="cpu", threads=None):
-    """Runs one leg and writes <out_dir>/summary.json and grams.npz; returns the summary."""
+            audit_grid=C.AUDIT_GRID_K2, device="cpu", threads=None, start="chain", reset="new_lambda"):
+    """Runs one leg and writes <out_dir>/summary.json and grams.npz; returns the summary.  start / reset: the
+    adaptive method's warm start (see methods.run_adaptive); other values than the defaults are recorded."""
     if threads:
         torch.set_num_threads(int(threads))
     out_dir = Path(out_dir)
@@ -36,7 +37,7 @@ def run_leg(K, method, param, seed, out_dir, *, budget=C.BUDGET, step_rule=C.STE
     print(f"[{tag}] problem built in {time.time() - t_build:.1f}s (n={problem.n}, d={problem.d}, "
           f"{problem.device_description})", flush=True)
     if method == "adaptive":
-        rec = run_adaptive(problem, rule, budget, schedule, C.SEGMENTS, C.CCP_DECISIONS)
+        rec = run_adaptive(problem, rule, budget, schedule, C.SEGMENTS, C.CCP_DECISIONS, start=start, reset=reset)
     elif method == "uniform":
         rec = run_uniform(problem, rule, budget, schedule, int(param), C.SEGMENTS)
     elif method == "surf":
@@ -69,6 +70,11 @@ def run_leg(K, method, param, seed, out_dir, *, budget=C.BUDGET, step_rule=C.STE
     summary["audit_seconds"] = time.time() - t_audit
     if method == "surf":
         summary["surf_rounds"] = rec.surf_rounds
+    if method == "adaptive" and (start, reset) != ("chain", "new_lambda"):
+        si, ci = np.asarray(rec.start_index), np.asarray(rec.chain_index)
+        summary.update(start=start, reset=reset, decisions=int(si.size),
+                       start_moved=int(np.count_nonzero(si != ci)),      # decisions not starting at the last accepted point
+                       start_index=si.tolist())
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=1))
     np.savez_compressed(out_dir / "grams.npz", gram_stack=Ms, fvals=np.asarray(rec.fvals),

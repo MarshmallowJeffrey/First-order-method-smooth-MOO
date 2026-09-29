@@ -2,7 +2,7 @@
 
 Adaptive bundle method: one chain of points.  Every decision searches lambda with CCP on the current bundle and
 runs s segments from the last accepted point; the step rule's state (Adam moments) is reset only when lambda
-changes.
+changes.  (Other starts and resets, for the warm-start ablation: see run_adaptive.)
 
 Uniform discretization with resolution r: the snake-ordered grid of Delta_K, visited forward and backward; each
 visit runs s segments at the node.  The first visit of a node starts from the last accepted point of the run and
@@ -40,8 +40,23 @@ def _epoch_len(problem):
     return max(1, int(np.ceil(problem.n / float(problem.stoch.batch_size))))
 
 
-def run_adaptive(problem, step_rule, budget, schedule, s=5, ccp_config=None):
-    """The adaptive bundle method; returns the RunRecord."""
+START_RULES = ("chain", "lowest_f", "paper")
+STATE_RESETS = ("new_lambda", "every_decision")
+
+
+def run_adaptive(problem, step_rule, budget, schedule, s=5, ccp_config=None, start="chain", reset="new_lambda"):
+    """The adaptive bundle method; returns the RunRecord.
+
+    start: where the s segments of a decision begin
+        "chain"     the last accepted point (the runs of the paper)
+        "lowest_f"  the bundle point with the lowest F_lambda
+        "paper"     the bundle point with the lowest F_lambda - ||grad F_lambda||^2 / (2 L_lambda), the start of
+                    Algorithms 2-6, with L_lambda = lambda^T L from the estimated L
+    reset: when the step rule's state is reset: "new_lambda" (when lambda changes; the runs of the paper) or
+        "every_decision".  The warm-start ablation (scripts/warm_start.py) varies both.
+    """
+    if start not in START_RULES or reset not in STATE_RESETS:
+        raise ValueError(f"start {start!r} / reset {reset!r}")
     name, params = step_rule
     K, batch = problem.K, problem.stoch.batch_size
     epoch_len = _epoch_len(problem)
@@ -50,15 +65,29 @@ def run_adaptive(problem, step_rule, budget, schedule, s=5, ccp_config=None):
     stepper = make_stepper(name, problem.d, params)
     solver = CCPSolver(K, ccp_config or CCPConfig(), transport="bulk")
     chain = (x0.copy(), rec.f0, rec.J0)
+    chain_i = 0                                    # bundle index of the last accepted point
+    points = None if start == "chain" else [chain]  # every bundle point (x, f, J), for the other start rules
+    rec.start_index, rec.chain_index = [], []
     L_scale, prev_lam = 1.0, None
     rec.start_clock()
     while rec.budget.allows_segment(epoch_len, batch):
         t_dec = time.time()
-        _, lam = solver.solve(np.asarray(rec.grams, dtype=float))
+        grams = np.asarray(rec.grams, dtype=float)
+        _, lam = solver.solve(grams)
         lam = np.asarray(lam, dtype=float)
-        rec.decision_seconds += time.time() - t_dec
         L_lam = float(lam @ problem.L)
-        if prev_lam is None or not np.array_equal(lam, prev_lam):
+        start_i = chain_i
+        if points is not None:
+            score = np.asarray(rec.fvals) @ lam
+            if start == "paper":
+                score = score - np.einsum("ikl,k,l->i", grams, lam, lam) / (2.0 * L_lam)
+            start_i = int(np.argmin(score))
+            chain = points[start_i]
+        rec.start_index.append(start_i)
+        rec.chain_index.append(chain_i)
+        chain_i = start_i
+        rec.decision_seconds += time.time() - t_dec
+        if reset == "every_decision" or prev_lam is None or not np.array_equal(lam, prev_lam):
             stepper.on_lambda_change(lam, L_lam, L_scale)
         prev_lam = lam
         retries = 0
@@ -67,14 +96,16 @@ def run_adaptive(problem, step_rule, budget, schedule, s=5, ccp_config=None):
                 break
             y, f_y, J_y, accepted = run_segment(problem, stepper, chain, lam, L_lam, L_scale, epoch_len)
             rec.add(f_y, J_y, lam)
+            if points is not None:
+                points.append((y, f_y, J_y))
             if accepted:
-                chain, retries = (y, f_y, J_y), 0
+                chain, chain_i, retries = (y, f_y, J_y), len(rec.grams) - 1, 0
             else:
                 L_scale *= 2.0
                 rec.rejections += 1
                 retries += 1
                 if retries > MAX_RETRIES:
-                    chain, retries = (y, f_y, J_y), 0
+                    chain, chain_i, retries = (y, f_y, J_y), len(rec.grams) - 1, 0
             stepper.on_segment_result(accepted, L_lam, L_scale)
             rec.checkpoint_if_due()
     rec.finish()
