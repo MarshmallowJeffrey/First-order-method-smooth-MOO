@@ -1,0 +1,107 @@
+{
+  "task": "dst",
+  "adaptive": {
+    "calls": 96000,
+    "cpu": 20.602945000000016,
+    "gn": 6.52770817745161e-06,
+    "lower": 6.52770817745161e-06,
+    "upper": 6.52770817745161e-06,
+    "outer_iterations": 4800
+  },
+  "baselines": {
+    "Uniform": {
+      "param": 512,
+      "gn": 4.858773811716205e-05,
+      "lower": 4.858773811716205e-05,
+      "upper": 4.858773811716205e-05,
+      "calls": 71822,
+      "cpu": 8.958123999999998,
+      "iterations_to_stop": 21,
+      "ratio_to_final_adaptive": 7.4433073287492615,
+      "adaptive_same_calls": 7.494313280761115e-06,
+      "ratio_same_calls": 6.483280895381455,
+      "adaptive_same_time": 8.845754170102051e-06,
+      "ratio_same_time": 5.492775085405918,
+      "adaptive_reaches_at": {
+        "calls": 2882,
+        "cpu": 0.3788819999999998
+      },
+      "points_above_curve": {
+        "calls": [
+          2,
+          4,
+          8,
+          16,
+          32,
+          64,
+          128,
+          256,
+          512
+        ],
+        "time": [
+          2,
+          4,
+          8,
+          16,
+          32,
+          64,
+          128,
+          256,
+          512
+        ],
+        "all": [
+          2,
+          4,
+          8,
+          16,
+          32,
+          64,
+          128,
+          256,
+          512
+        ]
+      }
+    },
+    "SURF": {
+      "param": 64,
+      "gn": 0.00013042997660901064,
+      "lower": 0.00013042997660901064,
+      "upper": 0.00013042997660901064,
+      "calls": 91002,
+      "cpu": 11.374760000000006,
+      "iterations_to_stop": 35,
+      "ratio_to_final_adaptive": 19.98097541485532,
+      "adaptive_same_calls": 6.6847334774899085e-06,
+      "ratio_same_calls": 19.51161958037953,
+      "adaptive_same_time": 7.942263890740898e-06,
+      "ratio_same_time": 16.42226679990652,
+      "adaptive_reaches_at": {
+        "calls": 642,
+        "cpu": 0.08630000000000004
+      },
+      "points_above_curve": {
+        "calls": [
+          4,
+          8,
+          16,
+          32,
+          64
+        ],
+        "time": [
+          4,
+          8,
+          16,
+          32,
+          64
+        ],
+        "all": [
+          4,
+          8,
+          16,
+          32,
+          64
+        ]
+      }
+    }
+  }
+}
