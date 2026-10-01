@@ -4,12 +4,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Sequence, Tuple
 import warnings
 
-import numpy as np
-
-try:
-    from scipy.optimize import minimize as scipy_minimize
-except ImportError:
-    scipy_minimize = None
+LAMBDA_SOLVERS = {"ipopt", "slsqp", "exact_k2"}
 
 try:
     from cyipopt import minimize_ipopt as ipopt_minimize
@@ -19,6 +14,13 @@ except (ImportError, OSError) as exc:
     ipopt_minimize = None
     HAS_IPOPT = False
     IPOPT_IMPORT_ERROR = exc
+
+import numpy as np
+
+try:
+    from scipy.optimize import minimize as scipy_minimize
+except ImportError:
+    scipy_minimize = None
 
 
 def ipopt_available() -> bool:
@@ -46,9 +48,16 @@ class FirstOrderBundle:
     d: int
     L: Sequence[float]
     dtype: np.dtype = np.float32
+    lambda_projection_dim: Optional[int] = None
+    lambda_projection_seed: int = 0
     points: List[np.ndarray] = field(default_factory=list)
     fvals: List[np.ndarray] = field(default_factory=list)
     grads: List[np.ndarray] = field(default_factory=list)
+    gram_matrices: List[np.ndarray] = field(default_factory=list)
+    projected_grads: List[np.ndarray] = field(default_factory=list)
+    projected_gram_matrices: List[np.ndarray] = field(default_factory=list)
+    _projection_buckets: Optional[np.ndarray] = field(default=None, init=False, repr=False)
+    _projection_signs: Optional[np.ndarray] = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.K < 1:
@@ -61,10 +70,64 @@ class FirstOrderBundle:
         if np.any(~np.isfinite(self.L)) or np.any(self.L <= 0.0):
             raise ValueError("L must contain finite positive values")
         self.dtype = np.dtype(self.dtype)
+        if self.lambda_projection_dim is not None:
+            self.lambda_projection_dim = int(self.lambda_projection_dim)
+            if self.lambda_projection_dim < 1:
+                raise ValueError("lambda_projection_dim must be positive when provided")
+            if self.lambda_projection_dim < self.d:
+                rng = np.random.default_rng(int(self.lambda_projection_seed))
+                self._projection_buckets = rng.integers(
+                    0,
+                    self.lambda_projection_dim,
+                    size=self.d,
+                    dtype=np.int64,
+                )
+                self._projection_signs = rng.choice(
+                    np.asarray([-1.0, 1.0], dtype=np.float64),
+                    size=self.d,
+                )
+            else:
+                self.lambda_projection_dim = None
 
     @property
     def m(self) -> int:
         return len(self.points)
+
+    @property
+    def lambda_projection_active(self) -> bool:
+        return self._projection_buckets is not None and self._projection_signs is not None
+
+    def lambda_projection_info(self) -> dict:
+        return {
+            "active": self.lambda_projection_active,
+            "full_dim": int(self.d),
+            "projection_dim": (
+                int(self.lambda_projection_dim)
+                if self.lambda_projection_active and self.lambda_projection_dim is not None
+                else None
+            ),
+            "projection_seed": int(self.lambda_projection_seed),
+            "method": "countsketch" if self.lambda_projection_active else "none",
+        }
+
+    def _project_objective_grads(self, grads: np.ndarray) -> Optional[np.ndarray]:
+        if not self.lambda_projection_active:
+            return None
+        projected = np.empty((self.K, int(self.lambda_projection_dim)), dtype=np.float64)
+        signs = self._projection_signs
+        buckets = self._projection_buckets
+        for objective_idx in range(self.K):
+            weights = grads[objective_idx].astype(np.float64, copy=False) * signs
+            projected[objective_idx] = np.bincount(
+                buckets,
+                weights=weights,
+                minlength=int(self.lambda_projection_dim),
+            )
+        return projected.astype(self.dtype, copy=False)
+
+    def _objective_gram(self, grads: np.ndarray) -> np.ndarray:
+        grads64 = np.asarray(grads, dtype=np.float64)
+        return grads64 @ grads64.T
 
     def add(
         self,
@@ -88,11 +151,58 @@ class FirstOrderBundle:
         self.points.append(x_arr.copy())
         self.fvals.append(f_arr.copy())
         self.grads.append(g_arr.copy())
+        self.gram_matrices.append(self._objective_gram(g_arr))
+        projected = self._project_objective_grads(g_arr)
+        if projected is not None:
+            self.projected_grads.append(projected.copy())
+            self.projected_gram_matrices.append(self._objective_gram(projected))
+
+    def replace(
+        self,
+        index: int,
+        x: Sequence[float],
+        fvals: Sequence[float],
+        grads: Sequence[Sequence[float]],
+    ) -> None:
+        if not self.points:
+            raise ValueError("Cannot replace an entry in an empty bundle")
+        if index < 0:
+            index += len(self.points)
+        if index < 0 or index >= len(self.points):
+            raise IndexError(f"Bundle index out of range: {index}")
+
+        x_arr = np.asarray(x, dtype=self.dtype)
+        f_arr = np.asarray(fvals, dtype=np.float64)
+        g_arr = np.asarray(grads, dtype=self.dtype)
+
+        if x_arr.shape != (self.d,):
+            raise ValueError(f"x must have shape ({self.d},), got {x_arr.shape}")
+        if f_arr.shape != (self.K,):
+            raise ValueError(f"fvals must have shape ({self.K},), got {f_arr.shape}")
+        if g_arr.shape != (self.K, self.d):
+            raise ValueError(f"grads must have shape ({self.K}, {self.d}), got {g_arr.shape}")
+        if np.any(~np.isfinite(x_arr)) or np.any(~np.isfinite(f_arr)) or np.any(~np.isfinite(g_arr)):
+            raise ValueError("Bundle entries must be finite")
+
+        self.points[index] = x_arr.copy()
+        self.fvals[index] = f_arr.copy()
+        self.grads[index] = g_arr.copy()
+        self.gram_matrices[index] = self._objective_gram(g_arr)
+        projected = self._project_objective_grads(g_arr)
+        if projected is not None:
+            self.projected_grads[index] = projected.copy()
+            self.projected_gram_matrices[index] = self._objective_gram(projected)
 
     def pop(self) -> None:
         self.points.pop()
         self.fvals.pop()
         self.grads.pop()
+        if self.gram_matrices:
+            self.gram_matrices.pop()
+        if self.projected_grads:
+            self.projected_grads.pop()
+        if self.projected_gram_matrices:
+            self.projected_gram_matrices.pop()
 
 
 def project_simplex(values: Sequence[float]) -> np.ndarray:
@@ -129,14 +239,31 @@ def _bundle_grads(bundle: FirstOrderBundle) -> np.ndarray:
     return np.asarray(bundle.grads, dtype=bundle.dtype)
 
 
+def _bundle_grams(bundle: FirstOrderBundle) -> np.ndarray:
+    return np.asarray(bundle.gram_matrices, dtype=np.float64)
+
+
+def _bundle_lambda_selection_grads(bundle: FirstOrderBundle, use_projection: bool = True) -> np.ndarray:
+    if use_projection and bundle.lambda_projection_active:
+        return np.asarray(bundle.projected_grads, dtype=bundle.dtype)
+    return _bundle_grads(bundle)
+
+
+def _bundle_lambda_selection_grams(bundle: FirstOrderBundle, use_projection: bool = True) -> np.ndarray:
+    if use_projection and bundle.lambda_projection_active:
+        return np.asarray(bundle.projected_gram_matrices, dtype=np.float64)
+    return _bundle_grams(bundle)
+
+
 def _lambda_selection_grads(
     bundle: FirstOrderBundle,
     lambda_normalization: str = "none",
+    use_projection: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray]:
     if lambda_normalization not in {"none", "global_mean"}:
         raise ValueError("lambda_normalization must be either 'none' or 'global_mean'")
 
-    Jmat = _bundle_grads(bundle)
+    Jmat = _bundle_lambda_selection_grads(bundle, use_projection=use_projection)
     if lambda_normalization == "none":
         return Jmat, np.ones(bundle.K, dtype=np.float64)
 
@@ -148,6 +275,27 @@ def _lambda_selection_grads(
     return Jmat_scaled.astype(bundle.dtype, copy=False), scales.astype(np.float64, copy=False)
 
 
+def _lambda_selection_grams(
+    bundle: FirstOrderBundle,
+    lambda_normalization: str = "none",
+    use_projection: bool = True,
+) -> Tuple[np.ndarray, np.ndarray]:
+    if lambda_normalization not in {"none", "global_mean"}:
+        raise ValueError("lambda_normalization must be either 'none' or 'global_mean'")
+
+    Qmat = _bundle_lambda_selection_grams(bundle, use_projection=use_projection)
+    if lambda_normalization == "none":
+        return Qmat, np.ones(bundle.K, dtype=np.float64)
+
+    diagonals = np.diagonal(Qmat, axis1=1, axis2=2)
+    norms = np.sqrt(np.maximum(diagonals, 0.0))
+    scales = norms.mean(axis=0)
+    eps = np.finfo(np.float64).eps
+    scales = np.where(scales > eps, scales, 1.0)
+    Qmat_scaled = Qmat / (scales[None, :, None] * scales[None, None, :])
+    return Qmat_scaled, scales.astype(np.float64, copy=False)
+
+
 def _gn_value_batched(Jmat: np.ndarray, lam: np.ndarray) -> float:
     lam = lam.astype(Jmat.dtype, copy=False)
     weighted_grads = np.einsum("mkd,k->md", Jmat, lam, optimize=True)
@@ -155,14 +303,52 @@ def _gn_value_batched(Jmat: np.ndarray, lam: np.ndarray) -> float:
     return float(np.min(gnorms_sq))
 
 
+def _bundle_gram_matrices(Jmat: np.ndarray) -> np.ndarray:
+    """Return Q_i = G_i^T G_i for the bundle gradient tensor."""
+    J64 = Jmat.astype(np.float64, copy=False)
+    return np.einsum("mkd,mld->mkl", J64, J64, optimize=True)
+
+
+def _gn_value_from_gram(Qmat: np.ndarray, lam: np.ndarray) -> float:
+    lam64 = np.asarray(lam, dtype=np.float64)
+    values = np.einsum("k,mkl,l->m", lam64, Qmat, lam64, optimize=True)
+    return float(np.min(values))
+
+
+def active_gn_source(
+    bundle: FirstOrderBundle,
+    lam: Sequence[float],
+    lambda_normalization: str = "none",
+    lambda_min: float = 0.0,
+    use_projection: bool = True,
+) -> Tuple[int, float]:
+    """Return argmin_i ||sum_k lambda_k grad F_k(x_i)||^2 for the current bundle."""
+    if bundle.m == 0:
+        raise ValueError("Cannot select an active source from an empty bundle")
+    lam_arr = project_truncated_simplex(lam, lambda_min=lambda_min)
+    Qmat, _ = _lambda_selection_grams(
+        bundle,
+        lambda_normalization=lambda_normalization,
+        use_projection=use_projection,
+    )
+    gnorms_sq = np.einsum("k,mkl,l->m", lam_arr, Qmat, lam_arr, optimize=True)
+    i_star = int(np.argmin(gnorms_sq))
+    return i_star, float(gnorms_sq[i_star])
+
+
 def gn_value_at_lambda(
     bundle: FirstOrderBundle,
     lam: Sequence[float],
     lambda_normalization: str = "none",
     lambda_min: float = 0.0,
+    use_projection: bool = True,
 ) -> float:
-    Jmat, _ = _lambda_selection_grads(bundle, lambda_normalization=lambda_normalization)
-    return _gn_value_batched(Jmat, project_truncated_simplex(lam, lambda_min=lambda_min))
+    Qmat, _ = _lambda_selection_grams(
+        bundle,
+        lambda_normalization=lambda_normalization,
+        use_projection=use_projection,
+    )
+    return _gn_value_from_gram(Qmat, project_truncated_simplex(lam, lambda_min=lambda_min))
 
 
 def bundle_gradient_diagnostics(bundle: FirstOrderBundle) -> dict:
@@ -198,6 +384,7 @@ def gn_grid_diagnostics(
     num_points: int = 21,
     lambda_normalization: str = "none",
     lambda_min: float = 0.0,
+    use_projection: bool = True,
 ) -> list:
     """Evaluate GN(lambda; bundle) on a 2-objective helpful-weight grid."""
     if bundle.K != 2:
@@ -206,9 +393,10 @@ def gn_grid_diagnostics(
         raise ValueError("num_points must be at least 2")
     if not np.isfinite(lambda_min) or lambda_min < 0.0 or lambda_min >= 0.5:
         raise ValueError("For K=2, lambda_min must be finite and in [0, 0.5)")
-    Jmat, scales = _lambda_selection_grads(
+    Qmat, scales = _lambda_selection_grams(
         bundle,
         lambda_normalization=lambda_normalization,
+        use_projection=use_projection,
     )
     rows = []
     for helpful_weight in np.linspace(lambda_min, 1.0 - lambda_min, num_points):
@@ -216,12 +404,107 @@ def gn_grid_diagnostics(
         rows.append({
             "lambda_helpful": float(helpful_weight),
             "lambda_harmless": float(1.0 - helpful_weight),
-            "gn": _gn_value_batched(Jmat, lam),
+            "gn": _gn_value_from_gram(Qmat, lam),
             "lambda_normalization": lambda_normalization,
             "lambda_normalization_scales": scales.tolist(),
+            "use_projection": bool(use_projection and bundle.lambda_projection_active),
             "lambda_min": float(lambda_min),
         })
     return rows
+
+
+def diversify_lambda_on_grid(
+    bundle: FirstOrderBundle,
+    base_lam: Sequence[float],
+    recent_lams: Sequence[Sequence[float]],
+    *,
+    lambda_normalization: str = "none",
+    lambda_min: float = 0.0,
+    num_points: int = 101,
+    diversity_strength: float = 0.0,
+    recent_window: int = 3,
+    use_projection: bool = True,
+) -> Tuple[np.ndarray, dict]:
+    """Optionally move a two-objective lambda away from recent selections.
+
+    The default ``diversity_strength=0`` returns ``base_lam`` unchanged.  When
+    enabled, this is an explicit anti-collapse heuristic for LLM runs where the
+    GN maximizer repeatedly picks the same boundary weight.  It scores a dense
+    one-dimensional lambda grid by normalized GN value plus a distance bonus to
+    recent lambdas.
+    """
+    base = project_truncated_simplex(base_lam, lambda_min=lambda_min)
+    info = {
+        "enabled": False,
+        "selected_by": "gn",
+        "base_lambda": base.tolist(),
+        "chosen_lambda": base.tolist(),
+        "diversity_strength": float(diversity_strength),
+        "recent_window": int(recent_window),
+        "num_points": int(num_points),
+        "use_projection": bool(use_projection and bundle.lambda_projection_active),
+    }
+    if diversity_strength <= 0.0 or bundle.K != 2:
+        return base, info
+    if num_points < 2:
+        raise ValueError("num_points must be at least 2")
+    if recent_window < 1:
+        raise ValueError("recent_window must be at least 1")
+
+    rows = gn_grid_diagnostics(
+        bundle,
+        num_points=num_points,
+        lambda_normalization=lambda_normalization,
+        lambda_min=lambda_min,
+        use_projection=use_projection,
+    )
+    if not rows:
+        return base, info
+
+    helpful = np.asarray([row["lambda_helpful"] for row in rows], dtype=np.float64)
+    harmless = 1.0 - helpful
+    gn_values = np.asarray([row["gn"] for row in rows], dtype=np.float64)
+    finite = np.isfinite(gn_values)
+    if not np.any(finite):
+        return base, info
+
+    gn_min = float(np.min(gn_values[finite]))
+    gn_max = float(np.max(gn_values[finite]))
+    denom = max(gn_max - gn_min, np.finfo(np.float64).eps)
+    gn_score = (gn_values - gn_min) / denom
+
+    recent = [
+        project_truncated_simplex(lam, lambda_min=lambda_min)
+        for lam in list(recent_lams)[-recent_window:]
+    ]
+    if recent:
+        recent_helpful = np.asarray([lam[0] for lam in recent], dtype=np.float64)
+        distances = np.min(np.abs(helpful[:, None] - recent_helpful[None, :]), axis=1)
+    else:
+        distances = np.zeros_like(helpful)
+
+    scores = gn_score + float(diversity_strength) * distances
+    scores = np.where(finite, scores, -np.inf)
+    chosen_idx = int(np.argmax(scores))
+    chosen = np.asarray([helpful[chosen_idx], harmless[chosen_idx]], dtype=np.float64)
+    chosen = project_truncated_simplex(chosen, lambda_min=lambda_min)
+
+    best_gn_idx = int(np.argmax(np.where(finite, gn_values, -np.inf)))
+    info.update({
+        "enabled": True,
+        "selected_by": "gn_plus_diversity_grid",
+        "chosen_lambda": chosen.tolist(),
+        "chosen_gn": float(gn_values[chosen_idx]),
+        "chosen_score": float(scores[chosen_idx]),
+        "chosen_distance_to_recent": float(distances[chosen_idx]),
+        "best_grid_lambda": [float(helpful[best_gn_idx]), float(harmless[best_gn_idx])],
+        "best_grid_gn": float(gn_values[best_gn_idx]),
+        "best_grid_score": float(scores[best_gn_idx]),
+        "best_grid_distance_to_recent": float(distances[best_gn_idx]),
+        "gn_min": gn_min,
+        "gn_max": gn_max,
+    })
+    return chosen, info
 
 
 def _gn_value_and_jac_batched(Jmat: np.ndarray, lam: np.ndarray) -> Tuple[float, np.ndarray]:
@@ -234,6 +517,88 @@ def _gn_value_and_jac_batched(Jmat: np.ndarray, lam: np.ndarray) -> Tuple[float,
         @ weighted_grads[i_star].astype(np.float64, copy=False)
     )
     return float(gnorms_sq[i_star]), grad_lam
+
+
+def _quadratic_roots_in_interval(a: float, b: float, c: float, lo: float, hi: float) -> List[float]:
+    tol = 1e-12
+    roots: List[float] = []
+    if abs(a) <= tol:
+        if abs(b) > tol:
+            roots.append(-c / b)
+    else:
+        disc = b * b - 4.0 * a * c
+        if disc >= -tol:
+            disc = max(0.0, disc)
+            sqrt_disc = float(np.sqrt(disc))
+            roots.append((-b - sqrt_disc) / (2.0 * a))
+            roots.append((-b + sqrt_disc) / (2.0 * a))
+    return [float(root) for root in roots if lo - tol <= root <= hi + tol]
+
+
+def _maximise_gn_exact_k2_from_gram(
+    Qmat: np.ndarray,
+    lambda_min: float = 0.0,
+) -> Tuple[float, np.ndarray]:
+    """Exact O(m^2) maximization of the two-objective lower envelope."""
+    if Qmat.ndim != 3 or Qmat.shape[1:] != (2, 2):
+        raise ValueError("exact_k2 requires Gram matrices with shape (m, 2, 2)")
+    if Qmat.shape[0] < 1:
+        raise ValueError("Cannot maximize GN for an empty bundle")
+    if not np.isfinite(lambda_min) or lambda_min < 0.0 or lambda_min >= 0.5:
+        raise ValueError("For exact_k2, lambda_min must be finite and in [0, 0.5)")
+
+    lo = float(lambda_min)
+    hi = float(1.0 - lambda_min)
+    q00 = Qmat[:, 0, 0]
+    q01 = 0.5 * (Qmat[:, 0, 1] + Qmat[:, 1, 0])
+    q11 = Qmat[:, 1, 1]
+    coeffs = np.stack(
+        [
+            q00 - 2.0 * q01 + q11,
+            2.0 * (q01 - q11),
+            q11,
+        ],
+        axis=1,
+    )
+
+    candidates: List[float] = [lo, hi]
+    m = int(Qmat.shape[0])
+    for i in range(m):
+        ai, bi, ci = coeffs[i]
+        for j in range(i + 1, m):
+            aj, bj, cj = coeffs[j]
+            candidates.extend(
+                _quadratic_roots_in_interval(
+                    float(ai - aj),
+                    float(bi - bj),
+                    float(ci - cj),
+                    lo,
+                    hi,
+                )
+            )
+
+    best_value = -np.inf
+    best_s = lo
+    for s in candidates:
+        s_clipped = min(max(float(s), lo), hi)
+        values = coeffs[:, 0] * s_clipped * s_clipped + coeffs[:, 1] * s_clipped + coeffs[:, 2]
+        value = float(np.min(values))
+        if np.isfinite(value) and value > best_value:
+            best_value = value
+            best_s = s_clipped
+
+    lam = np.asarray([best_s, 1.0 - best_s], dtype=np.float64)
+    return best_value, lam
+
+
+def _simplex_entropy(lam: np.ndarray) -> float:
+    lam_safe = np.clip(lam.astype(np.float64, copy=False), np.finfo(np.float64).tiny, 1.0)
+    return float(-np.sum(lam_safe * np.log(lam_safe)))
+
+
+def _simplex_entropy_jac(lam: np.ndarray) -> np.ndarray:
+    lam_safe = np.clip(lam.astype(np.float64, copy=False), np.finfo(np.float64).tiny, 1.0)
+    return -(np.log(lam_safe) + 1.0)
 
 
 def _gn_multistart_set(
@@ -291,29 +656,58 @@ def maximise_gn(
     require_ipopt: bool = False,
     lambda_normalization: str = "none",
     lambda_min: float = 0.0,
+    use_projection: bool = True,
+    entropy_tau: float = 0.0,
 ) -> Tuple[float, np.ndarray]:
     """Approximate argmax_lambda min_i ||sum_k lambda_k grad F_k(x_i)||^2."""
-    if solver not in {"ipopt", "slsqp"}:
-        raise ValueError("solver must be either 'ipopt' or 'slsqp'")
+    if solver not in LAMBDA_SOLVERS:
+        raise ValueError(f"solver must be one of: {', '.join(sorted(LAMBDA_SOLVERS))}")
     if lambda_normalization not in {"none", "global_mean"}:
         raise ValueError("lambda_normalization must be either 'none' or 'global_mean'")
     if not np.isfinite(lambda_min) or lambda_min < 0.0 or lambda_min * bundle.K >= 1.0:
         raise ValueError("lambda_min must be finite and smaller than 1 / K")
+    if not np.isfinite(entropy_tau) or entropy_tau < 0.0:
+        raise ValueError("entropy_tau must be finite and non-negative")
     if bundle.m == 0:
         raise ValueError("Cannot maximize GN for an empty bundle")
     if bundle.K == 1:
         lam = np.ones(1, dtype=np.float64)
-        Jmat, _ = _lambda_selection_grads(bundle, lambda_normalization=lambda_normalization)
-        return _gn_value_batched(Jmat, lam), lam
+        Qmat, _ = _lambda_selection_grams(
+            bundle,
+            lambda_normalization=lambda_normalization,
+            use_projection=use_projection,
+        )
+        return _gn_value_from_gram(Qmat, lam), lam
 
-    Jmat, _ = _lambda_selection_grads(bundle, lambda_normalization=lambda_normalization)
+    entropy_tau = float(entropy_tau)
+    if solver == "exact_k2":
+        if bundle.K != 2:
+            raise ValueError("solver='exact_k2' requires exactly two objectives")
+        if entropy_tau > 0.0:
+            raise ValueError("solver='exact_k2' does not support entropy regularization")
+        Qmat, _ = _lambda_selection_grams(
+            bundle,
+            lambda_normalization=lambda_normalization,
+            use_projection=use_projection,
+        )
+        return _maximise_gn_exact_k2_from_gram(Qmat, lambda_min=lambda_min)
+
+    Jmat, _ = _lambda_selection_grads(
+        bundle,
+        lambda_normalization=lambda_normalization,
+        use_projection=use_projection,
+    )
 
     def neg_gn(lam: np.ndarray) -> float:
         value, _ = _gn_value_and_jac_batched(Jmat, lam)
+        if entropy_tau > 0.0:
+            value += entropy_tau * _simplex_entropy(lam)
         return -value
 
     def neg_gn_jac(lam: np.ndarray) -> np.ndarray:
         _, jac = _gn_value_and_jac_batched(Jmat, lam)
+        if entropy_tau > 0.0:
+            jac = jac + entropy_tau * _simplex_entropy_jac(lam)
         return -jac
 
     starts = _gn_multistart_set(
@@ -431,10 +825,10 @@ def prune_last_candidates(
     base_m: int,
     steps_taken: int,
     lam: Sequence[float],
-) -> None:
+) -> Optional[int]:
     """Keep only the new candidate with smallest ||grad F_lambda||."""
     if steps_taken <= 1:
-        return
+        return None
     lam_arr = project_simplex(lam)
     cand_grads = np.asarray(bundle.grads[base_m:base_m + steps_taken], dtype=bundle.dtype)
     grad_lam = np.einsum("skd,k->sd", cand_grads, lam_arr.astype(bundle.dtype), optimize=True)
@@ -450,3 +844,9 @@ def prune_last_candidates(
     bundle.points.append(keep_point)
     bundle.fvals.append(keep_fvals)
     bundle.grads.append(keep_grads)
+    bundle.gram_matrices.append(bundle._objective_gram(keep_grads))
+    projected = bundle._project_objective_grads(keep_grads)
+    if projected is not None:
+        bundle.projected_grads.append(projected.copy())
+        bundle.projected_gram_matrices.append(bundle._objective_gram(projected))
+    return base_m

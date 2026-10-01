@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -30,6 +31,14 @@ DEFAULT_ADAPTIVE_DIR = (
 DEFAULT_OUTPUT_DIR = (
     "./output/PKU-Alignment/PKU-SafeRLHF-10K/figures/qwen2_0_5b_2k"
 )
+ADAPTIVE_METHOD_COLORS = [
+    "#F58518",
+    "#E45756",
+    "#72B7B2",
+    "#54A24B",
+    "#B279A2",
+    "#FF9DA6",
+]
 
 
 @dataclass
@@ -74,6 +83,20 @@ def first_present(*values):
     return None
 
 
+def group_points_by_method(points: Sequence[ParetoPoint]) -> Dict[str, List[ParetoPoint]]:
+    groups: Dict[str, List[ParetoPoint]] = {}
+    for point in points:
+        groups.setdefault(point.method, []).append(point)
+    return groups
+
+
+def group_rows_by_method(rows: Sequence[Dict]) -> Dict[str, List[Dict]]:
+    groups: Dict[str, List[Dict]] = {}
+    for row in rows:
+        groups.setdefault(str(row.get("method", "Adaptive bundle")), []).append(row)
+    return groups
+
+
 def budget_x_from_point(point: ParetoPoint) -> int:
     value = first_present(
         point.objective_gradient_evals,
@@ -115,6 +138,66 @@ def moving_average(values: Sequence[float], window: int) -> Tuple[np.ndarray, np
     kernel = np.ones(window, dtype=np.float64) / window
     smoothed = np.convolve(y, kernel, mode="valid")
     return x[window - 1 :], smoothed
+
+
+def best_so_far(values: Sequence[float]) -> np.ndarray:
+    """Return the monotone best-so-far envelope for minimization metrics."""
+    return np.minimum.accumulate(np.asarray(values, dtype=np.float64))
+
+
+def elapsed_x_from_row(row: Dict) -> Optional[float]:
+    value = first_present(
+        row.get("elapsed_wall_seconds"),
+        row.get("elapsed_wall_seconds_after"),
+        row.get("elapsed_seconds"),
+        row.get("runtime_seconds"),
+        row.get("wall_time_seconds"),
+    )
+    return float(value) if value is not None else None
+
+
+def relative_elapsed_axis(x: np.ndarray, *, log_x: bool) -> np.ndarray:
+    """Align elapsed-time curves to their own first logged checkpoint.
+
+    Absolute wall-clock time includes method-specific startup overhead such as
+    model loading and dataset construction. For method comparison plots, we want
+    both curves to start from a common time origin. Log plots cannot include
+    zero, so we shift the relative axis by one second.
+    """
+    if len(x) == 0:
+        return x
+    origin = float(np.nanmin(x))
+    relative = x - origin
+    if log_x:
+        relative = relative + 1.0
+    return relative
+
+
+def gn_value_from_row(row: Dict, gn_metric: str) -> float:
+    """Convert logged squared GN* values to the requested plotting scale."""
+    value = float(row["gn_star"])
+    if gn_metric == "norm":
+        return float(np.sqrt(max(value, 0.0)))
+    if gn_metric == "squared":
+        return value
+    raise ValueError(f"Unknown gn_metric: {gn_metric!r}")
+
+
+def gn_metric_ylabel(gn_metric: str) -> str:
+    if gn_metric == "norm":
+        return "Best-so-far gradient norm"
+    if gn_metric == "squared":
+        return "Best-so-far GN*"
+    raise ValueError(f"Unknown gn_metric: {gn_metric!r}")
+
+
+def gn_metric_title(gn_metric: str, suffix: str = "") -> str:
+    base = (
+        "Best-so-far worst-case gradient norm"
+        if gn_metric == "norm"
+        else "Best-so-far worst-case GN*"
+    )
+    return f"{base}{suffix}"
 
 
 def load_dpo_lw_runs(
@@ -233,11 +316,14 @@ def load_uniform_gn_run(
         )
         gn_rows.append(
             {
+                "phase": record.get("phase"),
                 "gradient_eval": oracle_gradient_eval,
                 "oracle_gradient_eval": oracle_gradient_eval,
                 "checkpoint_index": checkpoint_index,
                 "parameter_updates": parameter_updates,
                 "objective_gradient_evals": objective_gradient_evals,
+                "elapsed_wall_seconds": record.get("elapsed_wall_seconds"),
+                "elapsed_wall_seconds_after": record.get("elapsed_wall_seconds_after"),
                 "gn_star": record.get("gn_star"),
                 "lambda_gn_star": record.get("lambda_gn_star"),
                 "run": record.get("run", f"uniform_eval_{idx}"),
@@ -256,6 +342,7 @@ def add_adaptive_point(
     fvals: Sequence[float],
     outer: int,
     run: str,
+    method: str,
     source: str,
     lambda_helpful: Optional[float],
     lambda_harmless: Optional[float],
@@ -268,7 +355,7 @@ def add_adaptive_point(
         return
     points.append(
         ParetoPoint(
-            method="Adaptive bundle",
+            method=method,
             run=run,
             helpful_loss=float(fvals[0]),
             harmless_loss=float(fvals[1]),
@@ -286,6 +373,7 @@ def add_adaptive_point(
 
 def load_adaptive_run(
     adaptive_dir: Optional[Path],
+    method_label: str = "Adaptive bundle",
 ) -> Tuple[List[ParetoPoint], List[Dict], List[Dict]]:
     if adaptive_dir is None or not adaptive_dir.exists():
         return [], [], []
@@ -294,6 +382,18 @@ def load_adaptive_run(
     records = read_jsonl(history_path)
     if not records:
         return [], [], []
+    is_surf_run = (
+        method_label.lower() == "surf"
+        or any(record.get("method") == "SURF" or record.get("surf_outer") is not None for record in records)
+    )
+    final_surf_outer = None
+    if is_surf_run:
+        surf_outers = [
+            int(record["surf_outer"])
+            for record in records
+            if record.get("surf_outer") is not None
+        ]
+        final_surf_outer = max(surf_outers) if surf_outers else None
 
     points: List[ParetoPoint] = []
     lambda_rows: List[Dict] = []
@@ -316,6 +416,7 @@ def load_adaptive_run(
             initial["fvals"],
             outer=0,
             run="initial",
+            method=method_label,
             source="initial_fixed_oracle",
             lambda_helpful=None,
             lambda_harmless=None,
@@ -373,6 +474,8 @@ def load_adaptive_run(
 
         lambda_rows.append(
             {
+                "method": method_label,
+                "adaptive_dir": str(adaptive_dir),
                 "outer": outer,
                 "lambda_helpful": lambda_helpful,
                 "lambda_harmless": lambda_harmless,
@@ -384,22 +487,44 @@ def load_adaptive_run(
         )
         gn_rows.append(
             {
+                "method": method_label,
+                "adaptive_dir": str(adaptive_dir),
+                "phase": record.get("phase"),
                 "outer": outer,
                 "gradient_eval": gradient_evals_before,
                 "oracle_gradient_eval": gradient_evals_before,
                 "parameter_updates": parameter_updates_before,
+                "parameter_updates_after": parameter_updates_after,
                 "objective_gradient_evals": objective_gradient_evals_before,
+                "objective_gradient_evals_after": objective_gradient_evals_after,
+                "elapsed_wall_seconds": first_present(
+                    record.get("elapsed_wall_seconds_before"),
+                    record.get("elapsed_wall_seconds"),
+                ),
+                "elapsed_wall_seconds_after": first_present(
+                    record.get("elapsed_wall_seconds_after"),
+                    record.get("elapsed_wall_seconds"),
+                ),
                 "gn_star": record.get("gn_star"),
                 "bundle_size": record.get("bundle_size"),
             }
         )
 
-        if "fvals" in record:
+        include_record_point = "fvals" in record
+        if is_surf_run and final_surf_outer is not None:
+            include_record_point = (
+                include_record_point
+                and record.get("surf_outer") is not None
+                and int(record["surf_outer"]) == int(final_surf_outer)
+            )
+        if include_record_point:
+            run_name = str(record.get("run") or f"outer_{outer}")
             add_adaptive_point(
                 points,
                 record["fvals"],
                 outer,
-                f"outer_{outer}",
+                run_name,
+                method_label,
                 "outer_record",
                 lambda_helpful,
                 lambda_harmless,
@@ -412,6 +537,15 @@ def load_adaptive_run(
         for inner_idx, inner_record in enumerate(inner_records, start=1):
             if "fvals" not in inner_record:
                 continue
+            if inner_record.get("candidate_accepted") is False:
+                continue
+            if (
+                record.get("prune_inner")
+                and record.get("bundle_update_mode") == "append"
+                and record.get("retained_bundle_index") is not None
+            ):
+                if inner_record.get("bundle_index") != record.get("retained_bundle_index"):
+                    continue
             inner_gradient_eval = inner_record.get("gradient_eval")
             if inner_gradient_eval is None:
                 inner_gradient_eval = gradient_evals_before + inner_idx
@@ -431,6 +565,7 @@ def load_adaptive_run(
                 inner_record["fvals"],
                 outer,
                 f"outer_{outer}_inner_{inner_idx}",
+                method_label,
                 "inner_oracle",
                 lambda_helpful,
                 lambda_harmless,
@@ -531,6 +666,56 @@ def save_representatives(
     return path
 
 
+def save_frontiers(
+    dpo_points: Sequence[ParetoPoint],
+    adaptive_points: Sequence[ParetoPoint],
+    output_dir: Path,
+    lambda_round_decimals: int,
+) -> Path:
+    path = output_dir / "pareto_frontiers.csv"
+    dpo_frontier: List[ParetoPoint] = []
+    for group in group_points_by_method(
+        best_observed_per_lambda(dpo_points, lambda_round_decimals)
+    ).values():
+        dpo_frontier.extend(nondominated_points(group))
+    adaptive_frontier: List[ParetoPoint] = []
+    for group in group_points_by_method(
+        best_observed_per_lambda(adaptive_points, lambda_round_decimals)
+    ).values():
+        adaptive_frontier.extend(nondominated_points(group))
+    fields = [
+        "method",
+        "run",
+        "helpful_loss",
+        "harmless_loss",
+        "lambda_helpful",
+        "lambda_harmless",
+        "scalarized_loss",
+        "objective_gradient_evals",
+        "outer",
+        "source",
+    ]
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        for point in [*dpo_frontier, *adaptive_frontier]:
+            writer.writerow(
+                {
+                    "method": point.method,
+                    "run": point.run,
+                    "helpful_loss": point.helpful_loss,
+                    "harmless_loss": point.harmless_loss,
+                    "lambda_helpful": point.lambda_helpful,
+                    "lambda_harmless": point.lambda_harmless,
+                    "scalarized_loss": scalarized_loss(point),
+                    "objective_gradient_evals": point.objective_gradient_evals,
+                    "outer": point.outer,
+                    "source": point.source,
+                }
+            )
+    return path
+
+
 def setup_axes(ax, title: Optional[str] = None) -> None:
     if title:
         ax.set_title(title)
@@ -557,6 +742,11 @@ def nondominated_points(points: Sequence[ParetoPoint]) -> List[ParetoPoint]:
     return keep
 
 
+def objective_ordered_path(points: Sequence[ParetoPoint]) -> List[ParetoPoint]:
+    """Order plotted representatives into a readable objective-space path."""
+    return sorted(points, key=lambda point: (point.helpful_loss, point.harmless_loss))
+
+
 def lambda_color_values(points: Sequence[ParetoPoint]) -> np.ndarray:
     return np.asarray(
         [
@@ -579,6 +769,19 @@ def lambda_key(point: ParetoPoint, decimals: int) -> Optional[Tuple[float, float
         round(float(point.lambda_helpful), decimals),
         round(float(lambda_harmless), decimals),
     )
+
+
+def format_lambda_label(value: float) -> str:
+    """Format lambda labels without hiding near-endpoint SURF weights."""
+    value = min(max(float(value), 0.0), 1.0)
+    if np.isclose(value, 0.0) or np.isclose(value, 1.0):
+        return f"{value:.1f}"
+    edge_distance = min(value, 1.0 - value)
+    if edge_distance < 0.01:
+        return f"{value:.3f}"
+    if edge_distance < 0.1:
+        return f"{value:.2f}"
+    return f"{value:.1f}"
 
 
 def scalarized_loss(point: ParetoPoint) -> float:
@@ -605,11 +808,12 @@ def best_observed_per_lambda(
     objective. From logs we only know evaluated candidates, so the plotting
     representative is the lowest observed lambda-weighted DPO loss.
     """
-    best: Dict[Tuple[float, float], ParetoPoint] = {}
+    best: Dict[Tuple[str, float, float], ParetoPoint] = {}
     for point in points:
         key = lambda_key(point, decimals)
         if key is None:
             continue
+        key = (point.method, *key)
         incumbent = best.get(key)
         if incumbent is None or scalarized_loss(point) < scalarized_loss(incumbent):
             best[key] = point
@@ -706,60 +910,69 @@ def plot_pareto_front(
             zorder=3,
         )
         frontier = nondominated_points(dpo_representatives)
-        ax.plot(
-            [point.helpful_loss for point in frontier],
-            [point.harmless_loss for point in frontier],
-            color="#4C78A8",
-            alpha=0.85,
-            linewidth=1.8,
-            label="Uniform DPO-LW frontier",
-            zorder=2,
-        )
+        if len(frontier) >= 2:
+            ax.plot(
+                [point.helpful_loss for point in frontier],
+                [point.harmless_loss for point in frontier],
+                color="#4C78A8",
+                alpha=0.9,
+                linewidth=2.3,
+                marker="s",
+                markersize=3.6,
+                label="Uniform DPO-LW frontier",
+                zorder=5,
+            )
         if annotate:
             for point in frontier:
                 if point.lambda_helpful is None:
                     continue
                 ax.annotate(
-                    f"{point.lambda_helpful:.1f}",
+                    format_lambda_label(point.lambda_helpful),
                     (point.helpful_loss, point.harmless_loss),
                     textcoords="offset points",
                     xytext=(4, 4),
                     fontsize=8,
                 )
 
-    if adaptive_representatives:
+    adaptive_markers = ["o", "^", "P", "X", "v", "*"]
+    for method_idx, (method, method_points) in enumerate(group_points_by_method(adaptive_representatives).items()):
+        marker = adaptive_markers[method_idx % len(adaptive_markers)]
+        line_color = ADAPTIVE_METHOD_COLORS[method_idx % len(ADAPTIVE_METHOD_COLORS)]
         scatter_lambda_points(
             ax,
-            adaptive_representatives,
-            marker="o",
-            label="Adaptive bundle best per lambda",
+            method_points,
+            marker=marker,
+            label=f"{method} best per lambda",
             alpha=0.9,
             size=60,
             cmap=cmap,
             norm=norm,
-            zorder=4,
+            zorder=4 + method_idx,
         )
-        frontier = nondominated_points(adaptive_representatives)
-        ax.plot(
-            [point.helpful_loss for point in frontier],
-            [point.harmless_loss for point in frontier],
-            color="#F58518",
-            alpha=0.85,
-            linewidth=1.8,
-            label="Adaptive bundle frontier",
-            zorder=2,
-        )
+        frontier = nondominated_points(method_points)
+        if len(frontier) >= 2:
+            ax.plot(
+                [point.helpful_loss for point in frontier],
+                [point.harmless_loss for point in frontier],
+                color=line_color,
+                alpha=0.9,
+                linewidth=2.3,
+                marker=marker,
+                markersize=3.6,
+                label=f"{method} frontier",
+                zorder=5 + method_idx,
+            )
         if annotate:
             for point in frontier:
                 if point.lambda_helpful is None:
                     continue
                 ax.annotate(
-                    f"{point.lambda_helpful:.1f}",
+                    format_lambda_label(point.lambda_helpful),
                     (point.helpful_loss, point.harmless_loss),
                     textcoords="offset points",
-                    xytext=(4, -9),
+                    xytext=(4, -9 - 3 * method_idx),
                     fontsize=8,
-                    color="#B85C00",
+                    color=line_color,
                 )
 
     if initials:
@@ -796,16 +1009,160 @@ def plot_pareto_front(
     return path
 
 
+def publication_pareto_style(method: str) -> Dict[str, object]:
+    """Use the same method encoding across GN and DPO-loss paper figures."""
+    normalized = method.lower()
+    if normalized in {"dpo-lw", "uniform dpo-lw"} or "uniform" in normalized:
+        return {"color": "#1F77B4", "marker": "s", "linestyle": "--"}
+    if "surf" in normalized:
+        return {"color": "#D62728", "marker": "^", "linestyle": "--"}
+    return {"color": "#FF7F0E", "marker": "o", "linestyle": "-"}
+
+
+def publication_method_label(method: str) -> str:
+    return "Uniform DPO-LW" if method == "DPO-LW" else method
+
+
+def sparse_frontier_annotations(points: Sequence[ParetoPoint]) -> List[ParetoPoint]:
+    """Keep at most five well-spaced lambda labels for a readable paper plot."""
+    with_lambda = [point for point in points if point.lambda_helpful is not None]
+    if len(with_lambda) <= 5:
+        return with_lambda
+    indices = np.linspace(0, len(with_lambda) - 1, num=5, dtype=int)
+    selected: List[ParetoPoint] = []
+    seen = set()
+    for index in indices:
+        point = with_lambda[int(index)]
+        key = round(float(point.lambda_helpful), 3)
+        if key not in seen:
+            selected.append(point)
+            seen.add(key)
+    return selected
+
+
+def plot_publication_pareto_front(
+    dpo_points: Sequence[ParetoPoint],
+    adaptive_points: Sequence[ParetoPoint],
+    output_dir: Path,
+    *,
+    annotate: bool,
+    lambda_round_decimals: int,
+) -> Optional[Path]:
+    """Save a compact, method-first DPO-loss Pareto figure for the paper."""
+    if not dpo_points and not adaptive_points:
+        return None
+
+    grouped: Dict[str, List[ParetoPoint]] = {}
+    if dpo_points:
+        grouped["Uniform DPO-LW"] = best_observed_per_lambda(
+            dpo_points, lambda_round_decimals
+        )
+    for method, method_points in group_points_by_method(adaptive_points).items():
+        grouped[method] = best_observed_per_lambda(method_points, lambda_round_decimals)
+
+    fig, ax = plt.subplots(figsize=(7.0, 5.2), dpi=240)
+    legend_handles = []
+    legend_labels = []
+    for method, representatives in grouped.items():
+        if not representatives:
+            continue
+        style = publication_pareto_style(method)
+        xs = [point.helpful_loss for point in representatives]
+        ys = [point.harmless_loss for point in representatives]
+        # Keep every representative visible as context without competing with the frontier.
+        ax.scatter(
+            xs,
+            ys,
+            s=28,
+            marker=style["marker"],
+            color=style["color"],
+            alpha=0.20,
+            linewidths=0,
+            zorder=1,
+        )
+        frontier = nondominated_points(representatives)
+        if not frontier:
+            continue
+        (line,) = ax.plot(
+            [point.helpful_loss for point in frontier],
+            [point.harmless_loss for point in frontier],
+            color=style["color"],
+            linestyle=style["linestyle"],
+            linewidth=2.35,
+            marker=style["marker"],
+            markersize=6.2,
+            markeredgecolor="white",
+            markeredgewidth=0.65,
+            label=publication_method_label(method),
+            zorder=3,
+        )
+        legend_handles.append(line)
+        legend_labels.append(publication_method_label(method))
+        if annotate:
+            for point in sparse_frontier_annotations(frontier):
+                ax.annotate(
+                    format_lambda_label(float(point.lambda_helpful)),
+                    (point.helpful_loss, point.harmless_loss),
+                    textcoords="offset points",
+                    xytext=(4, 5),
+                    fontsize=8,
+                    color=style["color"],
+                )
+
+    initials = initial_points([*dpo_points, *adaptive_points])
+    unique_initials = []
+    seen_initials = set()
+    for point in initials:
+        key = (round(point.helpful_loss, 8), round(point.harmless_loss, 8))
+        if key not in seen_initials:
+            unique_initials.append(point)
+            seen_initials.add(key)
+    if unique_initials:
+        initial_handle = ax.scatter(
+            [point.helpful_loss for point in unique_initials],
+            [point.harmless_loss for point in unique_initials],
+            marker="D",
+            s=54,
+            facecolor="#9A9A9A",
+            edgecolor="white",
+            linewidth=0.6,
+            label="SFT initialization",
+            zorder=4,
+        )
+        legend_handles.append(initial_handle)
+        legend_labels.append("SFT initialization")
+
+    ax.set_xlabel("Helpful DPO loss (lower is better)", fontsize=11)
+    ax.set_ylabel("Harmless DPO loss (lower is better)", fontsize=11)
+    ax.grid(True, alpha=0.28, linewidth=0.7)
+    ax.tick_params(axis="both", labelsize=10)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    if legend_handles:
+        ax.legend(
+            legend_handles,
+            legend_labels,
+            loc="upper right",
+            frameon=False,
+            fontsize=9,
+        )
+    fig.tight_layout()
+    path = output_dir / "pareto_front_publication.png"
+    fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
 def group_points_by_lambda(
     points: Sequence[ParetoPoint],
     decimals: int,
-) -> Dict[Tuple[float, float], List[ParetoPoint]]:
-    groups: Dict[Tuple[float, float], List[ParetoPoint]] = {}
+) -> Dict[Tuple[str, float, float], List[ParetoPoint]]:
+    groups: Dict[Tuple[str, float, float], List[ParetoPoint]] = {}
     for point in points:
         key = lambda_key(point, decimals)
         if key is None:
             continue
-        groups.setdefault(key, []).append(point)
+        groups.setdefault((point.method, *key), []).append(point)
     for group in groups.values():
         group.sort(
             key=lambda point: (
@@ -835,11 +1192,11 @@ def plot_adaptive_lambda_trajectories(
     ax.set_xlabel("Helpful DPO loss (lower is better)")
     ax.set_ylabel("Harmless DPO loss (lower is better)")
 
-    for (lambda_helpful, lambda_harmless), group in sorted(groups.items()):
+    for (method, lambda_helpful, lambda_harmless), group in sorted(groups.items()):
         color = cmap(norm(lambda_helpful))
         xs = [point.helpful_loss for point in group]
         ys = [point.harmless_loss for point in group]
-        label = f"lambda=({lambda_helpful:g},{lambda_harmless:g})"
+        label = f"{method} lambda=({lambda_helpful:g},{lambda_harmless:g})"
         if len(group) > 1:
             ax.plot(
                 xs,
@@ -939,7 +1296,10 @@ def plot_uniform_lambda_trajectories(
         xs = helpful_smoothed[:length]
         ys = harmless_smoothed[:length]
         color = cmap(norm(float(lambda_helpful)))
-        label = f"lambda=({lambda_helpful:.1f},{lambda_harmless:.1f})"
+        label = (
+            f"lambda=({format_lambda_label(lambda_helpful)},"
+            f"{format_lambda_label(lambda_harmless)})"
+        )
         ax.plot(
             xs,
             ys,
@@ -964,7 +1324,7 @@ def plot_uniform_lambda_trajectories(
         )
         if annotate:
             ax.annotate(
-                f"{lambda_helpful:.1f}",
+                format_lambda_label(lambda_helpful),
                 (xs[-1], ys[-1]),
                 textcoords="offset points",
                 xytext=(4, 4),
@@ -992,15 +1352,31 @@ def plot_lambda_path(lambda_rows: Sequence[Dict], output_dir: Path) -> Optional[
     if not lambda_rows:
         return None
 
-    rows = sorted(lambda_rows, key=lambda row: row["outer"])
-    outer = np.asarray([row["outer"] for row in rows], dtype=np.int64)
-    helpful = np.asarray([row["lambda_helpful"] for row in rows], dtype=np.float64)
-    harmless = np.asarray([row["lambda_harmless"] for row in rows], dtype=np.float64)
-
     fig, ax = plt.subplots(figsize=(7.2, 4.4), dpi=180)
     setup_axes(ax, "Adaptive bundle lambda path")
-    ax.plot(outer, helpful, marker="o", linewidth=1.8, label="lambda_helpful")
-    ax.plot(outer, harmless, marker="s", linewidth=1.8, label="lambda_harmless")
+    for method_idx, (method, method_rows) in enumerate(group_rows_by_method(lambda_rows).items()):
+        color = ADAPTIVE_METHOD_COLORS[method_idx % len(ADAPTIVE_METHOD_COLORS)]
+        rows = sorted(method_rows, key=lambda row: row["outer"])
+        outer = np.asarray([row["outer"] for row in rows], dtype=np.int64)
+        helpful = np.asarray([row["lambda_helpful"] for row in rows], dtype=np.float64)
+        harmless = np.asarray([row["lambda_harmless"] for row in rows], dtype=np.float64)
+        ax.plot(
+            outer,
+            helpful,
+            marker="o",
+            linewidth=1.8,
+            color=color,
+            label=f"{method} lambda_helpful",
+        )
+        ax.plot(
+            outer,
+            harmless,
+            marker="s",
+            linewidth=1.8,
+            linestyle="--",
+            color=color,
+            label=f"{method} lambda_harmless",
+        )
     ax.set_xlabel("Outer iteration")
     ax.set_ylabel("Lambda")
     ax.set_ylim(-0.03, 1.03)
@@ -1037,7 +1413,7 @@ def plot_dpo_training_curves(
         label = (
             curve["run"]
             if lambda_helpful is None
-            else f"lambda_helpful={lambda_helpful:.1f}"
+            else f"lambda_helpful={format_lambda_label(lambda_helpful)}"
         )
 
         for ax, (key, ylabel) in zip(axes, curve_specs):
@@ -1075,6 +1451,8 @@ def plot_adaptive_trace(
     adaptive_points: Sequence[ParetoPoint],
     gn_rows: Sequence[Dict],
     output_dir: Path,
+    *,
+    gn_metric: str = "norm",
 ) -> Optional[Path]:
     if not adaptive_points and not gn_rows:
         return None
@@ -1082,53 +1460,74 @@ def plot_adaptive_trace(
     fig, axes = plt.subplots(2, 1, figsize=(7.5, 6.4), dpi=180, sharex=False)
 
     if adaptive_points:
-        ordered = sorted(
-            adaptive_points,
-            key=lambda point: (
-                budget_x_from_point(point),
-                point.outer if point.outer is not None else 0,
-                point.step if point.step is not None else 0,
-                point.run,
-            ),
-        )
-        x = np.asarray(
-            [
-                budget_x_from_point(point)
-                for point in ordered
-            ],
-            dtype=np.int64,
-        )
-        axes[0].plot(
-            x,
-            [point.helpful_loss for point in ordered],
-            marker="o",
-            linewidth=1.6,
-            label="helpful_loss",
-        )
-        axes[0].plot(
-            x,
-            [point.harmless_loss for point in ordered],
-            marker="s",
-            linewidth=1.6,
-            label="harmless_loss",
-        )
+        for method_idx, (method, method_points) in enumerate(group_points_by_method(adaptive_points).items()):
+            color = ADAPTIVE_METHOD_COLORS[method_idx % len(ADAPTIVE_METHOD_COLORS)]
+            ordered = sorted(
+                method_points,
+                key=lambda point: (
+                    budget_x_from_point(point),
+                    point.outer if point.outer is not None else 0,
+                    point.step if point.step is not None else 0,
+                    point.run,
+                ),
+            )
+            x = np.asarray(
+                [
+                    budget_x_from_point(point)
+                    for point in ordered
+                ],
+                dtype=np.int64,
+            )
+            axes[0].plot(
+                x,
+                [point.helpful_loss for point in ordered],
+                marker="o",
+                linewidth=1.6,
+                color=color,
+                label=f"{method} helpful_loss",
+            )
+            axes[0].plot(
+                x,
+                [point.harmless_loss for point in ordered],
+                marker="s",
+                linewidth=1.6,
+                linestyle="--",
+                color=color,
+                label=f"{method} harmless_loss",
+            )
         axes[0].set_xlabel("Objective gradient evaluations")
         axes[0].set_ylabel("DPO loss")
         axes[0].legend(frameon=False)
     setup_axes(axes[0], "Adaptive bundle objective trace")
 
-    usable_gn = [
-        row
-        for row in gn_rows
-        if row.get("gn_star") is not None and row.get("outer") is not None
-    ]
-    if usable_gn:
+    for method_idx, (method, method_rows) in enumerate(group_rows_by_method(gn_rows).items()):
+        color = ADAPTIVE_METHOD_COLORS[method_idx % len(ADAPTIVE_METHOD_COLORS)]
+        usable_gn = [
+            row
+            for row in method_rows
+            if row.get("gn_star") is not None and row.get("outer") is not None
+            and row.get("phase") != "warm_start"
+        ]
+        if not usable_gn:
+            continue
         parameter_updates = [budget_x_from_row(row) for row in usable_gn]
-        gn_star = [float(row["gn_star"]) for row in usable_gn]
-        axes[1].plot(parameter_updates, gn_star, marker="o", linewidth=1.6, color="#E45756")
+        gn_star = best_so_far([gn_value_from_row(row, gn_metric) for row in usable_gn])
+        axes[1].plot(
+            parameter_updates,
+            gn_star,
+            marker="o",
+            linewidth=1.6,
+            color=color,
+            label=method,
+        )
         axes[1].set_xlabel("Objective gradient evaluations")
-        axes[1].set_ylabel("GN*")
-    setup_axes(axes[1], "GN* over objective gradient evaluations")
+        axes[1].set_ylabel(gn_metric_ylabel(gn_metric))
+    if axes[1].get_legend_handles_labels()[0]:
+        axes[1].legend(frameon=False)
+    setup_axes(
+        axes[1],
+        f"{gn_metric_ylabel(gn_metric)} over objective gradient evaluations",
+    )
 
     fig.tight_layout()
     path = output_dir / "adaptive_training_trace.png"
@@ -1137,48 +1536,173 @@ def plot_adaptive_trace(
     return path
 
 
+def adaptive_checkpoint_gn_rows(rows: Sequence[Dict]) -> List[Dict]:
+    """Approximate MOA-style post-update adaptive GN* checkpoints.
+
+    Adaptive logs store the full worst-case GN* at the start of each outer
+    iteration. Therefore outer t+1 is the first full GN* recomputation after
+    the update performed during outer t. We shift those values back to the
+    previous row's after-update budget.
+    """
+    usable = [
+        row
+        for row in rows
+        if row.get("gn_star") is not None and row.get("phase") != "warm_start"
+    ]
+    usable = sorted(usable, key=budget_x_from_row)
+    if not usable:
+        return []
+    if any(row.get("phase") == "surf_outer_end" or row.get("method") == "SURF" for row in usable):
+        checkpoints = []
+        for row in usable:
+            checkpoint = dict(row)
+            checkpoint["checkpoint_kind"] = "post_surf_outer"
+            checkpoints.append(checkpoint)
+        return checkpoints
+
+    checkpoints: List[Dict] = []
+    first = dict(usable[0])
+    first["checkpoint_kind"] = "initial_before_outer"
+    checkpoints.append(first)
+
+    for prev, current in zip(usable, usable[1:]):
+        shifted = dict(current)
+        shifted["checkpoint_kind"] = "post_previous_outer"
+        shifted["objective_gradient_evals"] = first_present(
+            prev.get("objective_gradient_evals_after"),
+            prev.get("objective_gradient_evals"),
+        )
+        shifted["parameter_updates"] = first_present(
+            prev.get("parameter_updates_after"),
+            prev.get("parameter_updates"),
+        )
+        shifted["elapsed_wall_seconds"] = first_present(
+            prev.get("elapsed_wall_seconds_after"),
+            prev.get("elapsed_wall_seconds"),
+        )
+        checkpoints.append(shifted)
+
+    return checkpoints
+
+
+def gn_series(
+    rows: Sequence[Dict],
+    *,
+    use_elapsed_time: bool,
+    adaptive: bool,
+    gn_metric: str = "norm",
+) -> Tuple[np.ndarray, np.ndarray]:
+    usable = adaptive_checkpoint_gn_rows(rows) if adaptive else [
+        row for row in rows if row.get("gn_star") is not None
+    ]
+    usable = sorted(usable, key=budget_x_from_row)
+    x_values: List[float] = []
+    y_values: List[float] = []
+    for idx, row in enumerate(usable):
+        x_value = elapsed_x_from_row(row) if use_elapsed_time else budget_x_from_row(row, idx + 1)
+        if x_value is None:
+            continue
+        x_values.append(float(x_value))
+        y_values.append(gn_value_from_row(row, gn_metric))
+    if not x_values:
+        return np.asarray([], dtype=np.float64), np.asarray([], dtype=np.float64)
+    order = np.argsort(np.asarray(x_values, dtype=np.float64))
+    x = np.asarray(x_values, dtype=np.float64)[order]
+    y = np.asarray(y_values, dtype=np.float64)[order]
+    return x, best_so_far(y)
+
+
 def plot_gn_star_comparison(
     adaptive_gn_rows: Sequence[Dict],
     uniform_gn_rows: Sequence[Dict],
     output_dir: Path,
+    *,
+    use_elapsed_time: bool = False,
+    log_x: bool = False,
+    relative_time: bool = True,
+    gn_metric: str = "norm",
 ) -> Optional[Path]:
-    adaptive = [
-        row
-        for row in adaptive_gn_rows
-        if row.get("gn_star") is not None
-    ]
-    uniform = [
-        row
-        for row in uniform_gn_rows
-        if row.get("gn_star") is not None
-    ]
-    if not adaptive and not uniform:
+    adaptive_series: List[Tuple[str, np.ndarray, np.ndarray]] = []
+    for method, method_rows in group_rows_by_method(adaptive_gn_rows).items():
+        adaptive_x, adaptive_y = gn_series(
+            method_rows,
+            use_elapsed_time=use_elapsed_time,
+            adaptive=True,
+            gn_metric=gn_metric,
+        )
+        if use_elapsed_time and relative_time:
+            adaptive_x = relative_elapsed_axis(adaptive_x, log_x=log_x)
+        if log_x:
+            adaptive_mask = adaptive_x > 0
+            adaptive_x = adaptive_x[adaptive_mask]
+            adaptive_y = adaptive_y[adaptive_mask]
+        if len(adaptive_x) > 0:
+            adaptive_series.append((method, adaptive_x, adaptive_y))
+
+    uniform_x, uniform_y = gn_series(
+        uniform_gn_rows,
+        use_elapsed_time=use_elapsed_time,
+        adaptive=False,
+        gn_metric=gn_metric,
+    )
+    if use_elapsed_time and relative_time:
+        uniform_x = relative_elapsed_axis(uniform_x, log_x=log_x)
+
+    if log_x:
+        uniform_mask = uniform_x > 0
+        uniform_x = uniform_x[uniform_mask]
+        uniform_y = uniform_y[uniform_mask]
+
+    if not adaptive_series and len(uniform_x) == 0:
         return None
 
     fig, ax = plt.subplots(figsize=(7.2, 4.8), dpi=180)
-    setup_axes(ax, "GN* comparison at matched gradient-eval budget")
-    ax.set_xlabel("Objective gradient evaluations (= parameter updates * K)")
-    ax.set_ylabel("GN*")
-
-    if adaptive:
-        adaptive = sorted(
-            adaptive,
-            key=budget_x_from_row,
+    setup_axes(
+        ax,
+        gn_metric_title(gn_metric, " comparison")
+        if not use_elapsed_time
+        else (
+            gn_metric_title(gn_metric, " vs log elapsed time")
+            if log_x
+            else gn_metric_title(gn_metric, " vs elapsed time")
+        ),
+    )
+    ax.set_xlabel(
+        (
+            (
+                "Relative elapsed wall time (seconds, log scale)"
+                if relative_time
+                else "Elapsed wall time (seconds, log scale)"
+            )
+            if log_x
+            else (
+                "Relative elapsed wall time (seconds)"
+                if relative_time
+                else "Elapsed wall time (seconds)"
+            )
         )
+        if use_elapsed_time
+        else "Objective gradient evaluations (= parameter updates * K)"
+    )
+    ax.set_ylabel(gn_metric_ylabel(gn_metric))
+    if log_x:
+        ax.set_xscale("log")
+
+    for method_idx, (method, adaptive_x, adaptive_y) in enumerate(adaptive_series):
+        color = ADAPTIVE_METHOD_COLORS[method_idx % len(ADAPTIVE_METHOD_COLORS)]
         ax.plot(
-            [budget_x_from_row(row, idx + 1) for idx, row in enumerate(adaptive)],
-            [float(row["gn_star"]) for row in adaptive],
+            adaptive_x,
+            adaptive_y,
             marker="o",
             linewidth=1.8,
-            color="#F58518",
-            label="Adaptive bundle",
+            color=color,
+            label=method,
         )
 
-    if uniform:
-        uniform = sorted(uniform, key=budget_x_from_row)
+    if len(uniform_x) > 0:
         ax.plot(
-            [budget_x_from_row(row) for row in uniform],
-            [float(row["gn_star"]) for row in uniform],
+            uniform_x,
+            uniform_y,
             marker="s",
             linewidth=1.8,
             color="#4C78A8",
@@ -1187,10 +1711,323 @@ def plot_gn_star_comparison(
 
     ax.legend(frameon=False)
     fig.tight_layout()
-    path = output_dir / "gn_star_comparison.png"
+    if use_elapsed_time and log_x:
+        filename = (
+            "gn_star_log_time_comparison.png"
+            if relative_time
+            else "gn_star_log_absolute_time_comparison.png"
+        )
+    elif use_elapsed_time:
+        filename = (
+            "gn_star_time_comparison.png"
+            if relative_time
+            else "gn_star_absolute_time_comparison.png"
+        )
+    else:
+        filename = "gn_star_comparison.png"
+    path = output_dir / filename
     fig.savefig(path)
     plt.close(fig)
     return path
+
+
+def publication_gn_style(method: str, *, uniform: bool) -> Dict[str, object]:
+    """Return a stable, paper-oriented visual style for GN trajectories."""
+    normalized = method.lower()
+    if uniform:
+        return {
+            "color": "#1F77B4",
+            "linestyle": "--",
+            "marker": "s",
+            "markersize": 4.5,
+        }
+    if "surf" in normalized:
+        return {
+            "color": "#D62728",
+            "linestyle": "--",
+            "marker": "^",
+            "markersize": 4.8,
+        }
+    return {
+        "color": "#FF7F0E",
+        "linestyle": "-",
+        "marker": None,
+        "markersize": 0.0,
+    }
+
+
+def plot_publication_gn_comparison(
+    adaptive_gn_rows: Sequence[Dict],
+    uniform_gn_rows: Sequence[Dict],
+    output_dir: Path,
+    *,
+    relative_time: bool,
+    gn_metric: str = "norm",
+) -> Optional[Path]:
+    """Plot the GN trajectories as matched gradient-budget and time panels.
+
+    This is intentionally a visual restyling of the existing three-method
+    comparison, not an r/N sweep: every line retains the checkpoints actually
+    logged by its corresponding run.
+    """
+    series: List[Tuple[str, np.ndarray, np.ndarray, bool]] = []
+    for method, method_rows in group_rows_by_method(adaptive_gn_rows).items():
+        calls_x, y = gn_series(
+            method_rows,
+            use_elapsed_time=False,
+            adaptive=True,
+            gn_metric=gn_metric,
+        )
+        time_x, time_y = gn_series(
+            method_rows,
+            use_elapsed_time=True,
+            adaptive=True,
+            gn_metric=gn_metric,
+        )
+        if relative_time:
+            time_x = relative_elapsed_axis(time_x, log_x=False)
+        if len(calls_x) > 0 and len(time_x) > 0:
+            # Both calls use the same checkpoint rows, so y and time_y agree.
+            series.append((method, calls_x, y, False))
+            series.append((method, time_x, time_y, True))
+
+    uniform_calls_x, uniform_y = gn_series(
+        uniform_gn_rows,
+        use_elapsed_time=False,
+        adaptive=False,
+        gn_metric=gn_metric,
+    )
+    uniform_time_x, uniform_time_y = gn_series(
+        uniform_gn_rows,
+        use_elapsed_time=True,
+        adaptive=False,
+        gn_metric=gn_metric,
+    )
+    if relative_time:
+        uniform_time_x = relative_elapsed_axis(uniform_time_x, log_x=False)
+    if len(uniform_calls_x) > 0 and len(uniform_time_x) > 0:
+        series.append(("Uniform DPO-LW", uniform_calls_x, uniform_y, False))
+        series.append(("Uniform DPO-LW", uniform_time_x, uniform_time_y, True))
+
+    if not series:
+        return None
+
+    fig, axes = plt.subplots(
+        1,
+        2,
+        figsize=(11.2, 4.2),
+        dpi=240,
+        sharey=True,
+        gridspec_kw={"wspace": 0.08},
+    )
+    handles = []
+    labels = []
+    for panel_idx, ax in enumerate(axes):
+        for method, x, y, is_time in series:
+            if is_time != bool(panel_idx):
+                continue
+            style = publication_gn_style(method, uniform=method == "Uniform DPO-LW")
+            (line,) = ax.plot(
+                x,
+                y,
+                linewidth=2.0 if method == "Uniform DPO-LW" else 2.3,
+                markeredgecolor="white" if style["marker"] else None,
+                markeredgewidth=0.65 if style["marker"] else 0.0,
+                **style,
+                label=method,
+            )
+            if panel_idx == 0 and method not in labels:
+                handles.append(line)
+                labels.append(method)
+
+        ax.set_yscale("log")
+        ax.grid(True, which="major", alpha=0.28, linewidth=0.7)
+        ax.grid(False, which="minor")
+        ax.tick_params(axis="both", labelsize=10)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.set_xlabel(
+            "Objective gradient evaluations"
+            if panel_idx == 0
+            else (
+                "Relative wall-clock time (s)"
+                if relative_time
+                else "Wall-clock time (s)"
+            ),
+            fontsize=11,
+        )
+
+    axes[0].set_ylabel(gn_metric_ylabel(gn_metric), fontsize=11)
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        ncol=max(1, len(labels)),
+        frameon=False,
+        fontsize=11,
+        bbox_to_anchor=(0.5, 1.03),
+        handlelength=2.6,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.91))
+    path = output_dir / "gn_publication_comparison.png"
+    fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def epsilon_value_from_run_name(name: str) -> Optional[float]:
+    match = re.search(r"eps_([^_]+)", name)
+    if match is None:
+        return None
+    token = match.group(1)
+    try:
+        if "em" in token:
+            base, exponent = token.split("em", 1)
+            return float(base.replace("p", ".")) * (10 ** (-int(exponent)))
+        return float(token.replace("p", "."))
+    except ValueError:
+        return None
+
+
+def collect_latest_epsilon_runs(root: Path, run_glob: str) -> List[Tuple[float, Path]]:
+    latest_by_epsilon: Dict[float, Path] = {}
+    for history_path in root.glob(f"{run_glob}/adaptive_history.jsonl"):
+        run_dir = history_path.parent
+        epsilon = epsilon_value_from_run_name(run_dir.name)
+        if epsilon is None:
+            continue
+        previous = latest_by_epsilon.get(epsilon)
+        if previous is None or run_dir.stat().st_mtime > previous.stat().st_mtime:
+            latest_by_epsilon[epsilon] = run_dir
+    return sorted(latest_by_epsilon.items(), key=lambda item: item[0])
+
+
+def final_update_count(gn_rows: Sequence[Dict]) -> int:
+    if not gn_rows:
+        return 0
+    last = gn_rows[-1]
+    return int(first_present(
+        last.get("parameter_updates_after"),
+        last.get("parameter_updates"),
+        0,
+    ))
+
+
+def plot_epsilon_bundle_sweep(
+    adaptive_root: Path,
+    output_dir: Path,
+    *,
+    run_glob: str,
+    gn_metric: str = "norm",
+) -> List[Path]:
+    epsilon_runs = collect_latest_epsilon_runs(adaptive_root, run_glob)
+    if not epsilon_runs:
+        raise SystemExit(
+            f"No epsilon adaptive runs found under {adaptive_root} with glob {run_glob!r}."
+        )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    loaded: List[Tuple[float, Path, List[Dict]]] = []
+    for epsilon, run_dir in epsilon_runs:
+        _, _, gn_rows = load_adaptive_run(run_dir)
+        if gn_rows:
+            loaded.append((epsilon, run_dir, gn_rows))
+    if not loaded:
+        raise SystemExit("Found epsilon runs, but none had usable adaptive GN* rows.")
+
+    summary_path = output_dir / "epsilon_sweep_bundle_summary.csv"
+    with summary_path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow([
+            "epsilon",
+            "adaptive_run",
+            "updates",
+            "objective_gradient_evals",
+            "best_gradient_norm" if gn_metric == "norm" else "best_gn_star",
+        ])
+        for epsilon, run_dir, gn_rows in loaded:
+            _, y_eval = gn_series(
+                gn_rows,
+                use_elapsed_time=False,
+                adaptive=True,
+                gn_metric=gn_metric,
+            )
+            updates = final_update_count(gn_rows)
+            writer.writerow([
+                epsilon,
+                run_dir.name,
+                updates,
+                2 * updates,
+                float(y_eval[-1]) if len(y_eval) else "",
+            ])
+
+    def _plot(*, use_elapsed_time: bool, log_x: bool, filename: str) -> Optional[Path]:
+        fig, ax = plt.subplots(figsize=(9.6, 5.8), dpi=180)
+        setup_axes(ax, f"Adaptive bundle epsilon sweep ({gn_metric_ylabel(gn_metric)})")
+        colors = plt.cm.tab10(np.linspace(0, 1, max(1, len(loaded))))
+
+        plotted = False
+        for (epsilon, _run_dir, gn_rows), color in zip(loaded, colors):
+            x, y = gn_series(
+                gn_rows,
+                use_elapsed_time=use_elapsed_time,
+                adaptive=True,
+                gn_metric=gn_metric,
+            )
+            if use_elapsed_time:
+                x = relative_elapsed_axis(x, log_x=log_x)
+            if log_x:
+                mask = x > 0
+                x = x[mask]
+                y = y[mask]
+            if len(x) == 0:
+                continue
+            ax.plot(
+                x,
+                y,
+                marker="o",
+                linewidth=1.9,
+                markersize=4.8,
+                color=color,
+                label=f"epsilon={epsilon:g}",
+            )
+            plotted = True
+
+        if not plotted:
+            plt.close(fig)
+            return None
+
+        if log_x:
+            ax.set_xscale("log")
+            ax.set_xlabel("Relative elapsed wall time (seconds, log scale)")
+        elif use_elapsed_time:
+            ax.set_xlabel("Relative elapsed wall time (seconds)")
+        else:
+            ax.set_xlabel("Objective gradient evaluations (= parameter updates * K)")
+        ax.set_ylabel(gn_metric_ylabel(gn_metric))
+        ax.legend(frameon=False)
+        fig.tight_layout()
+        path = output_dir / filename
+        fig.savefig(path)
+        plt.close(fig)
+        return path
+
+    saved_paths: List[Path] = [summary_path]
+    for path in [
+        _plot(
+            use_elapsed_time=False,
+            log_x=False,
+            filename="epsilon_sweep_bundle_by_gradient_evals.png",
+        ),
+        _plot(
+            use_elapsed_time=True,
+            log_x=True,
+            filename="epsilon_sweep_bundle_by_log_time.png",
+        ),
+    ]:
+        if path is not None:
+            saved_paths.append(path)
+    return saved_paths
 
 
 def parse_args() -> argparse.Namespace:
@@ -1199,7 +2036,33 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dpo_lw_dir", type=Path, default=Path(DEFAULT_DPO_LW_DIR))
     parser.add_argument("--adaptive_dir", type=Path, default=Path(DEFAULT_ADAPTIVE_DIR))
+    parser.add_argument(
+        "--adaptive_run",
+        nargs=2,
+        action="append",
+        metavar=("DIR", "LABEL"),
+        default=None,
+        help=(
+            "Adaptive output directory and plot label. Can be repeated to compare "
+            "multiple adaptive solvers. When set, --adaptive_dir is ignored."
+        ),
+    )
     parser.add_argument("--output_dir", type=Path, default=Path(DEFAULT_OUTPUT_DIR))
+    parser.add_argument(
+        "--epsilon_adaptive_root",
+        type=Path,
+        default=None,
+        help=(
+            "If set, scan epsilon adaptive bundle runs under this root and plot "
+            "bundle-only epsilon sweep curves."
+        ),
+    )
+    parser.add_argument(
+        "--epsilon_run_glob",
+        type=str,
+        default="eps_*outer*_inner*",
+        help="Directory glob, relative to --epsilon_adaptive_root, for epsilon runs.",
+    )
     parser.add_argument(
         "--tail_window",
         type=int,
@@ -1223,6 +2086,39 @@ def parse_args() -> argparse.Namespace:
         default=4,
         help="Round lambdas to this many decimals when grouping candidates.",
     )
+    parser.add_argument(
+        "--absolute_elapsed_time",
+        action="store_true",
+        help=(
+            "Plot elapsed-time GN* curves on the raw wall-clock axis instead of "
+            "shifting each method to start at zero."
+        ),
+    )
+    parser.add_argument(
+        "--publication_gn",
+        action="store_true",
+        help=(
+            "Additionally save a two-panel, publication-style GN comparison "
+            "(gradient evaluations and elapsed time)."
+        ),
+    )
+    parser.add_argument(
+        "--publication_pareto",
+        action="store_true",
+        help=(
+            "Additionally save a compact, publication-style DPO-loss Pareto figure "
+            "with muted checkpoint clouds and prominent nondominated frontiers."
+        ),
+    )
+    parser.add_argument(
+        "--gn_metric",
+        choices=("norm", "squared"),
+        default="norm",
+        help=(
+            "Scale used for GN plots. Logs store squared gradient norms; "
+            "`norm` plots sqrt(GN*) and `squared` reproduces the old plots."
+        ),
+    )
     parser.add_argument("--title", type=str, default=None)
     return parser.parse_args()
 
@@ -1231,10 +2127,40 @@ def main() -> None:
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
+    if args.epsilon_adaptive_root is not None:
+        saved_paths = plot_epsilon_bundle_sweep(
+            args.epsilon_adaptive_root,
+            args.output_dir,
+            run_glob=args.epsilon_run_glob,
+            gn_metric=args.gn_metric,
+        )
+        print("Saved epsilon bundle sweep plots:")
+        for path in saved_paths:
+            print(f"  {path}")
+        return
+
     logged_dpo_points, dpo_curves = load_dpo_lw_runs(args.dpo_lw_dir, args.tail_window)
     uniform_oracle_points, uniform_gn_rows = load_uniform_gn_run(args.dpo_lw_dir)
     dpo_points = uniform_oracle_points if uniform_oracle_points else logged_dpo_points
-    adaptive_points, lambda_rows, adaptive_gn_rows = load_adaptive_run(args.adaptive_dir)
+    if args.adaptive_run:
+        adaptive_specs = [
+            (Path(run_dir), label)
+            for run_dir, label in args.adaptive_run
+        ]
+    else:
+        adaptive_specs = [(args.adaptive_dir, "Adaptive bundle")]
+
+    adaptive_points: List[ParetoPoint] = []
+    lambda_rows: List[Dict] = []
+    adaptive_gn_rows: List[Dict] = []
+    loaded_adaptive_labels: List[str] = []
+    for adaptive_dir, label in adaptive_specs:
+        run_points, run_lambda_rows, run_gn_rows = load_adaptive_run(adaptive_dir, label)
+        adaptive_points.extend(run_points)
+        lambda_rows.extend(run_lambda_rows)
+        adaptive_gn_rows.extend(run_gn_rows)
+        if run_points or run_lambda_rows or run_gn_rows:
+            loaded_adaptive_labels.append(label)
     all_points = [*dpo_points, *adaptive_points]
 
     saved_paths: List[Path] = []
@@ -1247,6 +2173,13 @@ def main() -> None:
         args.lambda_round_decimals,
     )
     saved_paths.append(representatives_path)
+    frontiers_path = save_frontiers(
+        dpo_points,
+        adaptive_points,
+        args.output_dir,
+        args.lambda_round_decimals,
+    )
+    saved_paths.append(frontiers_path)
 
     for path in [
         plot_pareto_front(
@@ -1256,6 +2189,19 @@ def main() -> None:
             args.title,
             args.annotate,
             args.lambda_round_decimals,
+        ),
+        *(
+            [
+                plot_publication_pareto_front(
+                    dpo_points,
+                    adaptive_points,
+                    args.output_dir,
+                    annotate=args.annotate,
+                    lambda_round_decimals=args.lambda_round_decimals,
+                )
+            ]
+            if args.publication_pareto
+            else []
         ),
         plot_adaptive_lambda_trajectories(
             adaptive_points,
@@ -1271,22 +2217,72 @@ def main() -> None:
         ),
         plot_lambda_path(lambda_rows, args.output_dir),
         plot_dpo_training_curves(dpo_curves, args.output_dir, args.smooth_window),
-        plot_adaptive_trace(adaptive_points, adaptive_gn_rows, args.output_dir),
-        plot_gn_star_comparison(adaptive_gn_rows, uniform_gn_rows, args.output_dir),
+        plot_adaptive_trace(
+            adaptive_points,
+            adaptive_gn_rows,
+            args.output_dir,
+            gn_metric=args.gn_metric,
+        ),
+        plot_gn_star_comparison(
+            adaptive_gn_rows,
+            uniform_gn_rows,
+            args.output_dir,
+            gn_metric=args.gn_metric,
+        ),
+        plot_gn_star_comparison(
+            adaptive_gn_rows,
+            uniform_gn_rows,
+            args.output_dir,
+            use_elapsed_time=True,
+            relative_time=not args.absolute_elapsed_time,
+            gn_metric=args.gn_metric,
+        ),
+        plot_gn_star_comparison(
+            adaptive_gn_rows,
+            uniform_gn_rows,
+            args.output_dir,
+            use_elapsed_time=True,
+            log_x=True,
+            relative_time=not args.absolute_elapsed_time,
+            gn_metric=args.gn_metric,
+        ),
+        *(
+            [
+                plot_publication_gn_comparison(
+                    adaptive_gn_rows,
+                    uniform_gn_rows,
+                    args.output_dir,
+                    relative_time=not args.absolute_elapsed_time,
+                    gn_metric=args.gn_metric,
+                )
+            ]
+            if args.publication_gn
+            else []
+        ),
     ]:
         if path is not None:
             saved_paths.append(path)
 
     if not all_points:
+        adaptive_hint = (
+            ", ".join(f"{label}={path}" for path, label in adaptive_specs)
+            if adaptive_specs
+            else str(args.adaptive_dir)
+        )
         print(
             "No Pareto points found. Expected DPO-LW logs under "
-            f"{args.dpo_lw_dir} or adaptive logs under {args.adaptive_dir}."
+            f"{args.dpo_lw_dir} or adaptive logs under {adaptive_hint}."
         )
     else:
         dpo_source = "fixed-oracle" if uniform_oracle_points else "logged-tail"
+        adaptive_label_text = (
+            ", ".join(loaded_adaptive_labels)
+            if loaded_adaptive_labels
+            else "none"
+        )
         print(
             f"Loaded {len(dpo_points)} DPO-LW points ({dpo_source}) "
-            f"and {len(adaptive_points)} adaptive points."
+            f"and {len(adaptive_points)} adaptive points ({adaptive_label_text})."
         )
 
     print("Saved:")
