@@ -62,7 +62,7 @@ def main_table(res):
         if K == 3:
             lines.append("\\midrule")
         lines.append(f"\\multicolumn{{3}}{{l}}{{\\emph{{MNIST $\\{{{digits}\\}}$, $K={K}$}}}} \\\\")
-        lines.append(f"Adaptive Bundle Method & {sci(ad)} & -- \\\\")
+        lines.append(f"Grab & {sci(ad)} & -- \\\\")
         for fam, p in C.BEST[K].items():
             y = stats[(fam, p)]["y_geomean"]
             label = f"Unif Discrtztn ($r={p}$)" if fam == "uniform" else f"SURF ($N={p}$)"
