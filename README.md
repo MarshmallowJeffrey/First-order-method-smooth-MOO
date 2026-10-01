@@ -47,7 +47,7 @@ that the numbers quoted in the paper follow from `results/`.
 | paper | file |
 |---|---|
 | Figure: worst-case gradient norm, {4,9} and {4,7,9} | `figures/mnist_worst_gn_k2.pdf`, `figures/mnist_worst_gn_k3.pdf` |
-| Figure: linear scalarization fronts | `figures/mnist_front_k2.pdf`, `figures/mnist_front_k3.pdf` |
+| Figure: linear scalarization fronts, {4,9} and {4,7,9} | `figures/mnist_fronts.pdf` |
 | Table: best configuration of each baseline | `tables/mnist_main.tex` |
 | Appendix: screening of pairs and triples | `tables/screening_pairs.tex`, `tables/screening_triples.tex` |
 | Appendix: step rules (table and figure) | `tables/step_rules_k2.tex`, `figures/mnist_step_rules_k2.pdf` |
