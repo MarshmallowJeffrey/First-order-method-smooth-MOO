@@ -1,0 +1,38 @@
+{
+  "experiment": "plateau",
+  "smoke": false,
+  "configs": [
+    {
+      "tag": "K3_p6_n30_h4_tanh_r6_B30000",
+      "d": 43,
+      "plateau_ratio_baseline_over_adaptive": null,
+      "cpu_ratio_baseline_over_adaptive": 0.158346215069301,
+      "grad_ratio_baseline_over_adaptive": 8.333333333333334,
+      "L_scale_final": 2.0
+    },
+    {
+      "tag": "K4_p6_n30_h4_tanh_r6_B30000",
+      "d": 48,
+      "plateau_ratio_baseline_over_adaptive": null,
+      "cpu_ratio_baseline_over_adaptive": 0.13139491713142956,
+      "grad_ratio_baseline_over_adaptive": 7.0,
+      "L_scale_final": 8.0
+    },
+    {
+      "tag": "K5_p6_n30_h4_tanh_r6_B30000",
+      "d": 53,
+      "plateau_ratio_baseline_over_adaptive": null,
+      "cpu_ratio_baseline_over_adaptive": 0.007578338189896239,
+      "grad_ratio_baseline_over_adaptive": 0.48,
+      "L_scale_final": 4.0
+    },
+    {
+      "tag": "K6_p6_n30_h4_tanh_r6_B30000",
+      "d": 58,
+      "plateau_ratio_baseline_over_adaptive": null,
+      "cpu_ratio_baseline_over_adaptive": 0.004532748829479914,
+      "grad_ratio_baseline_over_adaptive": 0.4166666666666667,
+      "L_scale_final": 4.0
+    }
+  ]
+}

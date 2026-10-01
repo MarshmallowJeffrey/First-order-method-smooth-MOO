@@ -1,0 +1,958 @@
+A First-Order Bundle Method for Smooth Non-convex
+           Multi-objective Optimization
+
+
+                        Paul Grigas                              Jiahui (Jeffrey) Cheng
+             University of California, Berkeley              University of California, Berkeley
+                   Berkeley, CA 94720                              Berkeley, CA 94720
+                pgrigas@berkeley.edu                         jeffrey_cheng@berkeley.edu
+
+                      Rongchuan Shi                                       Hua Ye
+             University of California, Berkeley              University of California, Berkeley
+                   Berkeley, CA 94720                              Berkeley, CA 94720
+               rongchuan@berkeley.edu                            hua01@berkeley.edu
+
+                                              Cheng Zeng
+                                    University of California, Berkeley
+                                          Berkeley, CA 94720
+                                     cheng_zeng@berkeley.edu
+
+
+
+                                                  Abstract
+
+            Multi-objective optimization underlies many machine learning problems, from
+            multi-task learning to LLM safety/alignment. A standard approach scalarizes the
+            objectives via a weight vector in the unit simplex, but in practice the right weights
+            are rarely known, motivating methods that approximate solutions uniformly across
+            all possible weights. Existing approaches either return a single Pareto-stationary
+            point or discretize the simplex and solve each scalarized problem independently,
+            discarding valuable information that could be reused across weights.
+            We introduce a first-order bundle method that systematically reuses zeroth- and
+            first-order information across weight vectors. The algorithm maintains a bundle
+            of previously computed gradients and function values, from which it constructs
+            a progress criterion certifying solution quality uniformly over the simplex, and
+            adaptively refines the bundle where progress is largest. We establish iteration and
+            oracle complexity bounds under non-convexity — the regime that directly capture
+            common machine learning training settings. We further demonstrate the advantage
+            of our method over the uniform discretization method as the baseline on LLM
+            safety/alignment benchmarks.
+
+
+1    Introduction
+
+Many problems in machine learning involve the simultaneous optimization of multiple objective
+functions. In physics-informed neural networks (PINNs) training, multiple loss terms induced by
+PDE residuals and boundary or initial conditions must be optimized simultaneously. In multi-task
+learning, a shared model must perform well across several tasks at once, each with its own loss
+function [R97]. In multi-class classification, the per-class losses define a collection of objectives that
+must be jointly minimized to achieve good predictive performance across all classes [Bis06]. These
+settings—and others such as hyperparameter optimization, federated learning, and fairness-aware
+training—give rise to the multi-objective optimization (MOO) problem.
+
+Preprint.
+A common approach to MOO is linear scalarization: given K objective functions F1 , . . . , FK , one
+                                           PK
+forms the weighted combination Fλ (x) := k=1 λk Fk (x) for a weight vector λ in the unit simplex
+∆K , and minimizes Fλ using standard first-order methods. For a single, fixed λ, this reduces to a
+well-understood scalar optimization problem. However, in many settings, such as multi-task learning,
+the weights need to be assigned manually at prior, and the overall performance depends heavily
+on the assigned weights. One potential resolution is to find good solutions for all weight vectors
+λ ∈ ∆K —that is, to approximate the entire Pareto front. This raises the true challenge of MOO,
+requiring solving a continuum of optimization problems, one for each λ, which is computationally
+prohibitive.
+In this paper, we introduce a first-order bundle method for smooth multi-objective optimization that
+addresses this gap. The central idea is to maintain a bundle—a collection of previously computed
+zeroth-order and first-order information at a set of iterates—and to construct from this bundle a
+progress criterion that certifies solution quality uniformly over all λ ∈ ∆K .
+
+1.1   Our Methods and Contributions
+      1. We introduce a general algorithmic framework (Section 4) for bundle-based smooth MOO,
+         which iteratively selects the weight vector λ with the largest progress criterion and refines the
+         bundle at that weight. We present both algorithm iteration complexity and oracle complexity
+         results (Theorem ??).
+      2. We provide a concrete instantiation of the framework under smoothness and various convex-
+         ity assumptions (Example 1,2), deriving closed-form expressions for the progress criteria
+         that are efficiently computable from the bundle.
+      3. We demonstrate the effectiveness of our method on multi-class logistic regression and
+         multi-class cross-entropy loss minimization, as well as multi-task learning benchmarks,
+         showing that the bundle method efficiently traces the Pareto front while reusing gradient
+         information across weight vectors.
+
+1.2   Related Work
+
+Existing approaches address this challenge from different angles. Methods such as the Multiple
+Gradient Descent Algorithm (MGDA) [Dés12] and its variants [SK18, LLJ+ 21, NSA+ 22] seek a
+single Pareto-stationary point by combining task gradients, but they do not characterize the full
+Pareto front. Grid-based scalarization methods [SK18] discretize ∆K and solve each subproblem
+independently, but this is wasteful: gradient information computed at one weight vector is discarded
+when solving for another. Neither approach provides a principled mechanism for reusing zeroth-order
+and first-order information across different scalarization weights.
+                                                                                       PK
+Notation. For any positive integer m, let [m] denote the set [m]. Let ∆K := {λ ∈ RK : k=1 λk =
+1, λ ≥ 0} be the unit simplex of dimension K. Let ∇F (x) be the gradient of function F at point
+x ∈ Rd . We will make use of a generic given norm ∥ · ∥ on w ∈ Rd .
+
+
+
+
+                                                   2
+2   Multi-objective Optimization Preliminaries
+We consider multi-objective optimization with K objective functions F1 (·), . . . , FK (·) where Fk (·) :
+Rd → R is Lk -smooth w.r.t. the ℓ2 -norm and Fk∗ := inf x∈Rd F (x) > −∞ (i.e., is finite). (The norm
+on x throughout is ℓ2 .) Note that finiteness of Fk∗ is not a strong assumption in many applications
+that we care about; for example, in machine learning most loss functions are nonnegative. Let
+F (x) := (F1 (x), . . . , FK (x))⊤ denote a vector of function values at x ∈ Rd . Notice that we do not
+make any assumptions on convexity at this point.
+Our goal will be to solve the (“scalarized”) multi-objective optimization (MOO) problem:
+                                                           K
+                                                           X
+                               min Fλ (x) := λ⊤ F (x) =          λk Fk (x),                          (1)
+                              x∈Rd
+                                                           k=1
+
+where λ ∈ ∆K is a weight vector in the unit simplex in RK . Note that Fλ (·) is Lλ -smooth with Lλ :=
+PK                                                  ∗
+                                                                             PK          ∗
+  k=1 λk Lk , and Lmax := maxk Lk < ∞. Also, Fλ := inf x∈Rd Fλ (x) ≥            k=1 λk Fk > −∞. An
+approximate solution to problem (1) is referred to as an approximate solution map x̂(·) : ∆K → Rd .
+To evaluate the quality of an approximate solution map in our potentially non-convex setting, we
+might use the following measure of worst-case solution map stationarity:
+                              ϵsm−stat (x̂(·)) := sup ∥∇Fλ (x̂(λ))∥2 .                               (2)
+                                                  λ∈∆K
+
+We might also use the following measure of worst-case function value suboptimality:
+                              ϵsm−gap (x̂(·)) := sup Fλ (x̂(λ)) − Fλ∗ .
+                                                  λ∈∆K
+
+Our goal will be to develop an algorithm, with corresponding complexity analysis, to find an
+approximate solution map x̂(·) satisfying ϵsm−stat (x̂(·)) ≤ ϵ or possibly ϵsm−gap (x̂(·)) ≤ ϵ for an
+ϵ > 0.
+
+
+
+
+                                                   3
+3     Uniform Discretization — The Baseline Approach
+In this section, we describe the uniform discretization method, which serves as the baseline against
+which we compare Algorithm 2. The idea is to partition the unit simplex ∆K into a uniform grid, run
+gradient descent at each grid point, and approximate the solution at any query λ ∈ ∆K by rounding
+to the nearest grid point in L1 -norm distance.
+
+3.1   Picking the right resolution parameter
+
+Let r ∈ Z+ be a grid resolution parameter. Define the uniform simplex grid
+                                 Gr := λ ∈ ∆K : rλ ∈ ZK
+                                        
+                                                             + .                                 (3)
+That is, Gr consists of all grid points whose coordinates are multiples of 1/r. By stars-and-bars,
+|Gr | = r+K−1
+               
+          K−1    . The goal is to find the correct resolution parameter r for a δ-net of ∆K .
+Proposition 1. For K ≥ 2,
+                                                                2⌊K 2 /4⌋   K
+                      ρ(Gr ) := sup min ∥λ − λ̂∥1 ≤                       ≤    .
+                                  λ∈∆K λ̂∈Gr                      Kr        2r
+                                                          PK
+Proof. Fix λ ∈ ∆K and write y := rλ ∈ RK      + , so that  k=1 yk = r. A grid point λ̂ ∈ Gr
+                                 K
+                                        P
+corresponds bijectively to m ∈ Z+ with k mk = r via λ̂ = m/r, and r∥λ − λ̂∥1 = ∥y − m∥1 .
+We construct a feasible m and bound ∥y − m∥1 .
+Step 1 (rounding rule). Let fk := yk − ⌊yk ⌋ ∈ [0, 1). Set
+                                               K
+                                               X               K
+                                                               X
+                                   d := r −          ⌊yk ⌋ =         fk ,
+                                               k=1             k=1
+                              P
+where the second equality uses k yk = r ∈ Z. Since each fk < 1, we have d ∈ {0, 1, . . . , K − 1}.
+Choose S ⊆ [K] with |S| = d to index the d largest fractional parts, and define
+                                         
+                                           ⌊yk ⌋ + 1, k ∈ S,
+                                 mk :=
+                                           ⌊yk ⌋,        k∈/ S.
+     P          P
+Then k mk = k ⌊yk ⌋ + d = r, so m is feasible.
+Step 2 (ℓ1 error). Direct computation:
+                   X              X           X      X      X          X
+   ∥y − m∥1 =         (1 − fk ) +    fk = d −   fk +    fk −  fk = 2d − 2 fk ,
+                  k∈S               ∈S
+                                   k/                k∈S             k      k∈S          k∈S
+                           P
+where the last step usesk fk = d.
+                        P
+Step 3 (lower bound on k∈S fk ). The set S collects the d largest of K nonnegative numbers
+whose average is d/K. The sum of the d largest of any K numbers is at least d times their mean, so
+                                                         K
+                                  X                1 X      d2
+                                        fk ≥ d ·       fk =    .
+                                                   K        K
+                                  k∈S                    k=1
+
+Combining with Step 2,
+                                                     2d2   2 d (K − d)
+                               ∥y − m∥1 ≤ 2d −           =             .                         (4)
+                                                      K         K
+
+Step 4 (maximizing over d). The right-hand side of (4) is a concave quadratic in d maximized at
+d∗ = K/2. Over the admissible integer values d ∈ {0, 1, . . . , K − 1} the maximum is attained at
+d = ⌊K/2⌋, giving
+                                 2d(K − d)   2 ⌊K/2⌋ ⌈K/2⌉   2⌊K 2 /4⌋
+                        max                =               =           .
+                   d∈{0,...,K−1}    K             K             K
+
+                                                     4
+Step 5 (translating back). Dividing by r,
+                                                 ∥y − m∥1   2⌊K 2 /4⌋
+                            min ∥λ − λ̂∥1 ≤               ≤           .
+                            λ̂∈Gr                    r        Kr
+
+The supremum over λ ∈ ∆K gives the first claimed bound; the second follows from 2⌊K 2 /4⌋/K ≤
+K/2.
+
+
+Corollary 3.1 (Resolution for a δ-net). For any δ > 0, the grid Gr is an δ-net of ∆K in the ℓ1 metric
+whenever
+                                                2⌊K 2 /4⌋
+                                          r ≥              ,
+                                                   Kδ
+                                   K
+and in particular whenever r ≥ ⌈ 2δ  ⌉. Equivalently, the smallest such resolution is
+                                          ∗                               K K−1 
+                     K                       r +K −1                     1
+         r∗ (δ) =         ,      |Gr∗ | =                    = Θ                          .
+                     2δ                        K −1                  (K − 1)! 2δ
+
+3.2   Uniform error tolerance for the suboptimality gap
+
+The goal of this subsection is to figure out the correct parameter constants, e.g: δ, grad_norm_tol, to
+bound the worst-case suboptimality gap for an approximate solution path x̂(·) defined on a δ-net N
+of ∆K :
+                        ϵsm−net (x̂(·)) := sup min Fλ (x̂(λ̂)) − Fλ (x∗ (λ))
+                                             λ∈∆K λ̂∈N
+
+for the uniform discretization method.
+Proposition 2 (Lipschitz continuity of the optimal solution path). Define
+
+       • Lmax := max{Li , i ∈ [k]}
+       • µmin := min{µi : i ∈ [k]}
+                                                               r
+                                         ∗                          2          p
+       • Gmax := sup max{∥∇Fi (x (λ))∥} ≤ max {Li                        sup       Fλ (0) + ∥∇Fi (0)∥}
+                   λ∈∆K i∈K                            i∈[K]       µmin λ∈∆K
+
+Then, the optimal solution path {x∗ (λ) : λ ∈ ∆K } is Gµmin
+                                                        max
+                                                            -Lipschitz in L1 -norm.
+
+Proof. The proof has two parts. First we show that
+                                             Gmax
+                   ∥x∗ (λ̂) − x∗ (λ)∥ ≤           ∥λ − λ̂∥1        for all λ, λ̂ ∈ ∆K ,              (5)
+                                             µmin
+which is the Lipschitz claim. Then we verify the bound on Gmax stated in the proposition.
+
+Step 1: Co-coercivity at the optimum. Since Fλ is µλ -strongly convex with unique minimiser x∗ (λ),
+
+                      ⟨∇Fλ (x∗ (λ̂)), x∗ (λ̂) − x∗ (λ)⟩ ≥ µλ ∥x∗ (λ̂) − x∗ (λ)∥2 .
+By Cauchy–Schwarz on the left-hand side and µλ ≥ µmin ,
+
+                             µmin ∥x∗ (λ̂) − x∗ (λ)∥ ≤ ∥∇Fλ (x∗ (λ̂))∥.                              (6)
+
+
+Step 2: Bounding the right-hand side of (6) by ∥λ − λ̂∥1 . Since ∇Fλ̂ (x∗ (λ̂)) = 0 (first-order
+optimality at x∗ (λ̂)),
+                                                         K
+                                                         X
+                  ∗                  ∗                  ∗
+           ∇Fλ (x (λ̂)) = ∇Fλ (x (λ̂)) − ∇Fλ̂ (x (λ̂)) =   (λi − λ̂i ) ∇Fi (x∗ (λ̂)).
+                                                                   i=1
+
+
+                                                   5
+Taking norms and applying the triangle inequality together with the definition of Gmax gives
+                                      K
+                                      X
+               ∥∇Fλ (x∗ (λ̂))∥ ≤            |λi − λ̂i | ∥∇Fi (x∗ (λ̂))∥ ≤ Gmax ∥λ − λ̂∥1 .                      (7)
+                                      i=1
+
+Combining (6) and (7) yields the Lipschitz inequality (5).
+
+Step 3: Bounding Gmax . We now establish the explicit upper bound on Gmax stated in the proposition.
+Fix any λ ∈ ∆K and any i ∈ [K]. By µλ -strong convexity of Fλ together with the nonnegativity
+convention Fλ ≥ 0 (so that Fλ (x) ≥ (µλ /2)∥x∥2 ),
+                     µmin ∗         µλ ∗
+                         ∥x (λ)∥2 ≤    ∥x (λ)∥2 ≤ Fλ (x∗ (λ)) ≤ Fλ (0),
+                      2              2
+where the last inequality is the optimality of x∗ (λ). Hence
+                                                     s
+                                                        2 Fλ (0)
+                                      ∥x∗ (λ)∥ ≤                 .                                              (8)
+                                                         µmin
+Next, by Li -smoothness of Fi ,
+       ∥∇Fi (x∗ (λ))∥ = ∥∇Fi (x∗ (λ)) − ∇Fi (0) + ∇Fi (0)∥ ≤ Li ∥x∗ (λ)∥ + ∥∇Fi (0)∥.
+Substituting (8) and taking the maximum over i ∈ [K] and the supremum over λ ∈ ∆K ,
+                                                   s                                 
+                                                        2 sup λ∈∆K λF (0)            
+    Gmax = sup max ∥∇Fi (x∗ (λ))∥ ≤ max Li                                 + ∥∇Fi (0)∥ ,
+                λ∈∆K i∈[K]                  i∈[K]              µmin                  
+
+which is the bound claimed in the proposition.
+Theorem 1. Adopting the notation in Proposition 2, for a uniform error tolerance ϵ, the worst-case
+suboptimality gap for an approximate solution path x̂(·) defined on a δ-net N of ∆K is upper
+bounded by ϵ if
+                               q
+      • Condition 1: δ ≤ Gµmin
+                           max
+                                   ϵ
+                                 2Lmax .
+
+       • Condition 2: grad_norm_tol for Nesterov’s accelerated gradient
+                                                                     q (NAG) method that is used
+                                                                        ϵ
+         to solve x̂(·) at each grid point λ̂ ∈ N is upper bounded by 2Lmax µλ̂ .
+
+
+Proof. Given any λ ∈ ∆K , let λ̂ ∈ N be the closest grid point to λ in L1 -norm distance.
+Define Lmax := max{Li , i ∈ [k]}. Since Fλ is Lλ -smooth, it is also Lmax -smooth. By definition,
+
+        Fλ (x̂(λ̂)) − Fλ (x∗ (λ))   ≤ ⟨∇Fλ (x∗ (λ)), x̂(λ̂) − x∗ (λ)⟩ + Lmax          ∗
+                                                                         2 ∥x̂(λ̂) − x (λ)∥
+                                                                                           2
+                                      Lmax            ∗      2
+                                    = 2 ∥x̂(λ̂) − x (λ)∥
+                                    ≤ Lmax             ∗           ∗        ∗
+                                        2 (∥x̂(λ̂) − x (λ̂)∥ + ∥x (λ̂) − x (λ)∥)
+                                                                                  2
+
+
+                                                                                                         q
+To bound the RHS by ϵ, it suffices to bound both ∥x̂(λ̂) − x∗ (λ̂)∥ and ∥x∗ (λ̂) − x∗ (λ)∥ by                  ϵ
+                                                                                                             2Lmax .
+
+For the first term, by µλ̂ -strong convexity, we have
+                                                             µλ̂
+                            Fλ̂ (x̂(λ̂)) − Fλ̂ (x∗ (λ̂)) ≥       ∥x̂(λ̂) − x∗ (λ̂)∥2
+                                                              2
+and
+                                                                               µλ̂
+          Fλ̂ (x∗ (λ̂)) − Fλ̂ (x̂(λ̂)) ≥ ⟨∇Fλ̂ (x̂(λ̂)), x∗ (λ̂) − x̂(λ̂)⟩ +       ∥x̂(λ̂) − x∗ (λ̂)∥2
+                                                                                2
+Adding both inequalities together to get
+                         ⟨∇Fλ̂ (x̂(λ̂)), x̂(λ̂) − x∗ (λ̂)⟩ ≥ µλ̂ ∥x̂(λ̂) − x∗ (λ̂)∥2
+
+
+                                                      6
+By Cauchy-Schwartz, we have
+                                                          ∥∇Fλ̂ (x̂(λ̂))∥
+                                   ∥x̂(λ̂) − x∗ (λ̂)∥ ≤
+                                                              µλ̂
+                             q                                                q
+                                   ϵ                                                ϵ
+which is upper bounded by        2Lmax if and only if ∥∇Fλ̂ (x̂(λ̂))∥ < µλ̂       2Lmax
+
+For the second term, apply Proposition 2 to get
+                                              r                           r
+                           Gmax                   ϵ                  µmin   ϵ
+      ∥x∗ (λ̂) − x∗ (λ)∥ ≤      ∥λ̂ − λ∥1 <           ⇐⇒ ∥λ̂ − λ∥1 <            .
+                           µmin                 2Lmax                Gmax 2Lmax
+
+
+
+3.3   The Uniform Discretization Algorithm
+
+Algorithm 1 Uniform Discretization Algorithm
+ 1: Parameters: number of classes K, an array of K objective functions, smoothness constants
+    L ∈ RK , initial iterate x0 ∈ Rd , error tolerance ϵ, first-order method M(·).         r
+                                                                  r
+                                                           µmin        ϵ          KGmax Lmax
+ 2: Resolution r = arg min{ sup min ∥λ̂ − λ∥1 <                            }=⌈                      ⌉
+                          r    λ∈∆K λ̂∈Gr                  Gmax 2Lmax               µmin         2ϵ
+ 3: Enumerate Gr = {λ(1) , . . . , λ(N ) } in an order such that consecutive grid points satisfy ∥λ(g+1) −
+    λ(g) ∥1 ≤ 2/r (e.g., a lexicographic sort), where N = r+K−1
+                                                                       
+                                                                  K−1 .
+               b(0) ← x0 .
+ 4: Initialize x
+ 5: for g = 1, . . . , N doq
+                               ϵ
+ 6:    grad_norm_tol = 2Lmax       µλ(g)
+ 7:    b(g) ← M(b
+       x           x(g−1) , grad_norm_tol, Lλ(g) ).
+ 8: end for                        N
+ 9: return the table (λ(g) , x
+                             b(g) ) g=1 .
+
+
+At query time, for any λ ∈ ∆K the baseline returns
+                                           ∗
+                        x            b(g ) ,
+                        bbase (λ) := x              g ∗ = arg min ∥λ − λ(g) ∥1 .                       (9)
+                                                             g∈[N ]
+
+
+One design choice in Algorithm 1 merits discussion.
+
+Warm-starting. On the first pass through the grid, each new grid point’s gradient descent is
+initialised from the previous grid point’s current iterate, exploiting the continuity of the optimal
+solution map λ 7→ x∗ (λ) (which is automatic under strong convexity). After the first pass, each
+grid point continues from its own current iterate, since each xb(g) is now closer to x∗ (λ(g) ) than its
+neighbour’s iterate would be. The lexicographic enumeration ensures consecutive grid points are
+ℓ1 -close, which makes the first-pass warm-starting effective.
+
+
+
+
+                                                    7
+4     Algorithmic Framework
+We propose an algorithmic framework for solving the MOO problem (1) based on a sequence of
+bundles of zeroth and first-order information as well as associated progress criteria built from these
+bundles. The key objects in play are:
+
+      1. A bundle of previously computed and available zeroth and first-order information, computed
+         at a given list of points x1 , . . . , xm , denoted by
+                      Bm := {(xi , F1 (xi ), . . . , FK (xi ), ∇F1 (xi ), . . . , ∇FK (xi ))}m
+                                                                                             i=1 .
+
+      2. A mapping T (·; Bm ) : ∆K → Rd , associated with the bundle Bm , where the output
+         T (λ; Bm ) is “easily computable” given the information in the bundle Bm .
+      3. A "gradient norm" function GN(·; Bm ) : ∆K → R associated with the bundle Bm , e.g:
+                                      GN(λ; Bm ) = min {∥∇Fλ (xi )∥2 }.
+                                                          xi ∈Bm
+
+
+    4. A family of constants L̃λ > 0 for λ ∈ ∆K .
+Example 4.1 (Vanilla gradient descent). For a fixed λ ∈ ∆K , define a mapping T (·; Bm ) by
+                                                                                      
+                         1                  ∗                          1             2
+   T (λ; Bm ) := xi∗ −     ∇Fλ (xi∗ ), for i ∈ arg min Fλ (xi ) −        ∥∇Fλ (xi )∥ ,               (10)
+                        Lλ                          i∈[m]            2Lλ
+with ties broken according to a least index rule (for example).
+
+Note that we require a family of the above objects, indexed by possibly bundles Bm . We first propose
+some "desired" conditions on these objects, and then follow with specific examples. In the condition
+below, for a given bundle Bm of zeroth and first-order information computed at points x1 , . . . , xm
+and a given x̄ ∈ Rd , we denote
+                  Bm+1 := Bm ∪ (x̄, F1 (x̄), . . . , FK (x̄), ∇F1 (x̄), . . . , ∇FK (x̄))
+as the new bundle with additional information computed at x̄. Note that whenever a new point is
+added to the bundle, function values and gradients are assumed to be calculated at this new point.
+
+4.1   Meta-algorithm
+
+In this subsection, we present a general algorithm to solve the MOO problem (1) for the gradient
+norm progress criterion function.
+Let’s consider the following algorithm. We use a subroutine to iterate adding points to the
+bundle at a fixed λ ∈ ∆K . Specifically, let B0 be a given initial non-empty bundle, and let
+BundleUpdateM (λ; B0 ) denote the bundle that results after applying T (λ; ·) for M steps start-
+ing with B0 . In other words, we add x̄1 := T (λ; B0 ) to create bundle B1 , then x̄2 := T (λ; B1 )
+to create bundle B2 , etc. until adding M total points to the bundle resulting in the final bundle
+BM = BundleUpdateM (λ; B0 ).
+The adaptive algorithm under non-convexity became
+
+
+
+
+                                                      8
+Algorithm 2 Adaptive Algorithm for non-convex function
+  Input: Number of classes K; max outer iterations T ; initial point x0 ; final accuracy parameter ϵ.
+  Initialize: Initial bundle B0 built at x0 ; Anchor A0 = {}.
+  At iteration t = 0, 2, . . . , T − 1 do:
+     Compute λt ∈ ∆K that maximizes mini∈[m] ∥∇Fλt (xi )∥2 and set GN∗t := GN(λt ; Bt ) as the
+  maximum value.
+  if GN∗t < 23 ϵ then
+     return anchor At to build the approximate solution path.
+  else
+     Set Bt+1 = BundleUpdateMt (λt ; Bt ) where Mt := arg minMt {GN(λt ; Bt+1 ) < 3ϵ }
+     Construct At+1 from At and (λt , Bt+1 \Bt )
+  end if
+
+
+4.2   Algorithm complexity analysis
+
+Proposition 3. For a bundle Bm generated by a sequence of points {x̄i := T (λi ; Bi ) : xi ∈ Bm }
+and any fixed λ ∈ ∆K , there exists a universal constant Cλ > 0 such that
+                                                        Cλ Lλ
+                                        GN(λ; Bm ) ≤          .
+                                                         m
+
+Proof. For gradient descent on an Lλ -smooth (possibly nonconvex) function, Nesterov’s descent
+analysis in Section 1.2.3 yields
+                                                                     
+                                               1 Lλ
+                           min ∥∇λ F (xi )∥2 ≤        Fλ (x1 ) − Fλ∗ ,
+                                                                    
+                          i∈[m]                m ω
+see [Nes18], eqs. (1.2.22). By picking gradient descent step size L1λ , we have ω := 12 .
+Hence,
+                                                             2Lλ [Fλ (x1 ) − Fλ∗ ]
+                      GN(λ; Bm ) = min ∥∇Fλ (xi )∥2 ≤                              .
+                                      i∈[m]                           m
+Let Cλ > 0 be such that 2[Fλ (x1 ) − Fλ∗ ] ≤ Cλ .
+Corollary 4.1. For any given initial bundle B0 and any fixed λ ∈ ∆K , for some universal constant
+Cλ > 0, setting BM = BundleUpdateM (λ; B0 ) for M = ⌈ CλϵLλ ⌉ yields
+                                            GN(λ; BM ) < ϵ.
+
+Now, we have the following theorem to analyze Algorithm 2.
+Theorem 2. Let x̂(·) be the approximate solution path built from the returned anchor A. For each
+λ ∈ ∆K , let Cλ be the universal constant in Corollary 4.1. Define
+              LipGN(λ; Bm ) := max {∥JF (xi )JF (xi )T ∥1,∞ }; E := sup Cλ Lλ .
+                                   xi ∈Bm                                    λ∈∆K
+                                                                   K−1
+Then for some universal constant C > 0, after at most CLipGN    ϵ           outer iterations and at most
+        K−1
+  CLipGN
+     ϵ         ( Eϵ ) total oracle calls, it holds that GN∗t ≤ ϵ. In addition, ϵsm−stat (x̂(·)) ≤ ϵ.
+
+
+
+
+                                                    9
+4.3   Idea from Chebyshev paper
+
+At a first glance, the multi-objective optimization problem in the Chebyshev paper is very different
+from our linear scalarization form. The problem they are solving is
+                                              min (F1 (x), . . . , FK (x))
+                                             x∈Rn
+                                                                                       PK
+where each Fk is differentiable, with the convergence result if the total loss F (x) := k=1 Fk (x) is
+β-smooth. The problem that we are interested in is to compute the entire (locally) optimal solution
+path, which is essentially equivalent to
+                                                           K
+                                                           X
+                                              max minn           λk Fk (x)
+                                              λ∈∆K x∈R
+                                                           k=1
+
+Hence, one idea is to weight each Fk by λk and apply algorithm 4, i.e: the optimization problem we
+are solving in each inner loop became
+                                          min (λ1 F1 (x), . . . , λK FK (x))
+                                          x∈Rn
+
+This motivates the following primal and dual formulations (Pλ /Dλ ) that is analogous to (P/D):
+              max r s.t. ⟨ĝk , v⟩ ≥ λk r, k ∈ [K].                                        (Pλ )
+           ∥v∥≤1,r
+
+                                    K
+                                    X
+                  Pmin          ∥         βk ĝk (x)∥.                                     (Dλ )
+                   K
+           β≥0,    k=1 βk λk =1     k=1
+
+And we have the following Weighted-Chebyshev-Exact-ADAM algorithm that is analogous to
+Algorithm 4.
+
+Algorithm 3 Weighted-Chebyshev-Exact-ADAM
+                                                                         −1
+  Input: Preference parameter λ, Initial point x0 , step sizes {ηt }Tt=0    , Adam parameters β1 , β2 , ϵad ,
+  threshold δ > 0
+  Initialize: Adam moments M0 = 0, S0 = 0
+  for iteration t = 0, . . . , T − 1 do
+     Compute gradients λ1 ∇F1 (xt ), . . . , λK ∇FK (xt ) and normalize to ĝ1 (xt ), . . . , ĝK (xt ).
+                                            PK
+     β ∗ = arg minβ≥0,PK      k=1 λk βk =1
+                                           ∥ k=1 βk ĝk (xt )∥ (closed form for K ≤ 3, else Frank-Wolfe)
+            PK
+     wt = k=1 βk∗ ĝk (xt )
+     if ∥wt ∥ ≤ δ then
+        Terminate and return xt
+     end if
+                                             wt
+     Recover the primal direction vt = ∥w     t∥
+                                                                     PK
+     Set the final update direction with adaptive scalar: dt = ( k=1 ⟨λk ∇Fk (xt ), vt ⟩)vt
+                                                 Mt+1
+     Mt+1 = β1 Mt + (1 − β1 )dt ; M̂t+1 = 1−β        t+1
+                                                          1
+                                                   St+1
+      St+1 = β2 St + (1 − β2 )(dt ⊙ dt ); Ŝt+1 = 1−β t+1
+                                                                 2
+
+      xt+1 = xt − ηt √ M̂t+1
+                          Ŝt+1 +ϵad
+  end for
+  return xT
+
+
+And we can use the above algorithm as the inner loop for the following main adaptive algorithm.
+
+
+
+
+                                                          10
+Algorithm 4 Chebyshev Adaptive Algorithm
+  Input: Number of classes K; InnerTol δ; Adam parameters (η, β1 , β2 , ϵad ); max outer iters T ;
+  initial point x0 .
+  Initialize: Bundle B0 built at point x0 ; Anchor A0 = {(centroid(∆K ), x0 )}
+  for iteration t = 0, . . . , T − 1 do
+     Compute λt ∈ ∆K that maximizes PC(λ; Bt ) and set PC∗t := PC(λt ; Bt ) as the maximum.
+     (·, xnear ) = arg min(λ,x)∈At ∥λ − λt ∥
+     xt =Weighted-Chebyshev-Exact-ADAM(λt , xnear , (η, β1 , β2 , ϵad ), δ)
+     Construct Bt+1 from Bt and xt
+     Construct At+1 from At and (λt , xt )
+  end for
+
+
+5   Numerical Experiments
+We empirically compare our Simple Adaptive Algorithm v2 (Algorithm 2) against the uniform-
+discretisation baseline (Algorithm 1).
+
+Worst-case error. In both experiments we compute a bundle Bm : for the uniform-discretisation
+baseline (Algorithm 1), Bm is the set of last iterates obtained by running
+                                                                        gradient descent on Fλ at
+each node λ of the coarse grid of resolution r — a fixed set of r+K−1
+                                                                 K−1    points spread uniformly over
+∆K ; for Algorithm 2, Bm is the set of points the algorithm accumulates, allocated adaptively to the
+weights where the gradient norm progress criterion is largest.
+We then measure first-order stationarity of the scalarised objective along the solution map, reporting
+the worst-case squared gradient norm
+                                                        2                         2
+                         b(·) := sup ∇Fλ x
+                ϵsm-stat x                         b(λ)      = sup ∇Fλ x) ,                       (11)
+                                      λ∈∆K                      (λ,x)∈A
+
+Note that
+                                 2
+               sup      ∇Fλ x)       ≤ sup    min ∥∇Fλ (xi )∥2 = sup GN(λ; Bm )                   (12)
+             (λ,x)∈A                  λ∈∆K   xi ∈Bm                   λ∈∆K
+
+
+A small value of (11) certifies that x
+                                     b(λ) is approximately stationary for Fλ uniformly over the simplex
+∆K .
+
+Two budget axes.       We benchmark each method along two complementary axes:
+      1. Gradient evaluations. We count one gradient evaluation per call to a single ∇Fk (·), so
+         each scalarised gradient-descent step costs K evaluations. This is the natural unit for oracle
+         complexity and matches the accounting in Theorem 3. For applications where the gradient
+         is expensive — for instance, large-scale neural-network training where each ∇Fk is a
+         backpropagation pass — this axis directly reflects wall-clock cost.
+      2. CPU time. Algorithm 3 incurs algorithmic overhead beyond gradient evaluation — specif-
+         ically, maximising the progress criterion over ∆K , evaluating GN(λ; Bm ) as the bundle
+         grows, and the T -map itself. CPU time captures these costs faithfully and reflects the
+         practical cost when gradient evaluations are cheap.
+
+Checkpoint cadence. For each method, we record (gradient evaluations, CPU time, worst-case
+error) tuples at periodic checkpoints, triggered when M gradient evaluations have accumulated since
+the last checkpoint. In both algorithms, the actual checkpoint occurs at the next natural boundary (a
+pass-completion for the baseline; an outer iteration for Algorithm 3) after the threshold is reached.
+
+Implementation details of Algorithm 2. For Algorithm 2, we make two implementation choices
+that materially affect runtime cost:
+       • Inner-loop pruning. Standard inner-loop practice would compute T (λ; Bm ) and uncon-
+         ditionally evaluate K gradient oracles at the candidate point. We observed that many of
+
+
+                                                  11
+        these evaluations contribute negligibly to the bundle once λ is well-served — i.e., once
+        ∥∇Fλ (xi∗ )∥ is small at the active index. We therefore add only the point of the last iterate
+        corresponding to the minimum gradient norm.
+
+Source code. A reference implementation of Algorithm 2, the uniform-discretisation baseline,
+all progress-criterion variants, and the experiment harness is available at https://github.com/
+MarshmallowJeffrey/First-order-method-for-smooth-MOO.
+
+
+
+
+                                                 12
+5.1     Generic non-convexity
+
+For generic non-convexity, we consider multi-layer perceptron (MLP). For simplicity, we consider
+1-hidden-layer MLP. In particular, let W1 ∈ Rh×p be the input-to-hidden weights, b1 ∈ Rh be the
+hidden biases, W2 ∈ RK×h be the hidden-to-output weights, b2 ∈ RK be the output biases. Let σ be
+the activation function, e.g: identity, ReLU.
+The forward pass is
+                                     z := W2 σ(W1 x + b1 ) + b2 .
+
+5.1.1    Synthetic data generation
+We sample synthetic data from a linear–softmax planted model, identical to the procedure used
+in subsection 7.2 for the regularised logistic regression experiment. Fix K = 3 classes, feature
+dimension p = 10, and sample size n = 50. We draw a ground-truth weight matrix and a feature
+matrix
+                                    iid                   iid
+            W⋆ ∈ RK×p , (W⋆ )iℓ ∼ U[−1, 1],            xj ∼ N (0, Ip ), j = 1, . . . , n,
+and assemble X = [x1 · · · xn ]⊤ ∈ Rn×p . Conditional on X, the labels are drawn from the
+categorical distribution induced by the planted linear softmax,
+                                                             
+                    yj | xj ∼ Categorical softmax(W⋆ xj ) ,     j = 1, . . . , n,
+implemented numerically by computing the row-stochastic matrix Π = softmax(XW⋆⊤ ) ∈ Rn×K
+and inverse-CDF-sampling each yj from the j-th row of Π. The pseudo-random seed is fixed (seed
+= 7) so that (X, y, W⋆ ) are reproducible across runs.
+This generation strategy gives the multi-objective formulation a meaningful target. The over-
+parameterised hypothesis class – a one-hidden-layer ReLU network of width h = 8 with parameter
+dimension d = hp + h + Kh + K = 115 – can represent the planted conditional distribution
+exactly, so a global optimum of the multi-objective problem exists in parameter space; the per-class
+cross-entropy losses F1 , . . . , FK remain genuinely non-convex because of the bilinear composition
+W2 σ(W1 x + b1 ), providing a clean non-convex testbed that is well-specified in theory yet still
+requires the optimiser to navigate ReLU kinks and the W2 W1 product. Because X is standard
+     p and W⋆ has entries in [−1, 1], the ground-truth logits have coordinate-wise standard devia-
+Gaussian
+tion p/3, so the softmax outputs are moderately peaked and the realised per-class sample counts
+ni = |{j : yj = i}| are close to, but not exactly, n/K; we enforce ni ≥ 1 in the per-class average so
+that each Fi remains well-defined.
+
+5.1.2    Experiment Plots
+The next three figures consider the uniform discretization approach for the case K = 3, p = 10, n =
+20, h = 8:
+
+
+
+
+Figure 1: Worst-case squared gradient norm V.S. CPU time and grad evals for error tolerance 1e-2.
+
+
+                                                 13
+Figure 2: Worst-case squared gradient norm V.S. CPU time and grad evals for error tolerance 1e-3.
+
+
+
+
+Figure 3: Worst-case squared gradient norm V.S. CPU time and grad evals for error tolerance 1e-4.
+
+
+5.1.3   LLM safety / LLM alignment
+We now show that the MOO framework of this paper applies directly to multi-objective alignment of
+large language models (LLMs), and in particular to multi-objective direct preference optimization
+(MODPO) [? ]. This is a strictly more challenging non-convex testbed than the 1-hidden-layer MLP
+of Section ??: the parameter vector θ now indexes a transformer policy πθ , the per-objective loss is
+composed through a deep network with softmax outputs over a large vocabulary, and the K objectives
+correspond to genuinely conflicting alignment dimensions (e.g. helpfulness vs. harmlessness).
+
+Problem setup. Let πθ (y | x) denote an autoregressive language model with parameters θ ∈ Rd ,
+                               Q|y|
+decomposed as πθ (y | x) = t=1 πθ (yt | x, y<t ). Fix a frozen reference policy πref (typically a
+supervised fine-tuned checkpoint). Let R1 , . . . , RK denote K scalar reward models, each capturing
+a distinct alignment dimension (e.g. R1 = helpfulness, R2 = harmlessness, R3 = honesty). The
+classical RLHF goal of maximising a single reward subject to a KL constraint admits a closed-form
+optimal policy, which is the well-known starting point for DPO [? ]:
+                                                                       
+                             ⋆
+                           πi,β (y | x) ∝ πref (y | x) exp β1 Ri (x, y) ,                       (13)
+
+where β > 0 is the KL-regularisation strength. Inverting this relation yields the implicit reward
+representation
+                     ri (x, y; θ) := β [log πθ (y | x) − log πref (y | x)] ,                  (14)
+which expresses any reward Ri directly in terms of the policy parameters θ.
+
+
+                                                 14
+                                                                                       (j)   (j)
+Multi-objective DPO loss. Given a preference dataset Di = {(x(j) , yw , yl )}nj=1   i
+                                                                                       for the i-th
+alignment dimension — where yw is the preferred (“winning”) response and yl the dispreferred
+(“losing”) one under reward Ri — the DPO loss is the negative log-likelihood of the Bradley–Terry
+preference model under the implicit reward:
+                                                ni
+                                            1 X         
+                                                            (j)
+                                                                
+                               Fi (θ) = −          log σ β ∆θ ,                                (15)
+                                            ni j=1
+
+where
+                                             (j)                            (j)
+                         (j)            πθ (yw | x(j) )               πθ (yl      | x(j) )
+                       ∆θ      := log     (j)
+                                                              − log
+                                                                 (j)
+                                                                            ,                        (16)
+                                   πref (yw | x(j) )      πref (yl | x(j) )
+and σ(u) = 1/(1 + e−u ) is the logistic function. The MOO formulation (??) then becomes
+                                                   K
+                                                   X
+                               min Fλ (θ) =              λi Fi (θ),    λ ∈ ∆K ,                      (17)
+                               θ∈Rd
+                                                   i=1
+
+with Fi defined as in (15) for each preference dataset Di . Each λ ∈ ∆K corresponds to a different
+user preference profile, and the Pareto front {(F1 (θ̂(λ)), . . . , FK (θ̂(λ))) : λ ∈ ∆K } is the set of
+language model behaviours achievable through preference fine-tuning. As shown in [? , Prop. 1], the
+global minimiser of Fλ recovers the same optimal policy as multi-objective RLHF (MORLHF) with
+weight vector λ, so the Pareto front of F is the alignment Pareto front of practical interest.
+The current practice in the literature is to discretise ∆K , run DPO independently at each grid point λj ,
+and aggregate the resulting checkpoints — exactly the uniform-discretisation baseline of Section ??.
+Our Algorithm ?? with the gradient-norm progress criterion (Example ??, Item 3) replaces this with
+a principled adaptive schedule that reuses gradient information across λ.
+
+Smoothness of Fi .     Each Fi is a composition
+                                        Fi = − log σ ◦ (β ∆θ ) ,                                     (18)
+where ∆θ is itself a difference of log-likelihoods through the transformer. To make this concrete,
+write the per-token log-probability as a log-sum-exp over the vocabulary V :
+                                                                X
+                       log πθ (yt | x, y<t ) = zθ,t (yt ) − log   exp zθ,t (v),              (19)
+                                                                      v∈V
+                |V |
+where zθ,t ∈ R is the output logit vector of the transformer at position t. Fi is therefore smooth
+(i.e. has a Lipschitz gradient) on any bounded set of parameters Θ ⊂ Rd , because (i) the softmax–
+logsumexp head is C ∞ with bounded Hessian on bounded logits, (ii) σ ′ and (log σ)′′ are bounded
+by 1/4 and 1 respectively, and (iii) the transformer’s zθ has a Lipschitz Jacobian on bounded θ.
+Concretely, for any θ1 , θ2 in a sublevel set of Fi ,
+                                ∥∇Fi (θ1 ) − ∇Fi (θ2 )∥ ≤ Li ∥θ1 − θ2 ∥,                             (20)
+with smoothness constant                                         
+                                                              (2)
+                                     Li = O β 2 Bz2 Lnet + β Lnet ,                                  (21)
+where Bz = supθ∈Θ ∥zθ ∥∞ is an upper bound on the logit magnitudes, Lnet is a Lipschitz constant of
+                              (2)
+the network Jacobian, and Lnet bounds the Hessian of zθ in θ (i.e. the network’s Jacobian-Lipschitz
+                  2
+constant). The β term arises from the implicit reward ri = β · (log πθ − log πref ) entering Fi
+quadratically through σ ′′ ; the β term comes from the linear coupling between σ ′ and the logit
+Jacobian. Fi is non-convex in θ — it inherits the non-convex bilinear structure of every neural-
+network composition, just like the MLP loss in Section ?? — but is bounded below by 0 (its infimum),
+satisfying the assumption Fi⋆ > −∞ used throughout Section ??.
+
+Estimating Li in practice. As in Section ??, no closed-form constant is available. We estimate Li
+empirically by gradient-difference sampling along the optimisation trajectory: at every Kest outer
+iterations we draw Npairs random pairs (θ(a) , θ(b) ) from the recent bundle Bt and compute
+                                 (t)           ∥∇Fi (θ(a) ) − ∇Fi (θ(b) )∥
+                               L̂i     = max                               ,                         (22)
+                                         (a,b)   ∥θ(a) − θ(b) ∥ + εnum
+
+                                                         15
+with εnum = 10−8 for numerical stability. Because the iterates of Algorithm ?? stay in a sublevel
+set of Fλ , the locally-estimated L̂i upper-bounds the relevant Lipschitz constant for the smoothness
+oracle used in T (λ; Bm ). When the network is small enough, one can additionally validate L̂i
+by power iteration on the Gauss–Newton approximation ∇2 Fi ≈ Jθ⊤ Hsoftmax Jθ , where Jθ is the
+per-sample logit Jacobian.
+
+Data generation strategies. We propose three complementary strategies, ordered by realism vs.
+controllability.
+
+(1) Planted synthetic preferences (controlled benchmark). This is the LLM analogue of the
+planted-model generation used in Section ??, and we recommend it as the primary testbed because it
+admits a known reference Pareto front. Fix a small ground-truth language model π⋆ and K linear
+“reward heads” {Ri⋆ }K           ⋆            ⋆
+                     i=1 , each Ri (x, y) = ⟨wi , ϕ(x, y)⟩ for a fixed embedding ϕ. For each i, sample
+prompts x ∼ Px and pairs of responses (ya , yb ) ∼ π⋆ (· | x) × π⋆ (· | x), then assign preference
+labels by the Bradley–Terry model
+                          P(ya ≻i yb | x) = σ(Ri⋆ (x, ya ) − Ri⋆ (x, yb )) .                       (23)
+Because the reward heads {wi⋆ } are known, the optimal scalarised policy πλ,β
+                                                                          ⋆
+                                                                              is computable in
+closed form for any λ ∈ ∆K , so the worst-case suboptimality
+                                     sup Fλ (π̂(λ)) − Fλ⋆
+                                                           
+                                      λ∈Gfine
+
+can be evaluated exactly — exactly matching the protocol of Figure ??.
+
+(2) Standard preference-dataset benchmarks (real preferences). Use established multi-objective
+preference datasets directly: PKU-SafeRLHF [? ] (K = 2: helpfulness, harmlessness; ∼30k
+pairs), HH-RLHF [? ] (K = 2: helpful, harmless; ∼170k pairs), or UltraFeedback [? ] (K = 4:
+helpfulness, truthfulness, honesty, instruction-following; ∼64k pairs). In this regime, no ground-truth
+Pareto front is available, so the worst-case suboptimality is replaced by hypervolume [? ] over the
+reward space and Pareto-front coverage against the published frontiers of MODPO and Rewarded
+Soups [? ].
+
+(3) Distilled preferences from a stronger model (semi-synthetic). For K beyond 2–4, or for
+alignment dimensions not covered by existing datasets (e.g. brevity, factuality, code safety), label
+preferences using a stronger frozen model as oracle. For each prompt x and pair (ya , yb ) sampled from
+πref , query a frozen oracle model for K independent ratings (ria , rib ) and assign the i-th preference
+label as 1[ria > rib ]. This recovers the controllability of strategy (1) at the cost of (modest) oracle
+bias.
+
+Experimental configuration. To keep the experiment within the same compute regime as Sec-
+tions ??–?? while remaining faithful to the LLM-alignment problem, we suggest the following
+configuration as a starting point: base model GPT-2 small (124M parameters) or Pythia-160M as
+πref ; K = 2 alignment dimensions on a 5k-pair subset of PKU-SafeRLHF; β = 0.1; sequence length
+capped at 128 tokens; reference Pareto front estimated by running plain DPO at 21 evenly-spaced
+grid points λ ∈ {0, 0.05, . . . , 1.0} for a high-accuracy budget. Algorithm ?? is then compared
+against the uniform-discretisation baseline at matched total gradient-evaluation budgets, with the
+same (gradient evals, worst-case suboptimality) axes used in Figures ?? and ??.
+
+
+
+
+                                                  16
+6   Conclusions and future directions
+In this paper, we have developed a first-order bundle method for solving the smooth multi-objective
+optimization problem, which has broad applications in machine learning, such as multi-task learning,
+neural architecture search, hyperparameter optimization, generative modeling, transfer and domain
+adaptation, recommender systems, reinforcement learning with smooth rewards, federated learning
+with smooth local loss. Some future directions include extending the setting to non-smooth multi-
+objective optimization, which has applications in fairness-accuracy tradeoff and robust and adversarial
+learning.
+
+Acknowledgements
+
+
+
+
+                                                  17
+References
+   [Bis06] C.M. Bishop. Pattern recognition and machine learning, volume 4. Springer New York,
+           2006.
+  [Dés12] Jean-Antoine Désidéri. Multiple-gradient descent algorithm (MGDA) for multiobjective
+          optimization. Comptes Rendus Mathématique, 350(5–6):313–318, 2012.
+[LLJ+ 21] Bo Liu, Xingchao Liu, Xiaojie Jin, Peter Stone, and Qiang Liu. Conflict-averse gradient
+          descent for multi-task learning. In Advances in Neural Information Processing Systems,
+          volume 34, 2021.
+  [Nes18] Yurii Nesterov. Lectures on Convex Optimization. Springer Publishing Company,
+          Incorporated, 2nd edition, 2018.
+[NSA+ 22] Aviv Navon, Aviv Shamsian, Idan Achituve, Haggai Maron, Kenji Kawaguchi, Gal
+          Chechik, and Ethan Fetaya. Multi-task learning as a bargaining game. In Proceedings of
+          the 39th International Conference on Machine Learning, volume 162 of Proceedings of
+          Machine Learning Research, pages 16428–16446. PMLR, 2022.
+    [R97] CARUANA R. Multitask learning : A knowledge-based source of inductive bias. Machine
+          Learning, 28:41–75, 1997.
+   [SK18] Ozan Sener and Vladlen Koltun. Multi-task learning as multi-objective optimization. 31,
+          2018.
+
+
+
+
+                                              18
+Appendix
+
+A         The convergence and oracle complexity of the adaptive algorithm
+A.1       Proof of Theorem 2 and Theorem ??
+                      ϵ
+Proof. Consider an 3LipPC -net of ∆K w.r.t. the ℓ1 -norm. That is, a finite set of points N ⊆ ∆K
+such that, for all λ ∈ ∆K , there exists λ̂ ∈ N with
+                                                            ϵ
+                                        ∥λ − λ̂∥1 ≤             .
+                                                         3LipPC
+By Assumption ??, we have for all t ≥ 1 and for all λ ∈ ∆K , there exists λ̂ ∈ N such that
+                                                             ϵ
+                                 PC(λ; Bt ) ≤ PC(λ̂; Bt ) + .
+                                                             3
+Therefore, it suffices to show that supλ̂∈N PC(λ̂; Bt ) ≤ 2ϵ
+                                                          3 at some iteration t.
+
+l any iteration t mof Algorithm 2, if PC = UB/GAP, applying Corollary ?? with Mt =
+At
+ L̃λt         ∗
+ µλ log (3PCt /ϵ) yields:
+      t
+
+                                                               Mt
+                                                         µλt                     ϵ
+                            PC(λt ; Bt+1 ) ≤       1−                 · PC∗t ≤     .
+                                                         L̃λt                    3
+Otherwise PC = GN, let Cλt be the constant in Corollary 4.1 such that
+                                                       ϵ
+                                    PC(λt ; Bt+1 ) <
+                                                       3
+              3Cλt Lλt
+for Mt = ⌈       ϵ     ⌉.
+Now, let λ̂t ∈ N be the projection onto the net N for λt . Then, Assumption ?? yields
+                                                                        ϵ  2ϵ
+                             PC(λ̂t ; Bt+1 ) ≤ PC(λt ; Bt+1 ) +           ≤ ,
+                                                                        3  3
+by combining with the previous inequality.
+Thus, at every iteration t of Algorithm 2, we can examine the list of values {PC(λ̂; Bt ) for λ̂ ∈ N }.
+Note that these values are all monotone decreasing by the global monotonicity property in Assumption
+??. At every iteration, we just demonstrated that at least one of these values becomes less than or
+equal to 2ϵ                                             2ϵ
+          3 and therefore remains less than or equal to 3 for all subsequent iterations. Thus, the total
+number of iterations before it is guaranteed that supλ̂∈N PC(λ̂; Bt ) ≤ 2ϵ3 is bounded by the size of
+                                                                       ∗
+N . As mentioned before, supλ̂∈N PC(λ̂; Bt ) ≤ 2ϵ  3  ensures that  PC t ≤ ϵ. Note that the size of N
+                              K−1
+can be bounded by CLipPC  ϵ         . This completes the proof.
+
+
+
+
+                                                    19
+

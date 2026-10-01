@@ -1,0 +1,46 @@
+{
+  "experiment": "crossover",
+  "smoke": false,
+  "configs": [
+    {
+      "tag": "d642_h16x16_tanh_n50000_B2000",
+      "d": 642,
+      "plateau_ratio_baseline_over_adaptive": null,
+      "cpu_ratio_baseline_over_adaptive": 0.38268869956064927,
+      "grad_ratio_baseline_over_adaptive": 4.8125,
+      "L_scale_final": 4.0
+    },
+    {
+      "tag": "d1794_h32x32_tanh_n50000_B2000",
+      "d": 1794,
+      "plateau_ratio_baseline_over_adaptive": null,
+      "cpu_ratio_baseline_over_adaptive": 0.4503070703642483,
+      "grad_ratio_baseline_over_adaptive": 1.925,
+      "L_scale_final": 4.0
+    },
+    {
+      "tag": "d5634_h64x64_tanh_n50000_B2000",
+      "d": 5634,
+      "plateau_ratio_baseline_over_adaptive": null,
+      "cpu_ratio_baseline_over_adaptive": 2.0156269449303155,
+      "grad_ratio_baseline_over_adaptive": 12.5,
+      "L_scale_final": 8.0
+    },
+    {
+      "tag": "d11522_h96x96_tanh_n50000_B2000",
+      "d": 11522,
+      "plateau_ratio_baseline_over_adaptive": null,
+      "cpu_ratio_baseline_over_adaptive": 1.3705075570261218,
+      "grad_ratio_baseline_over_adaptive": 11.55,
+      "L_scale_final": 8.0
+    },
+    {
+      "tag": "d19458_h128x128_tanh_n50000_B2000",
+      "d": 19458,
+      "plateau_ratio_baseline_over_adaptive": null,
+      "cpu_ratio_baseline_over_adaptive": 0.2145505851470313,
+      "grad_ratio_baseline_over_adaptive": 1.925,
+      "L_scale_final": 16.0
+    }
+  ]
+}
