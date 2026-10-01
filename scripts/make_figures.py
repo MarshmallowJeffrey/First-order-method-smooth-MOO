@@ -35,7 +35,7 @@ from abm.labels import place  # noqa: E402
 RESULTS, FIGURES = ROOT / "results", ROOT / "figures"
 COL = {"adaptive": "#ff7f0e", "uniform": "#1f77b4", "surf": "#d62728"}
 MARK = {"uniform": "s", "surf": "^"}
-NAME = {"adaptive": "Grab", "uniform": "Unif Discrtztn", "surf": "SURF"}
+NAME = {"adaptive": "GRAB", "uniform": "Unif Discrtztn", "surf": "SURF"}
 YLAB = r"$\max_{\lambda\in\Delta_K}\,\mathrm{GN}(\lambda,B_t)$"
 
 
