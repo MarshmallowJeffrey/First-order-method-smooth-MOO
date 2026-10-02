@@ -1,4 +1,5 @@
-"""Uniform discretization: one run per plotted resolution r, each until its GN plateaus.
+"""Uniform discretization: one run per plotted resolution r, each until its GN plateaus, with the
+Gradient-Call checkpoints of mogym.config (every grid weight end past each mark).
 
     python scripts/run_uniform.py fishwood [--values 2 4 8] [--results results]
 """
@@ -22,4 +23,5 @@ for r in a.values or spec["values"]:
         print(f"{a.task} uniform r={r}: exists, skipped")
         continue
     uniform_plateau(model, r, stem, lr=spec["lr"], steps=spec["M"], rule=config.RULE, pool=pool,
-                    max_sweeps=config.MAX_SWEEPS)
+                    max_sweeps=config.MAX_SWEEPS, every=config.TASKS[a.task]["every"],
+                    budget=config.TASKS[a.task]["budget"])

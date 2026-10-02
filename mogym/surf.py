@@ -11,6 +11,11 @@ Instead of a fixed number of rounds T, the run stops by the rule of mogym.platea
 (plateau != None); readiness: the slot weights (including the next round's) moved <= weight_tol over the
 window, and P95 over slots of ||grad F_lambda_n(slot n)|| <= max(own_floor, own_ratio * GN).  `rounds` is a
 safety cap.  Each Adam step counts as K Gradient Calls; the initial theta_0 gradient adds K.
+
+Two kinds of checkpoints (field "kind"): "calls" at the end of the first slot past every `every` Gradient
+Calls up to `budget` and every 10 x `every` afterwards (the schedule shared with GRAB; the bundle is the
+current N+1 slot policies), on which the plotted point is located; "round" at the end of every round, the
+values of the stopping rule.
 """
 import numpy as np
 from scipy.interpolate import PchipInterpolator
@@ -21,7 +26,7 @@ from .oracle import Oracle
 from .recorder import Recorder
 
 
-def surf(model, N_segments, path, *, rounds, inner_steps, inner_lr, alpha=0.3, fine_grid=2001,
+def surf(model, N_segments, path, *, rounds, inner_steps, inner_lr, every, budget, alpha=0.3, fine_grid=2001,
          plateau=None, adam_keep_tol=None, save_arrays=True):
     if model['K'] != 2:
         raise ValueError('SURF Algorithm 1 is defined for K=2')
@@ -29,9 +34,10 @@ def surf(model, N_segments, path, *, rounds, inner_steps, inner_lr, alpha=0.3, f
     oracle = Oracle(model)
     rec = Recorder(oracle, dict(method='SURF', N_segments=N_segments, N_points=N_segments + 1, rounds=rounds,
                                 alpha=alpha, inner_steps=inner_steps, inner_lr=inner_lr, fine_grid=fine_grid,
-                                plateau_rule=plateau, adam_keep_tol=adam_keep_tol), save_arrays=save_arrays)
+                                plateau_rule=plateau, adam_keep_tol=adam_keep_tol, checkpoint_every=every,
+                                checkpoint_budget=budget), save_arrays=save_arrays)
     steps = 0
-    rec.checkpoint(np.zeros((1, d)), count=K)
+    rec.checkpoint(np.zeros((1, d)), count=K); rec.rows[-1]['kind'] = 'start'
     quantiles = np.linspace(0.0, 1.0, N_segments + 1)
     fine_w = np.linspace(0.0, 1.0, fine_grid)
     F_vals = fine_w.copy()
@@ -44,6 +50,7 @@ def surf(model, N_segments, path, *, rounds, inner_steps, inner_lr, alpha=0.3, f
     slots = [(x0.copy(), f0, j0) for _ in quantiles]
     current_logits = [x0.copy() for _ in quantiles]
     slot_opts, slot_w = [None] * len(quantiles), [None] * len(quantiles)
+    mark, round_gn = every, []
     for outer in range(1, rounds + 1):
         current_w = np.interp(quantiles, F_vals, fine_w)
         weight_history.append(current_w.copy())
@@ -65,6 +72,12 @@ def surf(model, N_segments, path, *, rounds, inner_steps, inner_lr, alpha=0.3, f
             current_logits[slot] = x
             rr = oracle.evaluate(x, gradient=False)[1]  # reward vector (R1, R2, KL term): front point
             f_coords.append([rr[0], rr[1]])
+            if K * (steps + 1) >= mark:  # Gradient-Call checkpoint: the current slot policies
+                rec.checkpoint(np.asarray([np.asarray(z[0]).reshape(-1) for z in slots], float),
+                               np.array([z[1] for z in slots]), np.array([z[2] for z in slots]), K * (steps + 1))
+                rec.rows[-1]['kind'] = 'calls'
+                while mark <= K * (steps + 1):
+                    mark += every if mark < budget else 10 * every
         f_coords = np.asarray(f_coords, dtype=np.float32)
         seg_lens = np.sqrt(np.sum(np.diff(f_coords, axis=0) ** 2, axis=1))
         s_vals = np.concatenate([[0.0], np.cumsum(seg_lens)])
@@ -76,6 +89,7 @@ def surf(model, N_segments, path, *, rounds, inner_steps, inner_lr, alpha=0.3, f
         theta = np.asarray([np.asarray(x).reshape(-1) for x in current_logits], float)
         count = K * (steps + 1)
         gn = rec.checkpoint(theta, np.array([z[1] for z in slots]), np.array([z[2] for z in slots]), count)
+        rec.rows[-1]['kind'] = 'round'; round_gn.append(gn)
         if outer == 1 or outer % 5 == 0 or outer == rounds:
             print(f"{model['name']} SURF N={N_segments} round={outer} calls={count} GN={gn:.6g}", flush=True)
         if plateau is not None:
@@ -87,7 +101,7 @@ def surf(model, N_segments, path, *, rounds, inner_steps, inner_lr, alpha=0.3, f
             own = np.linalg.norm(np.einsum('nkd,nk->nd', rec.last_J, lam), axis=1)
             own_p95.append(float(np.quantile(own, .95)))
             ready = ready and own_p95[-1] <= max(plateau["own_floor"], plateau["own_ratio"] * gn)
-            trigger, stop = plateau_rule.update([c["gn"] for c in rec.rows[1:]], trigger, ready, plateau)
+            trigger, stop = plateau_rule.update(round_gn, trigger, ready, plateau)
             if stop:
                 status = 'plateau'
                 break

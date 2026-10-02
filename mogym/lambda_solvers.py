@@ -252,7 +252,10 @@ class CCP:
         fresh = (self.rng.dirichlet(np.ones(self.K), size=self.nseeds) if self.fresh_seeds
                  else np.empty((0, self.K)))
         extra = np.vstack([wA] + self.previous + [fresh])
-        es = np.einsum('ni,mij,nj->nm', extra, qs, extra).min(axis=1)
+        # screening: phi of every extra seed on the whole bundle in one batched contraction, evaluated as a
+        # single matrix product (w w')_flat . (Q_i)_flat; numpy's einsum would loop in C without BLAS, which
+        # took about half of the Fruit Tree selection time
+        es = ((extra[:, :, None] * extra[:, None, :]).reshape(len(extra), -1) @ qs.reshape(len(qs), -1).T).min(axis=1)
         seeds = np.vstack([self.seeds, extra]); scores = np.r_[scores, es]
         order = np.argsort(-scores, kind='stable')
         best = float(scores[order[0]]); wb = seeds[order[0]].copy()

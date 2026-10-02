@@ -1,4 +1,5 @@
-"""SURF (K=2): one run per plotted N, each until its GN plateaus.
+"""SURF (K=2): one run per plotted N, each until its GN plateaus, with the Gradient-Call checkpoints of
+mogym.config (every slot end past each mark).
 
     python scripts/run_surf.py fishwood [--values 2 4 8] [--results results]
 """
@@ -21,4 +22,5 @@ for n in a.values or spec["values"]:
         print(f"{a.task} SURF N={n}: exists, skipped")
         continue
     surf(model, n, stem, rounds=config.MAX_ROUNDS, inner_steps=spec["K_S"], inner_lr=spec["lr"],
-         plateau=config.SURF_RULE, adam_keep_tol=config.ADAM_KEEP_TOL)
+         plateau=config.SURF_RULE, adam_keep_tol=config.ADAM_KEEP_TOL, every=config.TASKS[a.task]["every"],
+         budget=config.TASKS[a.task]["budget"])

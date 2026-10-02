@@ -1,6 +1,7 @@
-# MO-Gymnasium experiments: adaptive bundle method vs. uniform discretization and SURF
+# MO-Gymnasium experiments: GRAB vs. uniform discretization and SURF
 
-This folder reproduces the MO-Gymnasium results of the paper *An Adaptive First Order Bundle Method*:
+This folder reproduces the MO-Gymnasium results of the paper *GRAB: Gradient Reuse with Adaptive Bundles for
+Smooth Nonconvex Multi-Objective Optimization*:
 the table in Section "MO-Gymnasium Benchmarks" and the four convergence figures of the appendix
 (FishWood and Deep Sea Treasure with K=2, Breakable Bottles with K=3, Fruit Tree of depth 6 with K=6).
 
@@ -27,12 +28,16 @@ and gradients are computed exactly from the finite models (no sampled trajectori
 ./run_all.sh
 ```
 
-The script runs every task serially with one numerical thread and takes about 12 minutes on a laptop.
+The script runs every task serially with one numerical thread and takes about 15 minutes on the machine below.
 Outputs:
 
 - `results/<task>/...`: one JSON file per run (settings, checkpoints with Gradient Calls, CPU time and GN, timings) and one `.npz` file with the returned policies.
-- `figures/<task>_convergence.png`: the figure.
+- `figures/<task>_convergence.png` and `.pdf`: the figure.
 - `figures/<task>_summary.json`: the number report.
+
+Reported runs: Apple M1 (8 CPU cores, 4 performance and 4 efficiency), 8 GB memory, macOS 15.7, Python 3.13.5,
+NumPy 2.1.3 (OpenBLAS 0.3.21), SciPy 1.15.3 (HiGHS), Gymnasium 1.3.0, MO-Gymnasium 1.3.2; one numerical thread,
+no GPU.
 
 The runs are deterministic.
 CPU times depend on the machine and vary by a few percent between repeated runs.  Comparisons in the
@@ -43,7 +48,7 @@ Time panel between points that are only a few milliseconds apart can therefore f
 ```bash
 python scripts/run_uniform.py  dst            # Uniform, every plotted r, each run to its GN plateau
 python scripts/run_surf.py     dst            # SURF (K=2 tasks), every plotted N
-python scripts/run_adaptive.py dst            # adaptive bundle method (budget from the baseline points)
+python scripts/run_adaptive.py dst            # GRAB, to the fixed budget of the task
 python scripts/make_figure.py  dst            # figure + summary
 python scripts/check_doubling.py dst          # optional: rerun each plotted baseline run for twice its length
 ```
@@ -58,15 +63,17 @@ and `--results <dir>`; runs whose output already exists are skipped.
 | `mogym/envs.py` | finite MDP models of the four tasks, with γ and τ |
 | `mogym/oracle.py` | exact objectives F_k (discounted, KL-regularized) and their Jacobians |
 | `mogym/adam.py` | Adam, the inner solver of all methods |
-| `mogym/adaptive.py` | adaptive bundle method (paper Algorithm 1) |
+| `mogym/adaptive.py` | GRAB, Gradient Reuse with Adaptive Bundles (paper Algorithm 1) |
 | `mogym/uniform.py` | uniform discretization (paper Algorithm 7), each grid weight run to the GN plateau |
 | `mogym/surf.py` | SURF (Algorithm 1 of the SURF paper), K=2 |
-| `mogym/lambda_solvers.py` | preference-weight solvers: exact envelope (K=2), simplicial branch-and-bound (K=3), multistart CCP of the paper appendix (K=6) |
+| `mogym/lambda_solvers.py` | preference-weight solvers: exact envelope (K=2), simplicial branch-and-bound (K=3), multistart CCP of the paper appendix (K=6; the seed screening is one matrix product) |
 | `mogym/metrics.py` | reported metric: exact (K=2), certified interval (K=3), fixed pool of 23,992 weights (K=6) |
 | `mogym/plateau.py` | stopping rule of the baseline runs and definition of the plotted point |
 | `mogym/recorder.py` | checkpoints; training time excludes the metric evaluation |
 | `mogym/config.py` | settings of the reported runs |
-| `mogym/points.py` | reading runs back: plotted points, adaptive curve, adaptive budget |
+| `mogym/points.py` | reading runs back: plotted points, GRAB curve |
+| `scripts/make_figure.py` | figure in the style of the MNIST figures of the paper, and the number report |
+| `scripts/labels.py` | placement of the number labels next to the points (taken from the MNIST code) |
 
 ## Protocol
 
@@ -76,7 +83,7 @@ and `--results <dir>`; runs whose output already exists are skipped.
 - Time is the training process CPU time. It includes preference selection and the SURF weight updates, and excludes the metric evaluation at checkpoints.
 - Adam state: a method keeps the Adam state of an inner solve while its weight is unchanged, i.e. moves by at most 0.005 in every coordinate, and starts a new state otherwise.
 
-**Adaptive bundle method.**
+**GRAB.**
 - At each outer iteration it selects λ_t maximizing GN(λ, B) over the current bundle.
 - It runs M_A Adam steps from the Algorithm 2 warm start and adds the iterate with the smallest ‖∇F_{λ_t}‖.
 
@@ -88,37 +95,48 @@ and `--results <dir>`; runs whose output already exists are skipped.
 - N+1 slots are placed at the quantiles of the reward-space arc length, with PCHIP interpolation and damping α = 0.3.
 - Each slot runs K_S Adam steps per round, and the output is the last round.
 
+**Budget and checkpoints.**
+- Each task has one fixed budget B, the same for all methods (table below): 1.05 × the Gradient Calls of the farthest comparator point measured previously, rounded up; the factor 1.05 is a heuristic margin.
+- All methods are checkpointed on one Gradient-Call schedule: every B/600 (K=2) or B/120 (K>2) calls up to B and every ten times that afterwards, at the end of the first unit that completes after the mark: a GRAB outer iteration, the M_U steps of one Uniform grid weight, or the K_S steps of one SURF slot. These checkpoints have `"kind": "calls"` in the run files.
+- Uniform also records the GN after every sweep and SURF after every round (`"kind": "sweep"` / `"round"`); the stopping rule uses only these.
+
 **Stopping rule and plotted points.**
-- Every Uniform r and SURF N is a separate run. It stops once its GN has changed by at most 1% three times in a row, the run is ready, and three further checkpoints confirm the plateau.
+- Every Uniform r and SURF N is a separate run. It stops once its per-sweep (per-round) GN has changed by at most 1% three times in a row, the run is ready, and three further sweeps (rounds) confirm the plateau.
   - Ready means: the 95th percentile of the gradient norms at the policies' own weights is at most max(1e-5, 0.25·GN). For SURF the slot weights must also have settled.
-- The plotted point is the earliest checkpoint after which the GN stays within 5% of its value at stopping.
-- The adaptive budget is 1.05 × the Gradient Calls of the farthest plotted point, rounded up.
+- The plotted point: among the Gradient-Call checkpoints before the stop and the stopping checkpoint, the earliest after which the GN stays within 5% of its value at stopping. Gradient Calls, CPU time and GN are read from that checkpoint.
+- A run is plotted if its point lies within B. The values of r and N (powers of two for K=2, 1, 2, ... for K>2) were increased until two consecutive values lie beyond B; `mogym/config.py` lists the plotted values and the ones beyond B.
+- `check_doubling.py` reruns every plotted run for twice its length; in the reported runs the GN changed by at most 1.6% after the stop.
 
 **Settings** (`mogym/config.py`; chosen by the tuning procedure of the paper appendix):
 
-| Task | Uniform | SURF | Adaptive | Adaptive budget |
+| Task | Uniform | SURF | GRAB | Budget B |
 |---|---|---|---|---|
 | FishWood | M_U=50, lr 0.03, r = 2,4,…,256 | K_S=25, lr 0.03, N = 2,4,…,128 | M_A=10, lr 0.01, envelope | 81,000 |
 | DST | M_U=5, lr 0.3, r = 2,4,…,512 | K_S=25, lr 0.1, N = 4,8,…,64 | M_A=10, lr 0.1, envelope | 96,000 |
-| Breakable Bottles | M_U=25, lr 0.1, r = 1,…,24 | – | M_A=25, lr 0.03, K=3 subdivision (gap 0.1, 500 nodes) | 27,000 |
-| Fruit Tree (d=6) | M_U=25, lr 0.03, r = 1,…,6 | – | M_A=10, lr 0.1, periodic CCP with LP warm start | 150,000 |
+| Breakable Bottles | M_U=25, lr 0.1, r = 1,…,26 | – | M_A=25, lr 0.03, K=3 subdivision (gap 0.05, 1,000 nodes) | 27,000 |
+| Fruit Tree (d=6) | M_U=25, lr 0.03, r = 1,…,6 | – | M_A=10, lr 0.03, periodic CCP with LP warm start | 150,000 |
 
 The Fruit Tree preference selector is the multistart CCP of the paper appendix with these settings:
-- Ordinary selections: 128 random seeds (redrawn at every selection), up to two polished starts, at most 30 CCP updates.
-- Every tenth selection: 1,024 seeds, eight starts, 100 updates.
+- Ordinary selections: 64 random seeds (redrawn at every selection), one polished start, at most 15 CCP updates.
+- Every twentieth selection: 1,024 seeds, eight starts, 100 updates.
 - Extra starts: the center, the previous maximizers, 19 points on each two-objective edge, and the centers of the three-objective faces.
 - Every LP is warm-started from the previous basis.
+- The seeds are screened against the whole bundle in one batched contraction, computed as a single matrix product.
+
+**Figures.** The style is that of the MNIST figures of the paper: GRAB as an orange curve, Uniform as blue
+squares, SURF as red triangles, each family with a dashed descriptive trend c + a (x/s)^(-p) (s the median x),
+fitted by least squares on the logarithms and drawn from the leftmost to the rightmost point.
 
 ## Expected results
 
-`make_figure.py` prints these values; the ratio is the baseline's lowest point divided by the final adaptive value.
+`make_figure.py` prints these values; the ratio is the baseline's lowest point divided by the final GRAB value.
 
-| Task | Adaptive (end of budget) | Uniform, lowest point | SURF, lowest point |
+| Task | GRAB (end of budget) | Uniform, lowest point | SURF, lowest point |
 |---|---|---|---|
 | DST | 6.5277e-6 | 4.8588e-5 (r=512), 7.44× | 1.3043e-4 (N=64), 19.98× |
-| FishWood | 1.9520e-4 | 4.8630e-4 (r=256), 2.49× | 1.0092e-3 (N=128), 5.17× |
-| Breakable Bottles | [4.4503, 4.4714]e-4 | [1.9295, 1.9382]e-3 (r=24), 4.34× | – |
-| Fruit Tree | 6.6208e-4 | 1.0100e-3 (r=6), 1.53× | – |
+| FishWood | 1.9520e-4 | 4.9108e-4 (r=256), 2.52× | 9.9031e-4 (N=128), 5.07× |
+| Breakable Bottles | [4.2709, 4.2919]e-4 | [1.7874, 1.7944]e-3 (r=26), 4.18× | – |
+| Fruit Tree | 6.7029e-4 | 1.0398e-3 (r=6), 1.55× | – |
 
 ## Notes
 

@@ -1,4 +1,4 @@
-"""Reading the runs back: the plotted baseline points, the adaptive curve and the adaptive budget.
+"""Reading the runs back: the plotted baseline points and the adaptive curve.
 
 Results layout (created by the scripts):
   results/<task>/uniform/r<r>.json|.npz      one Uniform run per resolution r
@@ -19,32 +19,40 @@ def plotted_gn(row, K):
     return math.sqrt(row["gn"] * row["gn_upper"]) if K == 3 else row["gn"]
 
 
-def points(results, task, K):
-    """One point per plotted r (Uniform) and N (SURF): the earliest checkpoint after which the GN stays
-    within 5% of its value at stopping; calls, CPU time and GN are read from that checkpoint."""
+def point_of(m, K):
+    """The plotted point of a run that reached its plateau: on the Gradient-Call checkpoints before the stop and
+    the stopping checkpoint, the earliest after which the GN stays within 5% of its value at stopping; calls,
+    CPU time and GN are read from that checkpoint."""
+    stop = m["stop_calls"]
+    cps = [c for c in m["checkpoints"] if c.get("kind") == "calls" and c["component_gradients"] < stop]
+    cps.append(m["checkpoints"][-1])  # the sweep / round checkpoint at which the rule stopped the run
+    return cps[plateau.onset([plotted_gn(c, K) for c in cps], config.POINT_BAND)]
+
+
+def points(results, task, K, all_values=False):
+    """One point per plotted r (Uniform) and N (SURF): runs that reached their plateau with the point at
+    <= B Gradient Calls (all_values=True: every run found, plotted or not, with a flag)."""
     out = []
     spec = config.TASKS[task]
     for method, sub, pre in (("Uniform", "uniform", "r"), ("SURF", "surf", "N")):
-        for v in spec.get(sub, {}).get("values", []):
-            f = Path(results) / task / sub / f"{pre}{v}.json"
-            if not f.exists():
+        files = sorted((Path(results) / task / sub).glob(f"{pre}*.json"), key=lambda f: int(f.stem[1:]))
+        for f in files:
+            v = int(f.stem[1:])
+            if not all_values and v not in spec.get(sub, {}).get("values", []):
                 continue
             m = json.loads(f.read_text())
             if m.get("status") != "plateau":
+                if all_values:
+                    out.append(dict(method=method, param=v, plotted=False, reason=m.get("status")))
                 continue
-            cps = m["checkpoints"][1:]
-            j = plateau.onset([plotted_gn(c, K) for c in cps], config.POINT_BAND)
-            out.append(dict(method=method, param=v, calls=cps[j]["component_gradients"], cpu=cps[j]["train_cpu"],
-                            gn=plotted_gn(cps[j], K), lower=cps[j]["gn"], upper=cps[j]["gn_upper"],
-                            stop_calls=m["stop_calls"], stop_cpu=m["stop_cpu"],
-                            iterations=m.get("sweeps", m.get("outer_rounds"))))
+            c = point_of(m, K)
+            row = dict(method=method, param=v, calls=c["component_gradients"], cpu=c["train_cpu"],
+                       gn=plotted_gn(c, K), lower=c["gn"], upper=c["gn_upper"], stop_calls=m["stop_calls"],
+                       stop_cpu=m["stop_cpu"], iterations=m.get("sweeps", m.get("outer_rounds")),
+                       plotted=c["component_gradients"] <= spec["budget"])
+            if row["plotted"] or all_values:
+                out.append(row)
     return out
-
-
-def budget(pts, task):
-    """1.05 x the Gradient Calls of the farthest plotted point, rounded up."""
-    step = config.TASKS[task]["budget_round"]
-    return int(math.ceil(1.05 * max(p["calls"] for p in pts) / step) * step)
 
 
 def adaptive_curve(results, task, K):

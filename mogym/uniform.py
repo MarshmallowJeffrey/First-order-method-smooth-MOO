@@ -10,8 +10,13 @@ Adam steps so that all weights progress together and the bundle can be checked a
   sweep >1  each weight continues from its own last iterate and Adam state.
 
 At a checkpoint the bundle is {theta_0} U {incumbent_i}, incumbent_i = the min-grad iterate of weight i so
-far, i.e. what Algorithm 7 returns if the InnerSolvers stopped there.  Stopping: mogym.plateau with the
-readiness condition P95_i ||grad F_lambda_i(incumbent_i)|| <= max(own_floor, own_ratio * GN).
+far (within the first sweep: the weights visited so far), i.e. what Algorithm 7 returns if the InnerSolvers
+stopped there.  Two kinds of checkpoints are recorded (field "kind"):
+
+  "calls"  at the end of the first grid weight past every `every` Gradient Calls up to `budget` and every
+           10 x `every` afterwards: the schedule shared with GRAB, on which the plotted point is located;
+  "sweep"  at the end of every sweep: the values g_1, g_2, ... of the stopping rule (mogym.plateau) with the
+           readiness condition P95_i ||grad F_lambda_i(incumbent_i)|| <= max(own_floor, own_ratio * GN).
 """
 import numpy as np
 
@@ -22,7 +27,7 @@ from .oracle import Oracle
 from .recorder import Recorder
 
 
-def uniform_plateau(model, resolution, path, *, lr, steps, rule, pool=None, max_sweeps=50000,
+def uniform_plateau(model, resolution, path, *, lr, steps, rule, every, budget, pool=None, max_sweeps=50000,
                     adam_beta1=.9, adam_beta2=.999, save_arrays=True):
     K, d = model['K'], model['d']
     grid = snake_grid(K, resolution)
@@ -30,29 +35,35 @@ def uniform_plateau(model, resolution, path, *, lr, steps, rule, pool=None, max_
     oracle = Oracle(model)
     config = dict(method='Uniform discretization', resolution=resolution, grid_size=len(grid), lr=lr,
                   steps_per_sweep=M, order='snake', plateau_rule=dict(rule), max_sweeps=max_sweeps,
-                  adam_beta1=adam_beta1, adam_beta2=adam_beta2)
+                  adam_beta1=adam_beta1, adam_beta2=adam_beta2, checkpoint_every=every, checkpoint_budget=budget)
     rec = Recorder(oracle, config, save_arrays=save_arrays)
     f0, j0 = oracle(np.zeros(d)); count = K
     grams = np.empty((len(grid) + 1, K, K))
     grams[0] = metrics.gram(j0[None])[0]
-    best = [None] * len(grid)
+    best, seen = [None] * len(grid), []
 
     def metric(changed):
         for i in changed:
             grams[1 + i] = metrics.gram(best[i][3][None])[0]
-        Q = grams if rec.rows else grams[:1]  # first checkpoint: {theta_0} only
-        return metrics.reporting_metric_gram(Q, pool)
+        return metrics.reporting_metric_gram(grams[[0] + [1 + i for i in seen]], pool)
+
+    def checkpoint(kind, changed):
+        size = np.empty((len(seen) + 1, 0))  # only the bundle size is passed to the recorder
+        gn = rec.checkpoint(size, None, size, count, force_exact=lambda: metric(changed))
+        rec.rows[-1]['kind'] = kind
+        return gn
 
     rec.checkpoint(np.zeros((1, d)), None, np.empty(0), count, force_exact=lambda: metric([]))
+    rec.rows[-1]['kind'] = 'start'
     current, opts = [None] * len(grid), [None] * len(grid)
     gs, p95s, ready_history, trigger, status, stop_a = [], [], [], None, 'safety_cap', None
+    nxt, changed_calls, changed_sweep = every, [], []
     for sweep in range(1, max_sweeps + 1):
         last = (np.zeros(d), f0, j0)
-        changed = []
         for i, lam in enumerate(grid):
             if sweep == 1:
                 x, f, j = last
-                opts[i] = Adam(d, lr, beta1=adam_beta1, beta2=adam_beta2)
+                opts[i] = Adam(d, lr, beta1=adam_beta1, beta2=adam_beta2); seen.append(i)
             else:
                 x, f, j = current[i]
             g = j.T @ lam
@@ -66,10 +77,12 @@ def uniform_plateau(model, resolution, path, *, lr, steps, rule, pool=None, max_
                     best[i] = (gsq, x, f, j)
             current[i] = last = (x, f, j)
             if best[i] is not old:
-                changed.append(i)
-        size = np.empty((len(grid) + 1, 0))  # only the bundle size is passed to the recorder
-        gn = rec.checkpoint(size, None, size, count, force_exact=lambda: metric(changed))
-        gs.append(float(gn))
+                changed_calls.append(i); changed_sweep.append(i)
+            if count >= nxt:  # Gradient-Call checkpoint
+                checkpoint('calls', changed_calls); changed_calls = []
+                while nxt <= count:
+                    nxt += every if nxt < budget else 10 * every
+        gs.append(float(checkpoint('sweep', changed_sweep))); changed_sweep = []
         p95s.append(float(np.quantile(np.sqrt([b[0] for b in best]), .95)))
         ready = p95s[-1] <= max(rule['own_floor'], rule['own_ratio'] * gs[-1])
         ready_history.append(bool(ready))
@@ -80,7 +93,7 @@ def uniform_plateau(model, resolution, path, *, lr, steps, rule, pool=None, max_
     X = np.asarray([np.zeros(d)] + [b[1] for b in best])
     F = np.asarray([f0] + [b[2] for b in best])
     J = np.asarray([j0] + [b[3] for b in best])
-    end = rec.rows[stop_a] if stop_a is not None else rec.rows[-1]
+    end = rec.rows[-1]  # the last sweep checkpoint (at the stop if status == 'plateau')
     own = np.sqrt([b[0] for b in best])
     print(f'{model["name"]} uniform r={resolution} M={M} sweeps={len(gs)} {status} '
           f'calls={end["component_gradients"]} GN={end["gn"]:.5g}', flush=True)

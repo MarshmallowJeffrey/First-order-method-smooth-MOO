@@ -11,5 +11,5 @@
   uniform         uniform discretization (paper Algorithm 7)
   surf            SURF Algorithm 1 (K=2)
   config          settings of the reported runs
-  points          reading the runs back (plotted points, adaptive curve, budget)
+  points          reading the runs back (plotted points, adaptive curve)
 """
