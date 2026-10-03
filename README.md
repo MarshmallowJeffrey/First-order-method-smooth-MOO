@@ -89,8 +89,8 @@ and `--results <dir>`; runs whose output already exists are skipped.
 - It runs M_A Adam steps from the Algorithm 2 warm start and adds the iterate with the smallest ‖∇F_{λ_t}‖.
 - It runs until the budget B is spent (no tolerance ε); every inner solve takes exactly M_A steps (fewer only when the budget runs out).
 - Preference-weight solvers and their stopping conditions:
-  - K=2: the exact lower envelope (no iteration).
-  - K=3: simplicial branch-and-bound; a selection stops once its certified relative gap is at most 0.05 or after 1,000 splits.
+  - K=2: with λ = (x, 1−x) every bundle point gives a convex quadratic in x; the lower envelope is kept as pieces (split at the crossing points when a point is added), and its maximum is the largest value at a piece end. Exact, no iteration or tolerance.
+  - K=3: branch-and-bound over triangles of the simplex. Lower bound: the best φ at the vertices, the center, a grid of resolution 12, the previous maximizer and the vertices of the examined triangles; upper bound on a triangle: min_i max_vertex q_i (q_i convex). The triangle with the largest upper bound is split into four at its edge midpoints. A selection stops once the certified relative gap in GN is at most 0.05 or after 1,000 splits (the reported metric uses 0.005, 1e5 splits and a grid of resolution 24).
   - K=6: multistart CCP (paper appendix). A selection returns at once if the best screened seed is within a relative 1e-8 of the upper bound val(A); otherwise each start stops when the predicted improvement is at most 1e-8·max(φ, 1e-6) (values normalized by the best seed value) or after the iteration cap. LPs: HiGHS with feasibility tolerances 1e-9, warm-started from the previous basis; LPs with at least 400 rows are solved by constraint generation (rows added until none is violated by more than 1e-10), which returns an optimum of the full LP.
 
 **Uniform discretization.**
