@@ -259,7 +259,7 @@ class CCP:
 
     Stopping: a solve returns at once if the best screened seed is within a relative 1e-8 of the upper bound
     val(A) (sandwich closed); otherwise each start is polished until the predicted improvement
-    t* - phi(lambda_c) is at most 1e-8 max(phi(lambda_c), 1e-6) or after maxiter LPs (values normalized by the
+    t* - phi(lambda_c) is at most 1e-8 max(1, phi(lambda_c)) or after maxiter LPs (values normalized by the
     best seed value)."""
     def __init__(self, K, nseeds=256, nstarts=4, seed=42, maxiter=100, boundary_seeds=False,
                  boundary_resolution=4, fresh_seeds=False, keep_pool=0, shared_pool=None):
@@ -331,7 +331,7 @@ class CCP:
                 if new < old - 2e-8:
                     raise RuntimeError('CCP descent exceeds numerical tolerance')
                 w = wn
-                if lower - old <= 1e-8 * max(abs(old), 1e-6):
+                if lower - old <= 1e-8 * max(abs(old), 1.):  # GNS note, Sec. 4.3
                     break
             maxima.append(w)
         self.previous = maxima
