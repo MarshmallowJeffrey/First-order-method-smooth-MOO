@@ -23,13 +23,14 @@ POINT_BAND = .05            # plotted point: earliest checkpoint after which the
 # (as measured before B was fixed), rounded up to a multiple of 1e3 (K=2), 3e3 (Breakable Bottles) or 6e3 (Fruit
 # Tree).  Checkpoints of every method follow one Gradient-Call schedule: every B/600 (K=2) or B/120 (K>2) calls up
 # to B, 10x that afterwards (GRAB: checkpoint_count = 600 / 120 over B).  A run is plotted if its point lies at <= B
-# calls.  The next values (FishWood r=1024 and N=256, DST r=1024 and N=128, Breakable Bottles r=64, Fruit Tree r=7)
-# have their point beyond B; DST N=2 is not plotted (its middle slot weight cycles without settling, so the rule
-# never stops it).
+# calls.  FishWood SURF also uses N=208, the largest multiple of 16 whose point lies within B, to place one SURF
+# point near the end of the budget.  The next values (FishWood r=1024 and N=224, DST r=1024 and N=128, Breakable
+# Bottles r=64, Fruit Tree r=7) have their point beyond B; DST N=2 is not plotted (its middle slot weight cycles
+# without settling, so the rule never stops it).
 TASKS = {
     "fishwood": dict(
         uniform=dict(M=50, lr=.03, values=[2, 4, 8, 16, 32, 64, 128, 256, 512]),
-        surf=dict(K_S=25, lr=.03, values=[2, 4, 8, 16, 32, 64, 128]),
+        surf=dict(K_S=25, lr=.03, values=[2, 4, 8, 16, 32, 64, 128, 208]),
         adaptive=dict(inner_steps=10, lr=.01, lambda_method="envelope", checkpoint_count=600),
         budget=108000, every=180),
     "dst": dict(

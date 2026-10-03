@@ -110,14 +110,14 @@ and `--results <dir>`; runs whose output already exists are skipped.
 - Every Uniform r and SURF N is a separate run. It stops once its per-sweep (per-round) GN has changed by at most 1% three times in a row, the run is ready, and three further sweeps (rounds) confirm the plateau.
   - Ready means: the 95th percentile of the gradient norms at the policies' own weights is at most max(1e-5, 0.25·GN). For SURF the slot weights must also have settled.
 - The plotted point: among the Gradient-Call checkpoints before the stop and the stopping checkpoint, the earliest after which the GN stays within 5% of its value at stopping. Gradient Calls, CPU time and GN are read from that checkpoint.
-- A run is plotted if its point lies within B. The values of r and N are powers of two from 2 (FishWood, DST, Breakable Bottles) and r = 1, …, 6 (Fruit Tree); the next value of every family has its point beyond B (`mogym/config.py`).
+- A run is plotted if its point lies within B. The values of r and N are powers of two from 2 (FishWood, DST, Breakable Bottles) and r = 1, …, 6 (Fruit Tree); FishWood SURF also uses N = 208, the largest multiple of 16 whose point lies within B, so that one SURF point lies near the end of the budget. The next value of every family has its point beyond B (`mogym/config.py`).
 - `check_doubling.py` reruns every plotted run for twice its length; in the reported runs the GN changed by less than 1.7% after the stop (between −1.63% and +1.51%).
 
 **Settings** (`mogym/config.py`):
 
 | Task | Uniform | SURF | GRAB | Budget B |
 |---|---|---|---|---|
-| FishWood | M_U=50, lr 0.03, r = 2,4,…,512 | K_S=25, lr 0.03, N = 2,4,…,128 | M_A=10, lr 0.01, envelope | 108,000 |
+| FishWood | M_U=50, lr 0.03, r = 2,4,…,512 | K_S=25, lr 0.03, N = 2,4,…,128 and 208 | M_A=10, lr 0.01, envelope | 108,000 |
 | DST | M_U=5, lr 0.3, r = 2,4,…,512 | K_S=25, lr 0.1, N = 4,8,…,64 | M_A=10, lr 0.1, envelope | 93,000 |
 | Breakable Bottles | M_U=5, lr 0.03, r = 2,4,…,32 | – | M_A=25, lr 0.03, K=3 subdivision (gap 0.05, 1,000 splits) | 18,000 |
 | Fruit Tree (d=6) | M_U=5, lr 0.1, r = 1,…,6 | – | M_A=10, lr 0.03, periodic CCP | 60,000 |
@@ -142,7 +142,7 @@ parentheses, divided by the lowest GRAB value within the Gradient Calls and with
 | Task | GRAB (end of budget) | Uniform, lowest point | SURF, lowest point |
 |---|---|---|---|
 | DST | 6.6235e-6 | 4.8588e-5 (r=512), 7.34× (6.36× / 5.50×) | 1.3043e-4 (N=64), 19.69× (19.24× / 16.63×) |
-| FishWood | 1.0211e-4 | 2.5027e-4 (r=512), 2.45× (2.23× / 1.58×) | 1.0050e-3 (N=128), 9.84× (3.17× / 3.07×) |
+| FishWood | 1.0211e-4 | 2.5027e-4 (r=512), 2.45× (2.23× / 1.58×) | 6.2749e-4 (N=208), 6.15× (5.87× / 4.05×) |
 | Breakable Bottles | [5.0486, 5.0738]e-4 | [1.5639, 1.5713]e-3 (r=32), 3.10× (3.09× / 1.99×) | – |
 | Fruit Tree | 8.3210e-4 | 1.0594e-3 (r=6), 1.27× (1.22× / 1.00×) | – |
 
