@@ -28,11 +28,12 @@ and gradients are computed exactly from the finite models (no sampled trajectori
 ./run_all.sh
 ```
 
-The script runs every task serially with one numerical thread and takes about 15 minutes on the machine below.
+The script runs every task serially with one numerical thread and takes about 7 minutes on the machine below
+(`check_doubling.py` for all tasks takes about 8 more minutes).
 Outputs:
 
 - `results/<task>/...`: one JSON file per run (settings, checkpoints with Gradient Calls, CPU time and GN, timings) and one `.npz` file with the returned policies.
-- `figures/<task>_convergence.png` and `.pdf`: the figure.
+- `figures/<task>_convergence.png`: the figure.
 - `figures/<task>_summary.json`: the number report.
 
 Reported runs: Apple M1 (8 CPU cores, 4 performance and 4 efficiency), 8 GB memory, macOS 15.7, Python 3.13.5,
@@ -66,7 +67,7 @@ and `--results <dir>`; runs whose output already exists are skipped.
 | `mogym/adaptive.py` | GRAB, Gradient Reuse with Adaptive Bundles (paper Algorithm 1) |
 | `mogym/uniform.py` | uniform discretization (paper Algorithm 7), each grid weight run to the GN plateau |
 | `mogym/surf.py` | SURF (Algorithm 1 of the SURF paper), K=2 |
-| `mogym/lambda_solvers.py` | preference-weight solvers: exact envelope (K=2), simplicial branch-and-bound (K=3), multistart CCP of the paper appendix (K=6; the seed screening is one matrix product) |
+| `mogym/lambda_solvers.py` | preference-weight solvers: exact envelope (K=2), simplicial branch-and-bound (K=3), multistart CCP of the paper appendix (K=6; the seed screening is one matrix product, large LPs by constraint generation) |
 | `mogym/metrics.py` | reported metric: exact (K=2), certified interval (K=3), fixed pool of 23,992 weights (K=6) |
 | `mogym/plateau.py` | stopping rule of the baseline runs and definition of the plotted point |
 | `mogym/recorder.py` | checkpoints; training time excludes the metric evaluation |
@@ -86,6 +87,11 @@ and `--results <dir>`; runs whose output already exists are skipped.
 **GRAB.**
 - At each outer iteration it selects λ_t maximizing GN(λ, B) over the current bundle.
 - It runs M_A Adam steps from the Algorithm 2 warm start and adds the iterate with the smallest ‖∇F_{λ_t}‖.
+- It runs until the budget B is spent (no tolerance ε); every inner solve takes exactly M_A steps (fewer only when the budget runs out).
+- Preference-weight solvers and their stopping conditions:
+  - K=2: the exact lower envelope (no iteration).
+  - K=3: simplicial branch-and-bound; a selection stops once its certified relative gap is at most 0.05 or after 1,000 splits.
+  - K=6: multistart CCP (paper appendix). A selection returns at once if the best screened seed is within a relative 1e-8 of the upper bound val(A); otherwise each start stops when the predicted improvement is at most 1e-8·max(φ, 1e-6) (values normalized by the best seed value) or after the iteration cap. LPs: HiGHS with feasibility tolerances 1e-9, warm-started from the previous basis; LPs with at least 400 rows are solved by constraint generation (rows added until none is violated by more than 1e-10), which returns an optimum of the full LP.
 
 **Uniform discretization.**
 - The grid G_r is visited in snake order. In the first sweep each weight starts from the preceding weight's last iterate; afterwards each weight continues its own trajectory.
@@ -96,7 +102,7 @@ and `--results <dir>`; runs whose output already exists are skipped.
 - Each slot runs K_S Adam steps per round, and the output is the last round.
 
 **Budget and checkpoints.**
-- Each task has one fixed budget B, the same for all methods (table below): 1.05 × the Gradient Calls of the farthest comparator point measured previously, rounded up; the factor 1.05 is a heuristic margin.
+- Each task has one fixed budget B, the same for all methods (table below): 1.05 × the Gradient Calls of the farthest comparator point measured previously, rounded up to a multiple of 10³ (K=2), 3·10³ (Breakable Bottles) or 6·10³ (Fruit Tree); the factor 1.05 is a heuristic margin.
 - All methods are checkpointed on one Gradient-Call schedule: every B/600 (K=2) or B/120 (K>2) calls up to B and every ten times that afterwards, at the end of the first unit that completes after the mark: a GRAB outer iteration, the M_U steps of one Uniform grid weight, or the K_S steps of one SURF slot. These checkpoints have `"kind": "calls"` in the run files.
 - Uniform also records the GN after every sweep and SURF after every round (`"kind": "sweep"` / `"round"`); the stopping rule uses only these.
 
@@ -104,24 +110,24 @@ and `--results <dir>`; runs whose output already exists are skipped.
 - Every Uniform r and SURF N is a separate run. It stops once its per-sweep (per-round) GN has changed by at most 1% three times in a row, the run is ready, and three further sweeps (rounds) confirm the plateau.
   - Ready means: the 95th percentile of the gradient norms at the policies' own weights is at most max(1e-5, 0.25·GN). For SURF the slot weights must also have settled.
 - The plotted point: among the Gradient-Call checkpoints before the stop and the stopping checkpoint, the earliest after which the GN stays within 5% of its value at stopping. Gradient Calls, CPU time and GN are read from that checkpoint.
-- A run is plotted if its point lies within B. The values of r and N (powers of two for K=2, 1, 2, ... for K>2) were increased until two consecutive values lie beyond B; `mogym/config.py` lists the plotted values and the ones beyond B.
-- `check_doubling.py` reruns every plotted run for twice its length; in the reported runs the GN changed by at most 1.6% after the stop.
+- A run is plotted if its point lies within B. The values of r and N are powers of two from 2 (FishWood, DST, Breakable Bottles) and r = 1, …, 6 (Fruit Tree); the next value of every family has its point beyond B (`mogym/config.py`).
+- `check_doubling.py` reruns every plotted run for twice its length; in the reported runs the GN changed by less than 1.7% after the stop (between −1.63% and +1.51%).
 
-**Settings** (`mogym/config.py`; chosen by the tuning procedure of the paper appendix):
+**Settings** (`mogym/config.py`):
 
 | Task | Uniform | SURF | GRAB | Budget B |
 |---|---|---|---|---|
-| FishWood | M_U=50, lr 0.03, r = 2,4,…,256 | K_S=25, lr 0.03, N = 2,4,…,128 | M_A=10, lr 0.01, envelope | 81,000 |
-| DST | M_U=5, lr 0.3, r = 2,4,…,512 | K_S=25, lr 0.1, N = 4,8,…,64 | M_A=10, lr 0.1, envelope | 96,000 |
-| Breakable Bottles | M_U=25, lr 0.1, r = 1,…,26 | – | M_A=25, lr 0.03, K=3 subdivision (gap 0.05, 1,000 nodes) | 27,000 |
-| Fruit Tree (d=6) | M_U=25, lr 0.03, r = 1,…,6 | – | M_A=10, lr 0.03, periodic CCP with LP warm start | 150,000 |
+| FishWood | M_U=50, lr 0.03, r = 2,4,…,512 | K_S=25, lr 0.03, N = 2,4,…,128 | M_A=10, lr 0.01, envelope | 108,000 |
+| DST | M_U=5, lr 0.3, r = 2,4,…,512 | K_S=25, lr 0.1, N = 4,8,…,64 | M_A=10, lr 0.1, envelope | 93,000 |
+| Breakable Bottles | M_U=5, lr 0.03, r = 2,4,…,32 | – | M_A=25, lr 0.03, K=3 subdivision (gap 0.05, 1,000 splits) | 18,000 |
+| Fruit Tree (d=6) | M_U=5, lr 0.1, r = 1,…,6 | – | M_A=10, lr 0.03, periodic CCP | 60,000 |
 
 The Fruit Tree preference selector is the multistart CCP of the paper appendix with these settings:
 - Ordinary selections: 64 random seeds (redrawn at every selection), one polished start, at most 15 CCP updates.
-- Every twentieth selection: 1,024 seeds, eight starts, 100 updates.
-- Extra starts: the center, the previous maximizers, 19 points on each two-objective edge, and the centers of the three-objective faces.
-- Every LP is warm-started from the previous basis.
+- Every tenth selection: 1,024 seeds, eight starts, 100 updates.
+- Extra starts: the center, the previous maximizers, a pool of at most 64 earlier local maximizers (newest first, pairwise distance above 0.08, shared by both settings), 19 points on each two-objective edge, and the centers of the three-objective faces.
 - The seeds are screened against the whole bundle in one batched contraction, computed as a single matrix product.
+- Every LP is warm-started from the previous basis; LPs with at least 400 rows are solved by constraint generation.
 
 **Figures.** The style is that of the MNIST figures of the paper: GRAB as an orange curve, Uniform as blue
 squares, SURF as red triangles, each family with a dashed descriptive trend c + a (x/s)^(-p) (s the median x),
@@ -129,14 +135,16 @@ fitted by least squares on the logarithms and drawn from the leftmost to the rig
 
 ## Expected results
 
-`make_figure.py` prints these values; the ratio is the baseline's lowest point divided by the final GRAB value.
+`make_figure.py` prints these values. The ratio is the baseline's lowest point divided by the final GRAB value; in
+parentheses, divided by the lowest GRAB value within the Gradient Calls and within the CPU time of that point
+(the time ratio varies by a few percent with the CPU timing).
 
 | Task | GRAB (end of budget) | Uniform, lowest point | SURF, lowest point |
 |---|---|---|---|
-| DST | 6.5277e-6 | 4.8588e-5 (r=512), 7.44× | 1.3043e-4 (N=64), 19.98× |
-| FishWood | 1.9520e-4 | 4.9108e-4 (r=256), 2.52× | 9.9031e-4 (N=128), 5.07× |
-| Breakable Bottles | [4.2709, 4.2919]e-4 | [1.7874, 1.7944]e-3 (r=26), 4.18× | – |
-| Fruit Tree | 6.7029e-4 | 1.0398e-3 (r=6), 1.55× | – |
+| DST | 6.6235e-6 | 4.8588e-5 (r=512), 7.34× (6.36× / 5.50×) | 1.3043e-4 (N=64), 19.69× (19.24× / 16.63×) |
+| FishWood | 1.0211e-4 | 2.5027e-4 (r=512), 2.45× (2.23× / 1.58×) | 1.0050e-3 (N=128), 9.84× (3.17× / 3.07×) |
+| Breakable Bottles | [5.0486, 5.0738]e-4 | [1.5639, 1.5713]e-3 (r=32), 3.10× (3.09× / 1.99×) | – |
+| Fruit Tree | 8.3210e-4 | 1.0594e-3 (r=6), 1.27× (1.22× / 1.00×) | – |
 
 ## Notes
 

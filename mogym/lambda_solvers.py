@@ -8,6 +8,10 @@ squared gradient norms, public GN values are their square roots.
                        [lower, upper] interval (cell upper bound min_i max_vertex q_i, valid by convexity).
   CCP                  multistart convex-concave procedure (paper appendix, Algorithm "Multi-start CCP").
   PeriodicStrongCCP    K>3: CCP with small settings, and a stronger CCP every `period` selections.
+
+Every LP max_{lambda in simplex} min_i (M lambda)_i is solved with HiGHS (feasibility tolerances 1e-9).  With
+LP_CG set, an LP with at least CG_MIN_ROWS rows is solved by constraint generation (_lp_cg), which returns an
+optimum of the full LP.
 """
 import heapq
 import warnings
@@ -20,7 +24,10 @@ from scipy.optimize import linprog
 # previous LP of the same size.  The state is module-wide, as in the runs reported in the paper, so the
 # checkpoint evaluation (evaluate_gram) and the training solver share it.
 WARM_LP = False
+LP_CG = False
+CG_MIN_ROWS, CG_INIT, CG_ADD = 400, 40, 40
 _HIGHS = {}
+_CG = {}  # rows active at the previous constraint-generation optimum, and its maximizer (module-wide, as WARM_LP)
 
 
 def roots(c):
@@ -138,7 +145,7 @@ class Envelope:
         return max(best, 0.), lam
 
 
-def _highs_direct(M):
+def _highs_direct(M, warm=True):
     """The LP of lp() solved by HiGHS with the model and options scipy.optimize.linprog(method='highs')
     uses, the options validated once.  Returns (x, row duals), or None if HiGHS is not reachable this way
     or does not report an optimal model (lp() then calls linprog)."""
@@ -172,20 +179,52 @@ def _highs_direct(M):
     highs = _h._Highs()
     if highs.passOptions(_HIGHS["options"]) == _h.HighsStatus.kError or highs.passModel(lp_) == _h.HighsStatus.kError:
         return None
-    if WARM_LP and _HIGHS.get("basis_shape") == (m, K):
+    if warm and WARM_LP and _HIGHS.get("basis_shape") == (m, K):
         highs.setBasis(_HIGHS["basis"])
     if highs.run() == _h.HighsStatus.kError or highs.getModelStatus() != _h.HighsModelStatus.kOptimal:
         return None
-    if WARM_LP:
+    if warm and WARM_LP:
         _HIGHS["basis"], _HIGHS["basis_shape"] = highs.getBasis(), (m, K)
     sol = highs.getSolution()
     return np.array(sol.col_value), np.array(sol.row_dual)[:m]
 
 
+def _lp_cg(M):
+    """The LP of lp() by constraint generation.  HiGHS solves it on a working set of rows: the rows active at the
+    previous optimum, the CG_INIT rows smallest at the previous maximizer (the center at first) and the smallest
+    row of every column.  Every row outside the working set with (M lambda)_i < t - 1e-10 (stricter than the
+    feasibility tolerance HiGHS applies inside) is violated; the CG_ADD most violated rows are added and the LP
+    is solved again.  When no row is violated, lambda is optimal for the full LP and the duals of the working set
+    (zero elsewhere) are optimal duals.  Returns (x, row duals) as _highs_direct, or None."""
+    m, K = M.shape
+    ref = _CG.get("lam")
+    ref = ref if ref is not None and len(ref) == K else np.ones(K) / K
+    W = np.zeros(m, bool); W[np.argsort(M @ ref, kind='stable')[:CG_INIT]] = True; W[M.argmin(axis=0)] = True
+    hint = _CG.get("rows")
+    if hint is not None:
+        W[hint[hint < m]] = True
+    while True:
+        rows = np.flatnonzero(W)
+        out = _highs_direct(M[rows], warm=False)
+        if out is None:
+            return None
+        x, marg = out
+        lam = np.maximum(x[1:], 0); lam /= lam.sum()
+        gap = M @ lam - x[0]; gap[W] = 0.
+        viol = np.flatnonzero(gap < -1e-10)
+        if len(viol) == 0:
+            full = np.zeros(m); full[rows] = marg
+            _CG["rows"] = rows[marg < 0]; _CG["lam"] = lam
+            return x, full
+        W[viol[np.argsort(gap[viol], kind='stable')[:CG_ADD]]] = True
+
+
 def lp(M, return_dual_bound=False):
     """max_{lambda in simplex} min_i (M lambda)_i: value, maximizer (and an upper bound from the duals)."""
     m, K = M.shape
-    fast = _highs_direct(M)
+    fast = _lp_cg(M) if LP_CG and m >= CG_MIN_ROWS else None
+    if fast is None:
+        fast = _highs_direct(M)
     if fast is not None:
         x, marg = fast
     else:
@@ -211,10 +250,19 @@ def lp(M, return_dual_bound=False):
 
 class CCP:
     """Multistart CCP (paper appendix).  Seeds: vertices, center, lambda_A of the sandwich LP, the maxima
-    of the previous solve, uniform random draws (a fixed batch, or redrawn at every solve with
-    fresh_seeds=True), and for K>3 optionally points on the edges and the centers of the 3-faces."""
+    of the previous solve, the pool, uniform random draws (a fixed batch, or redrawn at every solve with
+    fresh_seeds=True), and for K>3 optionally points on the edges and the centers of the 3-faces.
+
+    keep_pool=P>0 ("Keep the pool" / "Warm start across outer rounds" in the appendix): the distinct local
+    maxima (distance > 0.08) of the solves are carried forward, newest first, at most P, and screened with the
+    seeds; shared_pool (a list) lets the two solvers of PeriodicStrongCCP carry one pool.
+
+    Stopping: a solve returns at once if the best screened seed is within a relative 1e-8 of the upper bound
+    val(A) (sandwich closed); otherwise each start is polished until the predicted improvement
+    t* - phi(lambda_c) is at most 1e-8 max(phi(lambda_c), 1e-6) or after maxiter LPs (values normalized by the
+    best seed value)."""
     def __init__(self, K, nseeds=256, nstarts=4, seed=42, maxiter=100, boundary_seeds=False,
-                 boundary_resolution=4, fresh_seeds=False):
+                 boundary_resolution=4, fresh_seeds=False, keep_pool=0, shared_pool=None):
         self.K = K; self.nstarts = nstarts; self.maxiter = maxiter
         self.fresh_seeds = bool(fresh_seeds); self.nseeds = nseeds
         self.rng = np.random.default_rng(seed)
@@ -235,6 +283,7 @@ class CCP:
         self.seeds = np.vstack([np.eye(K), np.ones((1, K)) / K, grid, random, extra])
         self.scores = np.full(len(self.seeds), np.inf)
         self.Q = []; self.previous = []; self.lp_count = 0
+        self.keep_pool = int(keep_pool); self.pool = shared_pool if shared_pool is not None else []
 
     def add(self, Q):
         self.Q.append(np.array(Q))
@@ -251,7 +300,7 @@ class CCP:
         scores = self.scores / scale
         fresh = (self.rng.dirichlet(np.ones(self.K), size=self.nseeds) if self.fresh_seeds
                  else np.empty((0, self.K)))
-        extra = np.vstack([wA] + self.previous + [fresh])
+        extra = np.vstack([wA] + self.previous + list(self.pool) + [fresh])
         # screening: phi of every extra seed on the whole bundle in one batched contraction, evaluated as a
         # single matrix product (w w')_flat . (Q_i)_flat; numpy's einsum would loop in C without BLAS, which
         # took about half of the Fruit Tree selection time
@@ -261,6 +310,9 @@ class CCP:
         best = float(scores[order[0]]); wb = seeds[order[0]].copy()
         if ub - best <= 1e-8 * max(1., abs(ub)):  # sandwich closed
             self.previous = [wb.copy()]
+            if self.keep_pool > 0 and (not self.pool or
+                                       np.sqrt(((np.asarray(self.pool) - wb) ** 2).sum(axis=1)).min() > .08):
+                self.pool[:] = ([wb.copy()] + list(self.pool))[:self.keep_pool]
             return max(0., best * scale), wb, max(best, ub) * scale
         chosen = []; maxima = []
         for idx in order:
@@ -283,6 +335,13 @@ class CCP:
                     break
             maxima.append(w)
         self.previous = maxima
+        if self.keep_pool > 0:  # greedy, newest first: keep a point if it is > 0.08 from every point kept so far
+            cand = np.asarray([np.asarray(w, float) for w in maxima + list(self.pool)]).reshape(-1, self.K)
+            kept = np.empty_like(cand); n = 0
+            for w in cand:
+                if n == 0 or np.sqrt(((kept[:n] - w) ** 2).sum(axis=1)).min() > .08:
+                    kept[n] = w; n += 1
+            self.pool[:] = [kept[i].copy() for i in range(min(n, self.keep_pool))]
         if best > ub + 1e-7:
             raise RuntimeError('CCP bound violation')
         return max(0., best * scale), wb, max(best, ub) * scale
@@ -341,14 +400,17 @@ class K3BivariateEnvelope:
 
 class PeriodicStrongCCP:
     """CCP with the `weak` settings (nseeds, nstarts, maxiter) at every selection, and with the `strong`
-    settings at selections period, 2 period, ..."""
+    settings at selections period, 2 period, ...; the two share one pool of local maxima (keep_pool)."""
     def __init__(self, K, period=10, weak=(128, 2, 30), strong=(1024, 8, 100), seed=42,
-                 boundary_seeds=False, boundary_resolution=4, fresh_seeds=False):
+                 boundary_seeds=False, boundary_resolution=4, fresh_seeds=False, keep_pool=0):
         self.period = max(int(period), 1); self.calls = 0
+        pool = []
         self.weak = CCP(K, nseeds=weak[0], nstarts=weak[1], seed=seed, maxiter=weak[2],
-                        boundary_seeds=boundary_seeds, boundary_resolution=boundary_resolution, fresh_seeds=fresh_seeds)
+                        boundary_seeds=boundary_seeds, boundary_resolution=boundary_resolution, fresh_seeds=fresh_seeds,
+                        keep_pool=keep_pool, shared_pool=pool)
         self.strong = CCP(K, nseeds=strong[0], nstarts=strong[1], seed=seed, maxiter=strong[2],
-                          boundary_seeds=boundary_seeds, boundary_resolution=boundary_resolution, fresh_seeds=fresh_seeds)
+                          boundary_seeds=boundary_seeds, boundary_resolution=boundary_resolution, fresh_seeds=fresh_seeds,
+                          keep_pool=keep_pool, shared_pool=pool)
 
     def add(self, Q):
         self.weak.add(Q); self.strong.add(Q)

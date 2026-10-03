@@ -2,13 +2,15 @@
 
 One outer iteration:
   1. lambda_t = argmax_lambda min_i ||J_i' lambda|| over the current bundle (preference-weight solver:
-     K=2 exact envelope, K=3 simplicial subdivision, K>3 periodic multistart CCP);
+     K=2 exact envelope, K=3 simplicial subdivision, K>3 periodic multistart CCP; mogym.lambda_solvers);
   2. warm start at argmin_{theta in B} F_lambda(theta) - ||grad F_lambda(theta)||^2 / (2 L_lambda),
      L_lambda = sum_k lambda_k L_k (Algorithm 2 initialization);
   3. inner_steps Adam steps on F_lambda.  The Adam state is kept from the previous outer iteration while
      the weight is unchanged (max_k |lambda_t,k - lambda_t-1,k| <= adam_keep_tol) and reset otherwise;
   4. the trajectory point with the smallest ||grad F_lambda|| is added to the bundle.
-Every oracle call returns the full Jacobian and counts K Gradient Calls; the initial point counts too.
+Every oracle call returns the full Jacobian and counts K Gradient Calls; the initial point counts too.  The run
+stops when the budget is spent (no tolerance epsilon); every inner solve takes inner_steps steps (fewer only at
+the end of the budget).
 """
 import time
 
@@ -32,7 +34,7 @@ def _grow(X, F, J, n):
 def adaptive(model, L, budget, path, *, lr, inner_steps, lambda_method='envelope', checkpoint_count=20,
              k3_rtol=.005, k3_max_nodes=5000, hybrid_period=10, weak_ccp=(128, 2, 30), strong_ccp=(1024, 8, 100),
              boundary_ccp_seeds=False, boundary_seed_resolution=4, fresh_ccp_seeds=False,
-             adam_keep_tol=None, lp_warm_start=False, adam_beta1=.9, adam_beta2=.999):
+             ccp_keep_pool=0, adam_keep_tol=None, lp_warm_start=False, lp_cg=False, adam_beta1=.9, adam_beta2=.999):
     """lambda_method: 'envelope' (K=2), 'k3_special' (K=3) or 'periodic_strong_ccp' (K>3)."""
     K, d = model['K'], model['d']
     expected = {2: 'envelope', 3: 'k3_special'}.get(K, 'periodic_strong_ccp')
@@ -41,7 +43,8 @@ def adaptive(model, L, budget, path, *, lr, inner_steps, lambda_method='envelope
     oracle = Oracle(model)
     config = dict(method='Adaptive bundle', lr=lr, budget=budget, inner_steps=inner_steps, seed=42,
                   lambda_method=lambda_method, L=np.asarray(L).tolist(), adam_beta1=adam_beta1,
-                  adam_beta2=adam_beta2, adam_keep_tol=adam_keep_tol, lp_warm_start=bool(lp_warm_start))
+                  adam_beta2=adam_beta2, adam_keep_tol=adam_keep_tol, lp_warm_start=bool(lp_warm_start),
+                  lp_constraint_generation=bool(lp_cg))
     if K == 2:
         solver = ls.Envelope()
     elif K == 3:
@@ -50,11 +53,11 @@ def adaptive(model, L, budget, path, *, lr, inner_steps, lambda_method='envelope
     else:
         config.update(hybrid_period=hybrid_period, weak_ccp=list(weak_ccp), strong_ccp=list(strong_ccp),
                       boundary_ccp_seeds=bool(boundary_ccp_seeds), boundary_seed_resolution=boundary_seed_resolution,
-                      fresh_ccp_seeds=bool(fresh_ccp_seeds))
+                      fresh_ccp_seeds=bool(fresh_ccp_seeds), ccp_keep_pool=int(ccp_keep_pool))
         solver = ls.PeriodicStrongCCP(K, period=hybrid_period, weak=weak_ccp, strong=strong_ccp,
                                       boundary_seeds=boundary_ccp_seeds, boundary_resolution=boundary_seed_resolution,
-                                      fresh_seeds=fresh_ccp_seeds)
-    ls.WARM_LP = False; ls._HIGHS.pop("basis_shape", None)
+                                      fresh_seeds=fresh_ccp_seeds, keep_pool=ccp_keep_pool)
+    ls.WARM_LP = False; ls.LP_CG = False; ls._HIGHS.pop("basis_shape", None); ls._CG.clear()
     rec = Recorder(oracle, config)
     capacity = budget // (K * inner_steps) + 3
     X = np.empty((capacity, d)); F = np.empty((capacity, K)); J = np.empty((capacity, K, d))
@@ -71,6 +74,7 @@ def adaptive(model, L, budget, path, *, lr, inner_steps, lambda_method='envelope
     lambdas = []; steps_used = []; lambda_time = 0.; inner_time = 0.
     prev_opt, prev_lam, kept_state = None, None, 0
     ls.WARM_LP = bool(lp_warm_start); ls._HIGHS.pop("basis_shape", None)
+    ls.LP_CG = bool(lp_cg); ls._CG.clear()
     thresholds = np.linspace(0, budget, checkpoint_count + 1)[1:]; threshold = 0
     while count + K <= budget:
         t = time.perf_counter(); solved = solver.solve(); lam = solved[1]
@@ -106,5 +110,5 @@ def adaptive(model, L, budget, path, *, lr, inner_steps, lambda_method='envelope
     extra = dict(lambda_selection_wall=lambda_time, inner_wall=inner_time, lambdas=lambdas,
                  lp_count=getattr(solver, 'lp_count', 0), inner_steps_used=steps_used,
                  adam_state_kept_iterations=kept_state)
-    ls.WARM_LP = False
+    ls.WARM_LP = False; ls.LP_CG = False
     return rec.finish(path, X[:n], F[:n], J[:n], extra)

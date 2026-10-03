@@ -78,10 +78,6 @@ groups = {m: g for m, g in groups.items() if g}
 ad = {f: np.array([c[f] for c in curve], float) for f in ("calls", "cpu", "gn")}
 
 
-def labeled(p, group):  # Breakable Bottles: 26 points, crowded on the time axis
-    return K != 3 or p["param"] in (1, 2, 3, 5) or p["param"] % 5 == 0 or p["param"] == group[-1]["param"]
-
-
 fig, axs = plt.subplots(1, 2, figsize=(12.0, 4.6), sharey=True)
 per_axis, handles = [], {}
 for ax, f, xlabel in ((axs[0], "calls", "Gradient Calls"), (axs[1], "cpu", "Time (s)")):
@@ -98,7 +94,7 @@ for ax, f, xlabel in ((axs[0], "calls", "Gradient Calls"), (axs[1], "cpu", "Time
             dense = np.linspace(fit["x_min"], fit["x_max"], 600)
             lines.append((dense, trend(fit, dense)))
         items += [dict(x=p[f], y=p["gn"], text=str(p["param"]), color=COL[meth], key=(meth, p["param"]))
-                  for p in group if labeled(p, group)]
+                  for p in group]
     xmax = max(1.1 * max(p[f] for g in groups.values() for p in g), float(ad[f][-1]))
     ax.set_yscale("log"); ax.set_xlim(0, xmax)
     ax.set_xlabel(xlabel, fontsize=FS["label"]); ax.tick_params(labelsize=FS["tick"])
@@ -107,7 +103,8 @@ for ax, f, xlabel in ((axs[0], "calls", "Gradient Calls"), (axs[1], "cpu", "Time
         ax.spines[side].set_visible(False)
     mv = (ad[f] > 0) & (ad[f] <= xmax)
     per_axis.append((ax, items, lines + [(ad[f][mv], ad["gn"][mv])], float(ad["gn"][mv].min()), float(ad["gn"][mv].max())))
-axs[0].xaxis.set_major_locator(mticker.MaxNLocator(nbins=5, prune="upper"))  # no tick label at the panel gap
+xr = axs[0].get_xlim()[1]  # no tick label at the panel gap: left-panel ticks within 5% of its right edge dropped
+axs[0].set_xticks([t for t in mticker.MaxNLocator(nbins=5).tick_values(0, xr) if 0 <= t <= .95 * xr])
 axs[0].set_ylabel(YLAB, fontsize=FS["label"])
 y_lo = min(p[3] for p in per_axis) / 1.35
 y_hi = 1.9 * max(it["y"] for p in per_axis for it in p[1])
@@ -126,7 +123,6 @@ for ax, items, lines, _, _ in per_axis:  # labels last: they need the final limi
     place(ax, items, lines, fontsize=FS["num"])
 out = _setup.Path(a.figures); out.mkdir(parents=True, exist_ok=True)
 fig.savefig(out / f"{task}_convergence.png", dpi=300)
-fig.savefig(out / f"{task}_convergence.pdf", metadata={"CreationDate": None})
 plt.close(fig)
 
 end = curve[-1]
