@@ -11,6 +11,8 @@ compared with uniform discretization and SURF on multiclass classification, with
 * all methods: the same initial point, SVRG segments (one full gradient, then 12 or 18 mini-batch steps of 1,024
   images) with Adam (alpha = 1e-3, beta_1 = beta_2 = 0.9) and a descent safeguard, 5 segments per decision / grid
   visit / SURF slot and round, a budget of 480,000 gradient calls, sampling seeds 41, 42, 43;
+* the adaptive method chooses lambda at every decision with the exact lower envelope for K = 2 (Appendix A.4.1) and
+  with the multistart CCP for K = 3 (Appendix A.4);
 * the score is the worst-case gradient norm of the bundle of all visited points, max over lambda of GN(lambda, B_t):
   exact for K = 2, a lower bound for K = 3.
 
@@ -18,7 +20,7 @@ compared with uniform discretization and SURF on multiclass classification, with
 
 | path | content |
 |---|---|
-| `abm/` | the package: data, network, objectives, step rules, SVRG segments, CCP lambda-search, the three methods, the worst-case gradient norm meter, analysis, fronts, screening |
+| `abm/` | the package: data, network, objectives, step rules, SVRG segments, the lambda-search (exact envelope for K = 2, CCP for K = 3), the three methods, the worst-case gradient norm meter, analysis, fronts, screening |
 | `scripts/` | command-line entry points (below) |
 | `results/` | the numbers of the paper's runs: per run the audited worst-case gradient norm at every checkpoint, the plateau test and the marker; configuration statistics; front points; step-rule, warm-start and screening results |
 | `figures/`, `tables/` | the figures (PDF, PNG) and tables (LaTeX) of the paper, generated from `results/` |
@@ -32,12 +34,14 @@ compared with uniform discretization and SURF on multiclass classification, with
 A GPU with CUDA is needed for the full experiments (the paper used NVIDIA RTX A5000 GPUs); everything else runs on a
 CPU.  Apple MPS is not supported (no float64).
 
-## Check the installation (CPU, about 6 minutes)
+## Check the installation (CPU, about 8 minutes)
 
     python tests/test_reproduce.py
+    python tests/test_envelope.py
 
-It reruns four short runs against reference values of the original code, reruns the screening of {4,9}, and checks
-that the numbers quoted in the paper follow from `results/`.
+The first reruns five short runs against reference values, reruns the screening of {4,9}, and checks that the numbers
+quoted in the paper follow from `results/`.  The second (about 30 seconds) checks the exact K = 2 envelope against
+the pointwise minimum of the parabolas, against a rebuild from scratch and against the audit meter.
 
 ## Figures and tables from the included results
 
@@ -53,6 +57,7 @@ that the numbers quoted in the paper follow from `results/`.
 | Appendix: step rules (table and figure) | `tables/step_rules_k2.tex`, `figures/mnist_step_rules_k2.pdf` |
 | Appendix: warm start of the adaptive method | `tables/warm_start.tex` |
 | Appendix: all runs, {4,9} and {4,7,9} | `tables/mnist_k2_full.tex`, `tables/mnist_k3_full.tex` |
+| {4,9}: the adaptive method with the envelope and with CCP (`scripts/compare_envelope.py`) | `figures/k2_envelope_vs_ccp.pdf`, `figures/k2_envelope_vs_ccp_zoom.pdf`, `results/k2_envelope.json` |
 
 ## Rerun the experiments
 
@@ -79,9 +84,13 @@ that the numbers quoted in the paper follow from `results/`.
 
    K = 2 has 111 legs (uniform r in {2, ..., 64}: 21 values, SURF N in {2, ..., 40}: 15 values, adaptive; three
    seeds each), K = 3 has 48 legs (uniform r in {4, ..., 24}: 15 values, adaptive).  On one RTX A5000 a K = 2 leg
-   takes about 1 hour (adaptive: 5 hours; the CCP lambda-search runs on the CPU), a K = 3 leg about 1.7 hours
-   (adaptive: 3.8 hours) including the audits: about 120 and 86 GPU-hours in total.  Legs are independent and can
-   run in parallel; finished legs are skipped.
+   takes about 1 hour (the adaptive method too: its envelope lambda-search takes about 16 s per run), a K = 3 leg
+   about 1.7 hours (adaptive: 3.8 hours; the CCP lambda-search runs on the CPU) including the audits: about 110 and
+   86 GPU-hours in total.  Legs are independent and can run in parallel; finished legs are skipped.
+
+   The earlier K = 2 adaptive runs with the CCP lambda-search (results/k2_ccp.json; about 5 hours per leg):
+
+       python scripts/run.py --K 2 --legs adaptive --selector ccp --device cuda     (-> runs/k2_ccp)
 
 5. Analysis, figures and tables:
 
@@ -100,3 +109,8 @@ The settings of all experiments are in `abm/config.py`.
 * Some legs of the paper were run in two parts (the first 240,000 or 320,000 gradient calls, then continued with the
   saved state).  The continuation reproduces a single run bit for bit, so `scripts/run.py` runs every leg in one go.
 * The K = 3 audits use SLSQP (scipy) at the budget levels B/8, B/4, B/2 and B, as in the paper's runs.
+* On 2026-10-04 the K = 2 adaptive method changed from the CCP lambda-search to the exact envelope (Appendix A.4.1).
+  Only its three legs were rerun (the baselines choose no lambda); `scripts/update_k2_adaptive.py` put them into
+  `results/k2.json` and `results/k2_fronts.json` without changing any baseline entry.  The earlier versions of the two
+  files are kept as `results/k2_ccp.json` and `results/k2_fronts_ccp.json`; the step-rule and warm-start experiments
+  were run with the CCP lambda-search.

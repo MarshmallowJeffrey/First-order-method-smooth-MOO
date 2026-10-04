@@ -1,8 +1,9 @@
 """The three methods.  All use the same segment, step rule, budget meter and bundle (every segment end point).
 
-Adaptive bundle method: one chain of points.  Every decision searches lambda with CCP on the current bundle and
-runs s segments from the last accepted point; the step rule's state (Adam moments) is reset only when lambda
-changes.  (Other starts and resets, for the warm-start ablation: see run_adaptive.)
+Adaptive bundle method: one chain of points.  Every decision chooses lambda on the current bundle (K = 2: the
+maximizer of the exact lower envelope; K = 3: multistart CCP) and runs s segments from the last accepted point; the
+step rule's state (Adam moments) is reset only when lambda changes.  (Other starts and resets, for the warm-start
+ablation: see run_adaptive.)
 
 Uniform discretization with resolution r: the snake-ordered grid of Delta_K, visited forward and backward; each
 visit runs s segments at the node.  The first visit of a node starts from the last accepted point of the run and
@@ -25,6 +26,7 @@ import numpy as np
 from scipy.interpolate import PchipInterpolator
 
 from .ccp import CCPConfig, CCPSolver
+from .envelope import EnvelopeSelector
 from .grid import node_index, snake_grid
 from .model import initial_point
 from .steppers import make_stepper
@@ -42,9 +44,11 @@ def _epoch_len(problem):
 
 START_RULES = ("chain", "lowest_f", "paper")
 STATE_RESETS = ("new_lambda", "every_decision")
+SELECTORS = ("ccp", "envelope")
 
 
-def run_adaptive(problem, step_rule, budget, schedule, s=5, ccp_config=None, start="chain", reset="new_lambda"):
+def run_adaptive(problem, step_rule, budget, schedule, s=5, ccp_config=None, start="chain", reset="new_lambda",
+                 selector="ccp"):
     """The adaptive bundle method; returns the RunRecord.
 
     start: where the s segments of a decision begin
@@ -54,16 +58,22 @@ def run_adaptive(problem, step_rule, budget, schedule, s=5, ccp_config=None, sta
                     Algorithms 2-6, with L_lambda = lambda^T L from the estimated L
     reset: when the step rule's state is reset: "new_lambda" (when lambda changes; the runs of the paper) or
         "every_decision".  The warm-start ablation (scripts/warm_start.py) varies both.
+    selector: how a decision chooses lambda: "ccp" (multistart CCP, Appendix A.4) or "envelope" (K = 2 only: the
+        maximizer of the exact lower envelope, Appendix A.4.1 / abm/envelope.py).  The runs of the paper use envelope
+        for K = 2 and ccp for K = 3 (config.SELECTOR; experiment.run_leg passes it).  No tolerance epsilon: the run
+        always continues with the chosen lambda.
     """
     if start not in START_RULES or reset not in STATE_RESETS:
         raise ValueError(f"start {start!r} / reset {reset!r}")
+    if selector not in SELECTORS or (selector == "envelope" and problem.K != 2):
+        raise ValueError(f"selector {selector!r} for K = {problem.K}")
     name, params = step_rule
     K, batch = problem.K, problem.stoch.batch_size
     epoch_len = _epoch_len(problem)
     x0 = initial_point(K, INIT_SEED)
     rec = RunRecord(problem, x0, budget, schedule)
     stepper = make_stepper(name, problem.d, params)
-    solver = CCPSolver(K, ccp_config or CCPConfig(), transport="bulk")
+    solver = CCPSolver(K, ccp_config or CCPConfig(), transport="bulk") if selector == "ccp" else EnvelopeSelector()
     chain = (x0.copy(), rec.f0, rec.J0)
     chain_i = 0                                    # bundle index of the last accepted point
     points = None if start == "chain" else [chain]  # every bundle point (x, f, J), for the other start rules
@@ -72,8 +82,12 @@ def run_adaptive(problem, step_rule, budget, schedule, s=5, ccp_config=None, sta
     rec.start_clock()
     while rec.budget.allows_segment(epoch_len, batch):
         t_dec = time.time()
-        grams = np.asarray(rec.grams, dtype=float)
-        _, lam = solver.solve(grams)
+        if selector == "ccp":
+            grams = np.asarray(rec.grams, dtype=float)
+            _, lam = solver.solve(grams)
+        else:                                      # the envelope keeps its own state; only the new points are read
+            _, lam = solver.solve(rec.grams)
+            grams = np.asarray(rec.grams, dtype=float) if start == "paper" else None
         lam = np.asarray(lam, dtype=float)
         L_lam = float(lam @ problem.L)
         start_i = chain_i

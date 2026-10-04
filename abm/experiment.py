@@ -22,9 +22,12 @@ def leg_name(method: str, param, seed: int, step_rule: str | None = None) -> str
 
 
 def run_leg(K, method, param, seed, out_dir, *, budget=C.BUDGET, step_rule=C.STEP_RULE, schedule=None,
-            audit_grid=C.AUDIT_GRID_K2, device="cpu", threads=None, start="chain", reset="new_lambda"):
+            audit_grid=C.AUDIT_GRID_K2, device="cpu", threads=None, start="chain", reset="new_lambda",
+            selector=None):
     """Runs one leg and writes <out_dir>/summary.json and grams.npz; returns the summary.  start / reset: the
-    adaptive method's warm start (see methods.run_adaptive); other values than the defaults are recorded."""
+    adaptive method's warm start; selector: its lambda search, "ccp" or "envelope" (K = 2; see methods.run_adaptive),
+    by default the one of the paper (config.SELECTOR).  Other values than "chain" / "new_lambda" / "ccp" are recorded."""
+    selector = selector or C.SELECTOR[K]
     if threads:
         torch.set_num_threads(int(threads))
     out_dir = Path(out_dir)
@@ -37,7 +40,8 @@ def run_leg(K, method, param, seed, out_dir, *, budget=C.BUDGET, step_rule=C.STE
     print(f"[{tag}] problem built in {time.time() - t_build:.1f}s (n={problem.n}, d={problem.d}, "
           f"{problem.device_description})", flush=True)
     if method == "adaptive":
-        rec = run_adaptive(problem, rule, budget, schedule, C.SEGMENTS, C.CCP_DECISIONS, start=start, reset=reset)
+        rec = run_adaptive(problem, rule, budget, schedule, C.SEGMENTS, C.CCP_DECISIONS, start=start, reset=reset,
+                           selector=selector)
     elif method == "uniform":
         rec = run_uniform(problem, rule, budget, schedule, int(param), C.SEGMENTS)
     elif method == "surf":
@@ -70,6 +74,8 @@ def run_leg(K, method, param, seed, out_dir, *, budget=C.BUDGET, step_rule=C.STE
     summary["audit_seconds"] = time.time() - t_audit
     if method == "surf":
         summary["surf_rounds"] = rec.surf_rounds
+    if method == "adaptive" and selector != "ccp":
+        summary["selector"] = selector
     if method == "adaptive" and (start, reset) != ("chain", "new_lambda"):
         si, ci = np.asarray(rec.start_index), np.asarray(rec.chain_index)
         summary.update(start=start, reset=reset, decisions=int(si.size),

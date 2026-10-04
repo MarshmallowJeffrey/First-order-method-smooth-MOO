@@ -20,6 +20,8 @@ SEEDS = (41, 42, 43)                             # mini-batch sampling seeds (th
 BUDGET = 480_000.0                               # gradient calls
 SEGMENTS = 5                                     # per decision / grid visit / SURF slot and round
 STEP_RULE = "adam_alpha0.001_beta20.9"           # Adam(1e-3, beta2 = 0.9), the winner of the step-rule experiment
+SELECTOR = {2: "envelope", 3: "ccp"}             # lambda search of the adaptive method: the exact lower envelope for
+                                                 # K = 2 (Appendix A.4.1), multistart CCP for K = 3 (Appendix A.4)
 CCP_DECISIONS = CCPConfig(N0=2000, r=10, seed=0)
 
 INF = float("inf")

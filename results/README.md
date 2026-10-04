@@ -14,6 +14,12 @@ the runs of the paper (NVIDIA RTX A5000, float64); read by `scripts/make_figures
 * `adaptive_final`, `adaptive_final_geomean`: the adaptive method at the end of the budget.
 
 `k2_fronts.json`: per leg the non-dominated training objective values (F_4, F_9) of all visited points.
+
+The K = 2 adaptive legs in `k2.json` and `k2_fronts.json` use the exact envelope lambda-search (`selector`, and
+`adaptive_selector` at the top; since 2026-10-04, `scripts/update_k2_adaptive.py`).  `k2_ccp.json` and
+`k2_fronts_ccp.json` are the earlier versions of both files, with the CCP lambda-search; their baseline entries are
+the same.  `k2_envelope.json` (`scripts/compare_envelope.py`) compares the two: final values per seed, timings, the
+values at 10k ... 480k gradient calls, and the ratios to the best baselines.
 `k3_fronts.json`: per leg the non-dominated values (F_4, F_7, F_9) with every objective at most 0.5.
 
 `step_rules_k2.json` ({4,9}): per step rule the mean curve over the three seeds (`ck_grads`, `ck_wall_mean`,

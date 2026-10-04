@@ -1,7 +1,8 @@
 """Short reproduction checks (CPU, about 6 minutes):
 
-1. training + audit: four short runs (K = 2: adaptive, uniform r = 3, SURF N = 3; K = 3: adaptive) against reference
-   values of the original code of the paper (tests/reference_short_runs.json);
+1. training + audit: five short runs (K = 2: adaptive with the envelope selection of the paper and with the earlier
+   CCP lambda-search, uniform r = 3, SURF N = 3; K = 3: adaptive) against reference values
+   (tests/reference_short_runs.json);
 2. screening of {4,9} against results/screening_k2.json;
 3. results/: the configuration statistics and the numbers quoted in the paper follow from the per-run records.
 
@@ -41,7 +42,7 @@ def test_short_runs():
         schedule = [(float("inf"), r["cadence"])] if r["cadence"] else None
         with tempfile.TemporaryDirectory() as tmp:
             sm = run_leg(r["K"], r["method"], r["param"], r["seed"], Path(tmp) / name, budget=r["budget"],
-                         schedule=schedule, threads=r["threads"])
+                         schedule=schedule, threads=r["threads"], selector=r.get("selector"))
         exact = sm["ck_grads"] == r["ck_grads"] and sm["audit_gn"] == r["audit_gn"]
         assert sm["segments"] == r["segments"] and sm["rejections"] == r["rejections"], name
         assert _close(sm["ck_grads"], r["ck_grads"]) and _close(sm["audit_gn"], r["audit_gn"]), name
@@ -57,7 +58,7 @@ def test_screening_pair_4_9():
 
 
 def test_results_consistency():
-    for K, quoted in ((2, {"adaptive": 1.00e-3, ("uniform", 60): 6.86e-3, ("surf", 38): 6.27e-3}),
+    for K, quoted in ((2, {"adaptive": 9.82e-4, ("uniform", 60): 6.86e-3, ("surf", 38): 6.27e-3}),
                       (3, {"adaptive": 1.61e-2, ("uniform", 24): 9.04e-2})):
         res = json.loads((ROOT / "results" / f"k{K}.json").read_text())
         for s in res["configs"]:

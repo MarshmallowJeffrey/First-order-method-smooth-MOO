@@ -1,7 +1,37 @@
 {
- "note": "short CPU runs of the original code of the paper (Apple M-series CPU; torch threads as listed); the code of this repository reproduces them bit for bit on that machine",
+ "note": "short CPU runs of the original code of the paper (Apple M-series CPU; torch threads as listed); the code of this repository reproduces them bit for bit on that machine 2026-10-04: K2_adaptive now uses the exact envelope selection of the paper (config.SELECTOR); its earlier reference with the CCP lambda-search is kept as K2_adaptive_ccp.",
  "runs": {
   "K2_adaptive": {
+   "K": 2,
+   "method": "adaptive",
+   "param": null,
+   "seed": 41,
+   "budget": 1500.0,
+   "cadence": null,
+   "ck_grads": [
+    0.0,
+    254.47791852105442,
+    508.95583704210884,
+    763.4337555631633,
+    1017.9116740842177,
+    1272.3895926052721,
+    1495.8336186237589
+   ],
+   "audit_gn": [
+    10.440649709789776,
+    0.4648321140063919,
+    0.14898806700536502,
+    0.07643571966338503,
+    0.0573552326286817,
+    0.05007592904194225,
+    0.03848565012599484
+   ],
+   "segments": 241,
+   "rejections": 13,
+   "threads": 4,
+   "selector": "envelope"
+  },
+  "K2_adaptive_ccp": {
    "K": 2,
    "method": "adaptive",
    "param": null,
@@ -28,7 +58,8 @@
    ],
    "segments": 241,
    "rejections": 14,
-   "threads": 4
+   "threads": 4,
+   "selector": "ccp"
   },
   "K2_uniform_r3": {
    "K": 2,
