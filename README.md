@@ -113,14 +113,14 @@ Tasks are `fishwood` and `fruittree_d6` (no SURF). Each run script accepts `--va
 - Every Uniform r and SURF N is a separate run. It stops once its per-sweep (per-round) GN has changed by at most 1% three times in a row, the run is ready, and three further sweeps (rounds) confirm the plateau.
   - Ready means: the 95th percentile of the gradient norms at the policies' own weights is at most max(1e-5, 0.25·GN). For SURF the slot weights must also have settled.
 - The plotted point: among the Gradient-Call checkpoints before the stop and the stopping checkpoint, the earliest after which the GN stays within 5% of its value at stopping. Gradient Calls, CPU time and GN are read from that checkpoint.
-- A run is plotted if its point lies within B. The values are r = 2, 4, …, 512 and N = 2, 4, …, 128 (FishWood) and r = 1, …, 6 (Fruit Tree); FishWood SURF also uses N = 272, the largest multiple of 16 whose point lies within B, so that one SURF point lies near the end of the budget. The next values (FishWood r=1024 and N=288, Fruit Tree r=7) have their point beyond B.
+- A run is plotted if its point lies within B. The values are r = 2, 4, …, 512 and N = 2, 4, …, 256 (FishWood) and r = 1, …, 6 (Fruit Tree); FishWood SURF also uses N = 272, the largest multiple of 16 whose point lies within B, so that one SURF point lies near the end of the budget. The next values (FishWood r=1024 and N=288, Fruit Tree r=7) have their point beyond B.
 - `check_doubling.py` reruns every plotted run for twice its length; in the reported runs the GN changed by less than 1.9% after the stop (between −1.54% and +1.88%).
 
 **Settings** (`mogym/config.py`):
 
 | Task | Uniform | SURF | GRAB | Budget B |
 |---|---|---|---|---|
-| FishWood | M_U=50, lr 0.03, r = 2,4,…,512 | K_S=25, lr 0.03, N = 2,4,…,128 and 272 | M_A=2, lr 0.03, envelope | 161,000 |
+| FishWood | M_U=50, lr 0.03, r = 2,4,…,512 | K_S=25, lr 0.03, N = 2,4,…,256 and 272 | M_A=2, lr 0.03, envelope | 161,000 |
 | Fruit Tree (d=6) | M_U=1, lr 0.03, r = 1,…,6 | – | M_A=5, lr 0.03, periodic CCP | 150,000 |
 
 The Fruit Tree preference selector is the multistart CCP of paper Algorithm 2 with these settings:

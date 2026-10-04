@@ -16,7 +16,7 @@ MAX_ROUNDS = 1000           # SURF safety cap
 ADAM_KEEP_TOL = .005        # a weight counts as unchanged if it moves by at most this in every coordinate
 POINT_BAND = .05            # plotted point: earliest checkpoint after which the GN stays within 5% of the value at stopping
 
-# Values of r and N: FishWood r = 2, 4, ..., 512 and N = 2, 4, ..., 128; Fruit Tree r = 1, ..., 6.  One fixed budget B
+# Values of r and N: FishWood r = 2, 4, ..., 512 and N = 2, 4, ..., 256; Fruit Tree r = 1, ..., 6.  One fixed budget B
 # per task, the same for all methods: 1.05 x the Gradient Calls of the farthest of these points (as measured before B
 # was fixed: FishWood Uniform r=512, Fruit Tree r=6), rounded up to a multiple of 1e3 (FishWood) or 6e3 (Fruit Tree).
 # Checkpoints of every method follow one Gradient-Call schedule: every B/600 (K=2) or B/120 (K=6) calls up to B, 10x
@@ -27,7 +27,7 @@ POINT_BAND = .05            # plotted point: earliest checkpoint after which the
 TASKS = {
     "fishwood": dict(
         uniform=dict(M=50, lr=.03, values=[2, 4, 8, 16, 32, 64, 128, 256, 512]),
-        surf=dict(K_S=25, lr=.03, values=[2, 4, 8, 16, 32, 64, 128, 272]),
+        surf=dict(K_S=25, lr=.03, values=[2, 4, 8, 16, 32, 64, 128, 256, 272]),
         adaptive=dict(inner_steps=2, lr=.03, lambda_method="envelope", checkpoint_count=600),
         budget=161000, every=268),
     "fruittree_d6": dict(
