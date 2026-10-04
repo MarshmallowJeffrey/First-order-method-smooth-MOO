@@ -128,9 +128,7 @@ plt.close(fig)
 end = curve[-1]
 summary = dict(task=task, grab=dict(calls=end["calls"], cpu=end["cpu"], gn=end["gn"], lower=end["lower"],
                                     upper=end["upper"], outer_iterations=len(meta["lambdas"])), baselines={})
-print(f"{task}: GRAB {end['calls']:,} calls / {end['cpu']:.2f} s, GN {end['gn']:.4e}"
-      + (f" [{end['lower']:.4e}, {end['upper']:.4e}]" if K == 3 else "")
-      + f"; {len(meta['lambdas'])} outer iterations")
+print(f"{task}: GRAB {end['calls']:,} calls / {end['cpu']:.2f} s, GN {end['gn']:.4e}; {len(meta['lambdas'])} outer iterations")
 for method, group in groups.items():
     p = min(group, key=lambda p: p["gn"])
     same_calls, same_time = points.best_within(curve, "calls", p["calls"]), points.best_within(curve, "cpu", p["cpu"])

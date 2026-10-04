@@ -1,9 +1,7 @@
 """Reported metric max_{lambda in simplex} GN(lambda, B), GN(lambda, B) = min_i ||J_i' lambda||.
 
   K=2  exact (lower envelope of parabolas).
-  K=3  certified [lower, upper] interval from the simplicial subdivision (relative gap 0.005, at most
-       100,000 splits); figures use the geometric midpoint.
-  K>3  maximum over one fixed pool of 23,992 weights (vertices, center, 199 points per edge, 500 random
+  K=6  maximum over one fixed pool of 23,992 weights (vertices, center, 199 points per edge, 500 random
        points per face with 3..6 objectives): a numerical lower estimate, the same for every method.
 
 All evaluators return (gn, argmax weight, gn_upper).
@@ -12,13 +10,10 @@ from itertools import combinations
 
 import numpy as np
 
-from .lambda_solvers import Envelope, K3BivariateEnvelope
+from .lambda_solvers import Envelope
 
 POOL_SEED = 20260910
 POOL_PER_FACE = 500
-K3_RTOL = .005
-K3_MAX_NODES = 100000
-K3_GRID = 24
 
 
 def fixed_stratified_weights(K=6, seed=POOL_SEED, per_face=POOL_PER_FACE):
@@ -51,18 +46,6 @@ def k2_exact_gram(Q):
     return np.sqrt(value), weight, np.sqrt(value)
 
 
-def k3_interval_gram(Q):
-    solver = K3BivariateEnvelope(rtol=K3_RTOL, max_nodes=K3_MAX_NODES, grid_resolution=K3_GRID)
-    for q in Q:
-        solver.add(q)
-    lower, weight, upper = solver.solve()
-    return np.sqrt(lower), weight, np.sqrt(upper)
-
-
-def k3_interval(J):
-    return k3_interval_gram(gram(J))
-
-
 def pool_gn_gram(Q, weights, chunk=2000):
     best_sq, best_w = 0.0, weights[0]
     for start in range(0, len(weights), chunk):
@@ -91,8 +74,6 @@ def reporting_metric_gram(Q, pool=None):
     K = Q.shape[1]
     if K == 2:
         return k2_exact_gram(Q)
-    if K == 3:
-        return k3_interval_gram(Q)
     if pool is None:
-        raise ValueError("K>3 needs the fixed weight pool")
+        raise ValueError("K>2 needs the fixed weight pool")
     return pool_gn_gram(Q, pool)

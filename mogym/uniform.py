@@ -1,16 +1,19 @@
-"""Uniform discretization (paper Algorithm 7) with every InnerSolver run to the GN plateau.
+"""Uniform discretization (paper Algorithm 6, uniform-grid bundle method) with every InnerSolver run to the GN plateau.
 
-Algorithm 7 makes one InnerSolver call per grid weight lambda_i of G_r = {lambda in simplex: r lambda
+Algorithm 6 makes one InnerSolver call per grid weight lambda_i of G_r = {lambda in simplex: r lambda
 integral} and adds R(CandidatePoints) to the bundle, R = the candidate of smallest ||grad F_lambda_i||.
 Here the call for lambda_i is the whole Adam trajectory of that weight, advanced in sweeps of `steps`
 Adam steps so that all weights progress together and the bundle can be checked after every sweep:
 
-  sweep 1   weights in snake order (consecutive weights 2/r apart in l1); each starts from the last
-            iterate of the preceding weight (the first from theta_0) with a new Adam state;
-  sweep >1  each weight continues from its own last iterate and Adam state.
+  sweep 1   weights in snake order (consecutive weights 2/r apart in l1), each with a new Adam state, from the
+            point of the current bundle (theta_0 and the incumbents of the weights visited so far) minimizing
+            F_lambda - ||grad F_lambda||^2 / (2 L_lambda), L_lambda = sum_k lambda_k L_k, the first minimizer in
+            that order (Algorithm 6, Step 2; the rule of GRAB).  Sweep 1 is thus Algorithm 6 with `steps`
+            iterations per weight;
+  sweep >1  each weight continues its own InnerSolver call: from its own last iterate, with its own Adam state.
 
 At a checkpoint the bundle is {theta_0} U {incumbent_i}, incumbent_i = the min-grad iterate of weight i so
-far (within the first sweep: the weights visited so far), i.e. what Algorithm 7 returns if the InnerSolvers
+far (within the first sweep: the weights visited so far), i.e. what Algorithm 6 returns if the InnerSolvers
 stopped there.  Two kinds of checkpoints are recorded (field "kind"):
 
   "calls"  at the end of the first grid weight past every `every` Gradient Calls up to `budget` and every
@@ -28,7 +31,7 @@ from .recorder import Recorder
 
 
 def uniform_plateau(model, resolution, path, *, lr, steps, rule, every, budget, pool=None, max_sweeps=50000,
-                    adam_beta1=.9, adam_beta2=.999, save_arrays=True):
+                    adam_beta1=.9, adam_beta2=.999, save_arrays=True, L):
     K, d = model['K'], model['d']
     grid = snake_grid(K, resolution)
     M = int(steps)
@@ -59,10 +62,12 @@ def uniform_plateau(model, resolution, path, *, lr, steps, rule, every, budget, 
     gs, p95s, ready_history, trigger, status, stop_a = [], [], [], None, 'safety_cap', None
     nxt, changed_calls, changed_sweep = every, [], []
     for sweep in range(1, max_sweeps + 1):
-        last = (np.zeros(d), f0, j0)
         for i, lam in enumerate(grid):
             if sweep == 1:
-                x, f, j = last
+                ll = float(np.asarray(L) @ lam)  # Algorithm 6, Step 2
+                cands = [(np.zeros(d), f0, j0)] + [best[k][1:] for k in seen]
+                scores = [float(fc @ lam) - float((jc.T @ lam) @ (jc.T @ lam)) / (2 * ll) for _, fc, jc in cands]
+                x, f, j = cands[int(np.argmin(scores))]
                 opts[i] = Adam(d, lr, beta1=adam_beta1, beta2=adam_beta2); seen.append(i)
             else:
                 x, f, j = current[i]
@@ -75,7 +80,7 @@ def uniform_plateau(model, resolution, path, *, lr, steps, rule, every, budget, 
                 gsq = float(g @ g)
                 if best[i] is None or gsq < best[i][0]:
                     best[i] = (gsq, x, f, j)
-            current[i] = last = (x, f, j)
+            current[i] = (x, f, j)
             if best[i] is not old:
                 changed_calls.append(i); changed_sweep.append(i)
             if count >= nxt:  # Gradient-Call checkpoint

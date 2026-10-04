@@ -2,8 +2,10 @@
 
 N segments -> N+1 ordered weights w_n = Phi_t^{-1}(n/N), Phi_0(w) = w, lambda_n = (1 - w_n, w_n).  Each
 round runs `inner_steps` Adam steps for every slot from its previous iterate (all slots start at
-theta_0), measures reward-space chord lengths between neighbouring slots, interpolates the normalized
-arc length with PCHIP on a fine w-grid and damps the CDF update, Phi_{t+1} = alpha Phi~_t + (1-alpha) Phi_t.
+theta_0), measures the chord lengths between neighbouring slots' objective values F = (F_1, F_2) (the values
+returned with the last gradient of each slot; SURF eq. (12) uses h(u_n), and F = (1 - gamma) h), interpolates
+the normalized arc length with PCHIP on a fine w-grid and damps the CDF update,
+Phi_{t+1} = alpha Phi~_t + (1-alpha) Phi_t.
 The output of a round is its N+1 policies.  A slot keeps its Adam state while its weight moves by at most
 adam_keep_tol and gets a new state otherwise.
 
@@ -70,15 +72,14 @@ def surf(model, N_segments, path, *, rounds, inner_steps, inner_lr, every, budge
                 g = j.T @ lam
             slots[slot] = (x, f, j)
             current_logits[slot] = x
-            rr = oracle.evaluate(x, gradient=False)[1]  # reward vector (R1, R2, KL term): front point
-            f_coords.append([rr[0], rr[1]])
+            f_coords.append([f[0], f[1]])  # front point: the objective values at the slot's last iterate
             if K * (steps + 1) >= mark:  # Gradient-Call checkpoint: the current slot policies
                 rec.checkpoint(np.asarray([np.asarray(z[0]).reshape(-1) for z in slots], float),
                                np.array([z[1] for z in slots]), np.array([z[2] for z in slots]), K * (steps + 1))
                 rec.rows[-1]['kind'] = 'calls'
                 while mark <= K * (steps + 1):
                     mark += every if mark < budget else 10 * every
-        f_coords = np.asarray(f_coords, dtype=np.float32)
+        f_coords = np.asarray(f_coords, dtype=float)
         seg_lens = np.sqrt(np.sum(np.diff(f_coords, axis=0) ** 2, axis=1))
         s_vals = np.concatenate([[0.0], np.cumsum(seg_lens)])
         if s_vals[-1] > 1e-14:

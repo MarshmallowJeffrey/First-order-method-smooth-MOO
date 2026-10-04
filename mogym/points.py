@@ -15,8 +15,8 @@ from . import config, metrics, plateau
 
 
 def plotted_gn(row, K):
-    """K=3: geometric midpoint of the certified interval (as in every figure); else the value itself."""
-    return math.sqrt(row["gn"] * row["gn_upper"]) if K == 3 else row["gn"]
+    """The plotted value of a checkpoint: its GN (exact for K=2, the fixed-pool value for K=6)."""
+    return row["gn"]
 
 
 def point_of(m, K):
@@ -69,13 +69,8 @@ def adaptive_curve(results, task, K):
         need = [n for n in sorted({c["bundle_size"] for c in cps}) if str(n) not in cache]
         if need:
             J = np.load(stem.with_suffix(".npz"))["J"]
-            if K == 3:
-                for n in need:
-                    lo, _, up = metrics.k3_interval(J[:n])
-                    cache[str(n)] = [math.sqrt(lo * up), float(lo), float(up)]
-            else:
-                for n, v in zip(need, metrics.pool_gn_prefixes(J, need, metrics.fixed_stratified_weights())):
-                    cache[str(n)] = [float(v)] * 3
+            for n, v in zip(need, metrics.pool_gn_prefixes(J, need, metrics.fixed_stratified_weights())):
+                cache[str(n)] = [float(v)] * 3
             side.write_text(json.dumps(cache))
         vals = [tuple(cache[str(c["bundle_size"])]) for c in cps]
     return meta, [dict(calls=c["component_gradients"], cpu=c["train_cpu"], gn=v[0], lower=v[1], upper=v[2])

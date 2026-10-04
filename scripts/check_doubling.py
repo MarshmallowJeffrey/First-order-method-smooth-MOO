@@ -32,7 +32,7 @@ for p in points.points(a.results, task, K):
             spec = spec_t["uniform"]
             uniform_plateau(model, v, stem, lr=spec["lr"], steps=spec["M"], rule=dict(config.RULE, tol=-1.0),
                             pool=pool, max_sweeps=2 * meta["sweeps"], every=spec_t["every"], budget=spec_t["budget"],
-                            save_arrays=False)
+                            save_arrays=False, L=config.smoothness(task))
         else:
             spec = spec_t["surf"]
             surf(model, v, stem, rounds=2 * meta["outer_rounds"], inner_steps=spec["K_S"], inner_lr=spec["lr"],

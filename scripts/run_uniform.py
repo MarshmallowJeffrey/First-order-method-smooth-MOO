@@ -24,4 +24,4 @@ for r in a.values or spec["values"]:
         continue
     uniform_plateau(model, r, stem, lr=spec["lr"], steps=spec["M"], rule=config.RULE, pool=pool,
                     max_sweeps=config.MAX_SWEEPS, every=config.TASKS[a.task]["every"],
-                    budget=config.TASKS[a.task]["budget"])
+                    budget=config.TASKS[a.task]["budget"], L=config.smoothness(a.task))

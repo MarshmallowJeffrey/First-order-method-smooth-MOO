@@ -3,17 +3,17 @@
 Q_i = J_i J_i' is the Gram matrix of bundle point i (J_i: K x d Jacobian); all internal values are
 squared gradient norms, public GN values are their square roots.
 
-  Envelope             K=2: exact lower envelope of parabolas on lambda_1 in [0, 1].
-  K3BivariateEnvelope  K=3: simplicial branch-and-bound on the 2-simplex; returns a certified
-                       [lower, upper] interval (cell upper bound min_i max_vertex q_i, valid by convexity).
-  CCP                  multistart convex-concave procedure (paper appendix, Algorithm "Multi-start CCP").
+  Envelope             K=2: exact lower envelope of parabolas on lambda_1 in [0, 1] (paper Algorithm 3, envelope
+                       selection; built here by inserting one parabola at a time instead of divide and
+                       conquer, which gives the same envelope; the maximizer is the first breakpoint of
+                       largest value).
+  CCP                  multistart convex-concave procedure (paper Algorithm 2, Multi-start CCP).
   PeriodicStrongCCP    K>3: CCP with small settings, and a stronger CCP every `period` selections.
 
 Every LP max_{lambda in simplex} min_i (M lambda)_i is solved with HiGHS (feasibility tolerances 1e-9).  With
 LP_CG set, an LP with at least CG_MIN_ROWS rows is solved by constraint generation (_lp_cg), which returns an
 optimum of the full LP.
 """
-import heapq
 import warnings
 from itertools import combinations
 
@@ -249,7 +249,7 @@ def lp(M, return_dual_bound=False):
 
 
 class CCP:
-    """Multistart CCP (paper appendix).  Seeds: vertices, center, lambda_A of the sandwich LP, the maxima
+    """Multistart CCP (paper Algorithm 2).  Seeds: vertices, center, lambda_A of the sandwich LP, the maxima
     of the previous solve, the pool, uniform random draws (a fixed batch, or redrawn at every solve with
     fresh_seeds=True), and for K>3 optionally points on the edges and the centers of the 3-faces.
 
@@ -267,7 +267,6 @@ class CCP:
         self.fresh_seeds = bool(fresh_seeds); self.nseeds = nseeds
         self.rng = np.random.default_rng(seed)
         random = self.rng.dirichlet(np.ones(K), size=0 if fresh_seeds else nseeds)
-        grid = simplex_grid(K, 20) if K == 3 else np.empty((0, K))
         boundary = []
         if boundary_seeds and K > 3:
             boundary_resolution = max(int(boundary_resolution), 2)
@@ -280,7 +279,7 @@ class CCP:
                 w = np.zeros(K); w[list(ijk)] = 1. / 3.
                 boundary.append(w)
         extra = np.asarray(boundary).reshape((-1, K))
-        self.seeds = np.vstack([np.eye(K), np.ones((1, K)) / K, grid, random, extra])
+        self.seeds = np.vstack([np.eye(K), np.ones((1, K)) / K, random, extra])
         self.scores = np.full(len(self.seeds), np.inf)
         self.Q = []; self.previous = []; self.lp_count = 0
         self.keep_pool = int(keep_pool); self.pool = shared_pool if shared_pool is not None else []
@@ -347,57 +346,6 @@ class CCP:
         return max(0., best * scale), wb, max(best, ub) * scale
 
 
-class K3BivariateEnvelope:
-    """K=3: branch-and-bound over triangles of the 2-simplex until the upper bound is within rtol of the
-    best feasible value or max_nodes splits were made.  solve() returns (lower, argmax, upper), squared."""
-    def __init__(self, rtol=.005, max_nodes=5000, grid_resolution=12):
-        self.K = 3; self.rtol = float(rtol); self.max_nodes = int(max_nodes)
-        self.grid = simplex_grid(3, int(grid_resolution)); self.Q = []
-        self.previous = []; self.solve_count = 0; self.total_splits = 0
-        self.last_splits = 0; self.last_relative_gap = np.inf; self._cached = None
-
-    def add(self, Q):
-        self.Q.append(np.asarray(Q, float)); self._cached = None
-
-    def solve(self):
-        if self._cached is not None:
-            val, w, upper = self._cached
-            return val, w.copy(), upper
-        Q = np.asarray(self.Q, float)
-        scale = max(float(np.max(np.abs(Q))), 1e-300); qs = Q / scale
-        seeds = np.vstack([np.eye(3), np.ones((1, 3)) / 3, self.grid] + self.previous)
-        seed_values = np.einsum('nk,mkl,nl->nm', seeds, qs, seeds, optimize=True).min(axis=1)
-        ibest = int(np.argmax(seed_values)); best = max(float(seed_values[ibest]), 0.)
-        bestw = seeds[ibest].copy(); padding = 1e-13
-        heap = []; counter = 0; splits = 0
-
-        def add_cell(vertices):
-            nonlocal counter, best, bestw
-            values = np.einsum('lnm,nl->nm', np.einsum('mln->lnm', np.tensordot(qs, vertices, axes=((1,), (1,)))),
-                               vertices)
-            lower = values.min(axis=1); j = int(np.argmax(lower))
-            if lower[j] > best:
-                best = float(lower[j]); bestw = vertices[j].copy()
-            upper = float(np.min(values.max(axis=0))) + padding  # convexity: q_i <= max over the vertices
-            if upper > best:
-                heapq.heappush(heap, (-upper, counter, vertices)); counter += 1
-
-        add_cell(np.eye(3))
-        target = lambda: best * (1 + self.rtol) ** 2 + padding
-        while heap and -heap[0][0] > target() and splits < self.max_nodes:
-            _, _, v = heapq.heappop(heap); a, b, c = v
-            ab = (a + b) / 2; ac = (a + c) / 2; bc = (b + c) / 2
-            for sub in ([a, ab, ac], [ab, b, bc], [ac, bc, c], [ab, bc, ac]):
-                add_cell(np.asarray(sub))
-            splits += 1
-        upper = max(best, -heap[0][0] if heap else best)
-        self.previous = [bestw.copy()]; self.solve_count += 1; self.total_splits += splits
-        self.last_splits = splits
-        self.last_relative_gap = float(np.sqrt(upper / max(best, 1e-300)) - 1)
-        self._cached = (best * scale, bestw.copy(), upper * scale)
-        return self._cached[0], bestw.copy(), self._cached[2]
-
-
 class PeriodicStrongCCP:
     """CCP with the `weak` settings (nseeds, nstarts, maxiter) at every selection, and with the `strong`
     settings at selections period, 2 period, ...; the two share one pool of local maxima (keep_pool)."""
@@ -435,8 +383,14 @@ def evaluate_gram(Q, seed=917, nseeds=2048, nstarts=8):
             solver.add(q)
         val, w = solver.solve()
         return np.sqrt(val), w, np.sqrt(val)
-    solver = CCP(K, nseeds, nstarts, seed)
-    for q in Q:
-        solver.add(q)
-    val, w, upper = solver.solve()
+    # the LP warm-start state (basis, constraint-generation rows) belongs to the training run: kept aside here
+    saved = ({k: _HIGHS[k] for k in ("basis", "basis_shape") if k in _HIGHS}, dict(_CG))
+    try:
+        solver = CCP(K, nseeds, nstarts, seed)
+        for q in Q:
+            solver.add(q)
+        val, w, upper = solver.solve()
+    finally:
+        _HIGHS.pop("basis", None); _HIGHS.pop("basis_shape", None); _HIGHS.update(saved[0])
+        _CG.clear(); _CG.update(saved[1])
     return np.sqrt(val), w, np.sqrt(upper)
