@@ -3,6 +3,7 @@
 
     figures/mnist_worst_gn_k2.pdf    worst-case gradient norm vs gradient calls and time, {4,9}
     figures/mnist_worst_gn_k3.pdf    the same for {4,7,9}
+    figures/mnist_worst_gn_k2_vs_ccp.pdf   {4,9} with the earlier GRAB curve (CCP lambda-search) added
     figures/mnist_fronts.pdf         linear scalarization fronts (mean of three seeds): {4,9} left, {4,7,9} right
     figures/mnist_step_rules_k2.pdf  step-rule experiment, {4,9}
 
@@ -62,9 +63,10 @@ def adaptive_curve(res):
     return np.asarray(runs[0]["ck_grads"], float), wall, np.exp(np.log(G).mean(axis=0))
 
 
-def worst_gn(K):
+def worst_gn(K, extra=(), stem=None):
     """Markers: the drawn configurations (geometric means over the seeds); dashed: fitted trends; curve: the
-    adaptive method (geometric mean over the seeds)."""
+    adaptive method (geometric mean over the seeds).  extra: further adaptive curves (label, results file, line
+    style), drawn below the main curve and added to the legend after GRAB."""
     res = json.loads((RESULTS / f"k{K}.json").read_text())
     fams = ("uniform", "surf") if K == 2 else ("uniform",)
     drawn = {"uniform": C.FIGURE_UNIFORM_R[K], "surf": C.FIGURE_SURF_N}
@@ -85,6 +87,12 @@ def worst_gn(K):
         axv = ad_x if axis == "budget" else ad_w
         m = ad_x > 0
         handles["adaptive"], = ax.plot(axv[m], ad_y[m], "-", color=COL["adaptive"], lw=2.6, zorder=3)
+        extra_curves = []
+        for i, (_, path, style) in enumerate(extra):
+            ex, ew, ey = adaptive_curve(json.loads(Path(path).read_text()))
+            ev, em = (ex if axis == "budget" else ew), ex > 0
+            handles[f"extra{i}"], = ax.plot(ev[em], ey[em], **style)
+            extra_curves.append((ev, ey))
         items, lines = [], []
         for f in fams:
             keys = sorted(k for k in big if k[0] == f)
@@ -110,6 +118,7 @@ def worst_gn(K):
         for s_ in ("top", "right"):
             ax.spines[s_].set_visible(False)
         mv = (axv > 0) & (axv <= xmax)
+        lines += [(ev[(ev > 0) & (ev <= xmax)], ey[(ev > 0) & (ev <= xmax)]) for ev, ey in extra_curves]
         per_axis.append((ax, xlabel, items, lines + [(axv[mv], ad_y[mv])], float(ad_y[mv].min()), float(ad_y[mv].max())))
     axs[0].set_ylabel(YLAB, fontsize=FS["label"])
     y_lo = min(p[4] for p in per_axis) / 1.35                         # below the visible adaptive curve
@@ -123,15 +132,23 @@ def worst_gn(K):
                                                                          minor_thresholds=(3, 3)))
         axs[0].tick_params(axis="y", which="minor", labelsize=FS["tick"] - 1)
         axs[1].tick_params(axis="y", which="both", labelleft=False)
-    names = [NAME["adaptive"]] + [f"{NAME[f]} ({'r' if f == 'uniform' else 'N'})" for f in fams]
-    fig.legend([handles["adaptive"]] + [handles[f] for f in fams], names, loc="upper center", ncol=len(names),
-               fontsize=FS["legend"], frameon=False, bbox_to_anchor=(0.5, 1.0))
+    names = ([NAME["adaptive"]] + [label for label, _, _ in extra]
+             + [f"{NAME[f]} ({'r' if f == 'uniform' else 'N'})" for f in fams])
+    fig.legend([handles["adaptive"]] + [handles[f"extra{i}"] for i in range(len(extra))] + [handles[f] for f in fams],
+               names, loc="upper center", ncol=len(names), fontsize=FS["legend"], frameon=False,
+               bbox_to_anchor=(0.5, 1.0))
     fig.subplots_adjust(left=0.105, right=0.985, bottom=0.15, top=0.87, wspace=0.07)
     for ax, xlabel, items, lines, _, _ in per_axis:     # labels last: they need the final limits and layout
         info = place(ax, items, lines, fontsize=FS["num"])
         if info["hard"]:
             print(f"  warning ({xlabel}): labels with a hard clash: {info['hard']}")
-    _save(fig, f"mnist_worst_gn_k{K}")
+    _save(fig, stem or f"mnist_worst_gn_k{K}")
+
+
+def worst_gn_k2_vs_ccp():
+    """{4,9}: the figure of the paper with the earlier GRAB curve added (CCP lambda-search, results/k2_ccp.json)."""
+    worst_gn(2, extra=[(f"{NAME['adaptive']} (CCP)", RESULTS / "k2_ccp.json",
+                        dict(ls="-", color="#7f7f7f", lw=2.0, zorder=2.5))], stem="mnist_worst_gn_k2_vs_ccp")
 
 
 def _front_k2_panel(ax):
@@ -289,6 +306,7 @@ def step_rules_k2():
 
 def main():
     worst_gn(2)
+    worst_gn_k2_vs_ccp()
     worst_gn(3)
     fronts()
     step_rules_k2()

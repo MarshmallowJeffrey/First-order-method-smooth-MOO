@@ -57,6 +57,7 @@ the pointwise minimum of the parabolas, against a rebuild from scratch and again
 | Appendix: step rules (table and figure) | `tables/step_rules_k2.tex`, `figures/mnist_step_rules_k2.pdf` |
 | Appendix: warm start of the adaptive method | `tables/warm_start.tex` |
 | Appendix: all runs, {4,9} and {4,7,9} | `tables/mnist_k2_full.tex`, `tables/mnist_k3_full.tex` |
+| {4,9}: the figure of the paper with the earlier GRAB curve (CCP) added | `figures/mnist_worst_gn_k2_vs_ccp.pdf` |
 | {4,9}: the adaptive method with the envelope and with CCP (`scripts/compare_envelope.py`) | `figures/k2_envelope_vs_ccp.pdf`, `figures/k2_envelope_vs_ccp_zoom.pdf`, `results/k2_envelope.json` |
 
 ## Rerun the experiments
@@ -112,5 +113,6 @@ The settings of all experiments are in `abm/config.py`.
 * On 2026-10-04 the K = 2 adaptive method changed from the CCP lambda-search to the exact envelope (Appendix A.4.1).
   Only its three legs were rerun (the baselines choose no lambda); `scripts/update_k2_adaptive.py` put them into
   `results/k2.json` and `results/k2_fronts.json` without changing any baseline entry.  The earlier versions of the two
-  files are kept as `results/k2_ccp.json` and `results/k2_fronts_ccp.json`; the step-rule and warm-start experiments
-  were run with the CCP lambda-search.
+  files are kept as `results/k2_ccp.json` and `results/k2_fronts_ccp.json`.  The K = 2 step-rule and warm-start
+  experiments were rerun with the envelope the same day (`results/step_rules_k2.json`, `results/warm_start_k2.json`;
+  the CCP versions are kept as `results/step_rules_k2_ccp.json` and `results/warm_start_k2_ccp.json`).

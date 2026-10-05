@@ -15,6 +15,8 @@ when the step rule's state is reset.  Adam(1e-3, beta2 = 0.9), the three samplin
 Runs go to runs/warm_start_k<K>/<variant>_seed<s>/.  When all runs of the four variants exist, the summary (final
 worst-case gradient norm per seed, mean curves, rejections, decisions that did not start at the last accepted point)
 goes to results/warm_start_k<K>.json.  K = 2 uses the exact audits, K = 3 the suffix maximum of its lower bounds.
+The adaptive method chooses lambda as in the paper (config.SELECTOR; recorded as `selector`): for K = 2 the exact
+envelope since 2026-10-04; the earlier K = 2 runs with CCP are in results/warm_start_k2_ccp.json.
 """
 
 from __future__ import annotations
@@ -53,8 +55,12 @@ def board(K, runs_dir, seeds):
                   "decisions": [sm.get("decisions") or -(-sm["segments"] // C.SEGMENTS) for sm in sms],  # A: s per decision
                   "start_moved": [sm.get("start_moved", 0) for sm in sms],
                   "wall_seconds": [float(sm["wall_seconds"]) for sm in sms]}
+    selectors = {json.loads((runs_dir / f"{v}_seed{s}" / "summary.json").read_text()).get("selector", "ccp")
+                 for v in VARIANTS for s in seeds}
+    if len(selectors) != 1:
+        raise ValueError(f"runs with different lambda searches in {runs_dir}: {selectors}")
     return {"K": K, "digits": list(C.DIGITS[K]), "budget": C.WARM_START_BUDGET[K], "step_rule": C.STEP_RULE,
-            "seeds": list(seeds), "variants": out}
+            "seeds": list(seeds), "selector": selectors.pop(), "variants": out}
 
 
 def main():

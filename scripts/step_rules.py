@@ -4,8 +4,11 @@ three sampling seeds, 10,000 gradient calls on {4,9}.
 
     python scripts/step_rules.py --device cuda
 
-Runs go to runs/step_rules_k2/<rule>_adaptive_seed<s>/; the summary (curves and the board: mean and range over the
-seeds of the final worst-case gradient norm, from the exact audits) to results/step_rules_k2.json.
+Runs go to runs/step_rules_k2/<rule>_adaptive_seed<s>/ (or --runs); once every rule has a run for each of the
+three seeds, the summary (curves and the board: mean and range over the seeds of the final worst-case gradient norm,
+from the exact audits) goes to results/step_rules_k2.json.  The adaptive method chooses lambda as in the paper
+(config.SELECTOR; recorded as `selector`): the exact envelope since 2026-10-04; the earlier runs with CCP are in
+results/step_rules_k2_ccp.json.
 """
 
 from __future__ import annotations
@@ -40,8 +43,12 @@ def board(runs_dir, seeds):
                       "final_per_seed": finals, "final_mean": float(np.mean(finals)),
                       "rejections": [int(sm["rejections"]) for sm in sms]}
     ranked = sorted(rules, key=lambda t: rules[t]["final_mean"])
+    selectors = {json.loads((runs_dir / leg_name("adaptive", None, s, tag) / "summary.json").read_text()).get("selector", "ccp")
+                 for tag, _, _ in STEP_RULES for s in seeds}
+    if len(selectors) != 1:
+        raise ValueError(f"runs with different lambda searches in {runs_dir}: {selectors}")
     return {"K": K, "digits": list(C.DIGITS[K]), "budget": C.STEP_RULE_BUDGET, "seeds": list(seeds),
-            "ranking": ranked, "rules": rules}
+            "selector": selectors.pop(), "ranking": ranked, "rules": rules}
 
 
 def main():
@@ -49,9 +56,10 @@ def main():
     ap.add_argument("--seeds", default=",".join(str(s) for s in C.STEP_RULE_SEEDS))
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--runs", type=Path, default=None, help="default: runs/step_rules_k2")
     a = ap.parse_args()
     seeds = [int(s) for s in a.seeds.split(",")]
-    runs_dir = ROOT / "runs" / f"step_rules_k{K}"
+    runs_dir = a.runs or ROOT / "runs" / f"step_rules_k{K}"
     schedule = [(float("inf"), C.STEP_RULE_CADENCE)]
     for tag, _, _ in STEP_RULES:
         for s in seeds:
@@ -59,7 +67,12 @@ def main():
             if not (d / "summary.json").exists():
                 run_leg(K, "adaptive", None, s, d, budget=C.STEP_RULE_BUDGET, step_rule=tag, schedule=schedule,
                         audit_grid=C.STEP_RULE_AUDIT_GRID, device=a.device, threads=a.threads)
-    res = board(runs_dir, seeds)
+    all_seeds = [int(s) for s in C.STEP_RULE_SEEDS]
+    if not all((runs_dir / leg_name("adaptive", None, s, tag) / "summary.json").exists()
+               for tag, _, _ in STEP_RULES for s in all_seeds):
+        print(f"not every rule has a run for each of the seeds {all_seeds} in {runs_dir}: no summary written")
+        return
+    res = board(runs_dir, all_seeds)
     (ROOT / "results").mkdir(exist_ok=True)
     (ROOT / "results" / f"step_rules_k{K}.json").write_text(json.dumps(res, indent=1))
     for i, tag in enumerate(res["ranking"], 1):

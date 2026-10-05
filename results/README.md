@@ -23,11 +23,12 @@ values at 10k ... 480k gradient calls, and the ratios to the best baselines.
 `k3_fronts.json`: per leg the non-dominated values (F_4, F_7, F_9) with every objective at most 0.5.
 
 `step_rules_k2.json` ({4,9}): per step rule the mean curve over the three seeds (`ck_grads`, `ck_wall_mean`,
-`gn_mean`), the final values per seed and their mean; `ranking` from the lowest mean.
+`gn_mean`), the final values per seed and their mean; `ranking` from the lowest mean; `selector`, the lambda-search
+of the runs (envelope since 2026-10-04; the earlier CCP runs: `step_rules_k2_ccp.json`).
 
 `warm_start_k2.json`, `warm_start_k3.json`: per start rule A-D of the adaptive method (`start`, `reset`) the mean
 curve over the three seeds, the final values per seed and their mean, rejections, and the number of decisions that
-did not start at the last accepted point.
+did not start at the last accepted point; `selector` as above (the earlier K = 2 CCP runs: `warm_start_k2_ccp.json`).
 
 `screening_k2.json`, `screening_k3.json`: one record per digit pair or triple (most conflicting first): the
 lookahead affinities `Z` at the checkpoints, `C`, `c_j`, `C_bal` and `C_mean`.
