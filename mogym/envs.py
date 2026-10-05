@@ -6,7 +6,7 @@ The tabular builders store float32 values (as the original SURF notebooks do); t
 converted to float64.
 
   fishwood      K=2   2 states, 2 actions        gamma 0.995, tau 0.5  (as in the SURF paper)
-  fruittree_d6  K=6   Fruit Tree, depth 6        gamma 0.99,  tau 1
+  fruittree_d6  K=6   Fruit Tree, depth 6        gamma 0.99,  tau 1  (64 states: 63 internal nodes + absorbing)
 """
 import numpy as np
 
@@ -53,26 +53,29 @@ def _fishwood(fishproba, woodproba):
 
 # ---------------------------------------------------------------- Fruit Tree
 def _fruit_tree(depth):
-    """Full binary tree; node (row, col) has children (row+1, 2col+a).  The 6-dimensional fruit vector of
-    a leaf is received on the transition into the leaf; leaves move to an absorbing terminal state."""
+    """The model of the paper: the 2^depth - 1 internal nodes (i, j), 0 <= i <= depth - 1, 0 <= j < 2^i, indexed
+    2^i - 1 + j, and one absorbing state.  From (i, j) with i <= depth - 2 action a moves to (i + 1, 2j + a); from
+    (depth - 1, j) action a picks the fruit of leaf 2j + a (its 6-dimensional nutrient vector is the reward) and
+    moves to the absorbing state, which loops on itself with reward 0."""
     import mo_gymnasium as mo_gym
     env = mo_gym.make("fruit-tree-v0", depth=depth)
-    tree = np.asarray(env.unwrapped.tree, dtype=np.float32).copy()
+    tree = np.asarray(env.unwrapped.tree, dtype=np.float32).copy()  # full tree; the leaves are 2^depth - 1, ...
     env.close()
     K, A = 6, 2
-    terminal = 2 ** (depth + 1) - 1
-    S = terminal + 1
+    absorbing = 2 ** depth - 1
+    S = absorbing + 1
     P = np.zeros((S, A, S))
     R = np.zeros((S, A, K))
-    for row in range(depth + 1):
+    for row in range(depth):
         for col in range(2 ** row):
             s = 2 ** row - 1 + col
             for a in range(A):
-                child = terminal if row == depth else 2 ** (row + 1) - 1 + 2 * col + a
-                P[s, a, child] = 1.
                 if row == depth - 1:
-                    R[s, a] = tree[child]
-    P[terminal, :, terminal] = 1.
+                    P[s, a, absorbing] = 1.
+                    R[s, a] = tree[2 ** depth - 1 + 2 * col + a]
+                else:
+                    P[s, a, 2 ** (row + 1) - 1 + 2 * col + a] = 1.
+    P[absorbing, :, absorbing] = 1.
     rho0 = np.zeros(S)
     rho0[0] = 1.
     return dict(S=S, A=A, P=P, R=R, rho0=rho0)

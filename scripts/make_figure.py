@@ -6,9 +6,11 @@ SURF N (mogym.points), each family with a dashed descriptive trend c + a (x/s)^(
 the logarithms (s = median x) from its leftmost to its rightmost point, and number labels placed by
 scripts/labels.py.  The x axis runs to the larger of the GRAB budget and 1.1 x the farthest point.
 
-Also prints and writes figures/<task>_summary.json: the GRAB value at the end of its budget, each baseline's
-lowest point and the ratio to the final GRAB value (paper Table "MO-Gymnasium"), the GRAB value at the same
-Gradient Calls / CPU time as that point, where the GRAB curve first reaches it, and the points above the curve.
+CPU times are the medians over the timing repeats of scripts/time_repeats.py (the single run if it was not run).
+Also prints and writes figures/<task>_summary.json: the GRAB value at the budget B, each baseline's lowest point and
+the ratio to the final GRAB value, the ratios to GRAB at the same Gradient Calls and at the same CPU time (median and
+range over the timing repeats), where the GRAB curve first reaches that point, and the points above the GRAB curve.
+Configured runs that are not plotted (no plateau, or point beyond B) are listed.
 
     python scripts/make_figure.py fishwood [--results results] [--figures figures]
 """
@@ -72,7 +74,7 @@ from labels import place  # noqa: E402
 task = a.task
 K = envs.build(task)["K"]
 meta, curve = points.adaptive_curve(a.results, task, K)
-pts = points.points(a.results, task, K)
+pts, skipped = points.points(a.results, task)
 groups = {m: sorted([p for p in pts if p["method"] == m], key=lambda p: p["param"]) for m in ("Uniform", "SURF")}
 groups = {m: g for m, g in groups.items() if g}
 ad = {f: np.array([c[f] for c in curve], float) for f in ("calls", "cpu", "gn")}
@@ -126,26 +128,34 @@ fig.savefig(out / f"{task}_convergence.png", dpi=300)
 plt.close(fig)
 
 end = curve[-1]
-summary = dict(task=task, grab=dict(calls=end["calls"], cpu=end["cpu"], gn=end["gn"], lower=end["lower"],
-                                    upper=end["upper"], outer_iterations=len(meta["lambdas"])), baselines={})
+summary = dict(task=task, budget=config.TASKS[task]["budget"], not_plotted=[list(x) for x in skipped],
+               grab=dict(calls=end["calls"], cpu=end["cpu"], cpu_range=[min(end["cpu_repeats"]), max(end["cpu_repeats"])],
+                         timing_repeats=len(end["cpu_repeats"]), gn=end["gn"], outer_iterations=len(meta["lambdas"])),
+               baselines={})
 print(f"{task}: GRAB {end['calls']:,} calls / {end['cpu']:.2f} s, GN {end['gn']:.4e}; {len(meta['lambdas'])} outer iterations")
+for method, v, reason in skipped:
+    print(f"  not plotted: {method} {v} ({reason})")
 for method, group in groups.items():
     p = min(group, key=lambda p: p["gn"])
     same_calls, same_time = points.best_within(curve, "calls", p["calls"]), points.best_within(curve, "cpu", p["cpu"])
+    # same-time ratio in every timing repeat (GRAB curve and point timed in the same repeat): median and range
+    n_rep = min(len(p["cpu_repeats"]), len(curve[0]["cpu_repeats"]))
+    rep_ratios = [p["gn"] / points.best_within([dict(c, cpu=c["cpu_repeats"][k]) for c in curve], "cpu",
+                                               p["cpu_repeats"][k]) for k in range(n_rep)]
     above = {f: [q["param"] for q in group if q["gn"] > points.best_within(curve, f, q[f])] for f in ("calls", "cpu")}
-    row = dict(param=p["param"], gn=p["gn"], lower=p["lower"], upper=p["upper"], calls=p["calls"], cpu=p["cpu"],
-               iterations_to_stop=p["iterations"], ratio_to_final_grab=p["gn"] / end["gn"],
-               grab_same_calls=same_calls, ratio_same_calls=p["gn"] / same_calls,
-               grab_same_time=same_time, ratio_same_time=p["gn"] / same_time,
+    row = dict(param=p["param"], gn=p["gn"], calls=p["calls"], cpu=p["cpu"],
+               cpu_range=[min(p["cpu_repeats"]), max(p["cpu_repeats"])], ratio_to_final_grab=p["gn"] / end["gn"],
+               ratio_same_calls=p["gn"] / same_calls, ratio_same_time=dict(
+                   median=float(np.median(rep_ratios)), min=float(min(rep_ratios)), max=float(max(rep_ratios))),
                grab_reaches_at=dict(calls=points.first_reach(curve, "calls", p["gn"]),
                                     cpu=points.first_reach(curve, "cpu", p["gn"])),
-               points=[dict(param=q["param"], calls=q["calls"], cpu=q["cpu"], gn=q["gn"]) for q in group],
-               points_above_curve=dict(calls=above["calls"], time=above["cpu"], all=[q["param"] for q in group]))
+               points=[dict(param=q["param"], calls=q["calls"], cpu=q["cpu"], gn=q["gn"], iterations=q["iterations"])
+                       for q in group],
+               points_above_curve=dict(calls=above["calls"], time=above["cpu"]))
     summary["baselines"][method] = row
     pre = "r" if method == "Uniform" else "N"
-    print(f"  {method} lowest point {pre}={p['param']}: GN {p['gn']:.4e} at {p['calls']:,} calls / {p['cpu']:.2f} s "
-          f"({p['iterations']} {'sweeps' if method == 'Uniform' else 'rounds'} to stop); ratio to final GRAB "
-          f"{row['ratio_to_final_grab']:.2f}x; same calls {row['ratio_same_calls']:.2f}x, same time "
-          f"{row['ratio_same_time']:.2f}x")
+    print(f"  {method} lowest point {pre}={p['param']}: GN {p['gn']:.4e} at {p['calls']:,} calls / {p['cpu']:.2f} s; "
+          f"ratio to final GRAB {row['ratio_to_final_grab']:.2f}x; same calls {row['ratio_same_calls']:.2f}x, same time "
+          f"{np.median(rep_ratios):.2f}x (range [{min(rep_ratios):.2f}, {max(rep_ratios):.2f}] over {n_rep} repeat(s))")
     print(f"    points above the GRAB curve: calls {len(above['calls'])}/{len(group)}, time {len(above['cpu'])}/{len(group)}")
 (out / f"{task}_summary.json").write_text(json.dumps(summary, indent=2) + "\n")

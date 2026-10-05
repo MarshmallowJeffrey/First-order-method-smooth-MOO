@@ -4,9 +4,11 @@
   K=6  maximum over one fixed pool of 23,992 weights (vertices, center, 199 points per edge, 500 random
        points per face with 3..6 objectives): a numerical lower estimate, the same for every method.
 
-All evaluators return (gn, argmax weight, gn_upper).
+All evaluators return (gn, argmax weight).
 """
+import hashlib
 from itertools import combinations
+from pathlib import Path
 
 import numpy as np
 
@@ -34,6 +36,13 @@ def fixed_stratified_weights(K=6, seed=POOL_SEED, per_face=POOL_PER_FACE):
     return np.vstack(rows)
 
 
+def evaluator_sha256():
+    """Fingerprint of the K>2 evaluator: this module's source and the fixed pool of weights."""
+    h = hashlib.sha256(Path(__file__).read_bytes())
+    h.update(np.ascontiguousarray(fixed_stratified_weights()).tobytes())
+    return h.hexdigest()
+
+
 def gram(J):
     return J @ J.transpose(0, 2, 1)
 
@@ -43,7 +52,7 @@ def k2_exact_gram(Q):
     for q in Q:
         solver.add(q)
     value, weight = solver.solve()
-    return np.sqrt(value), weight, np.sqrt(value)
+    return np.sqrt(value), weight
 
 
 def pool_gn_gram(Q, weights, chunk=2000):
@@ -54,7 +63,7 @@ def pool_gn_gram(Q, weights, chunk=2000):
         i = int(values.argmax())
         if float(values[i]) > best_sq:
             best_sq, best_w = float(values[i]), w[i]
-    return float(np.sqrt(max(best_sq, 0.0))), np.asarray(best_w), float(np.sqrt(max(best_sq, 0.0)))
+    return float(np.sqrt(max(best_sq, 0.0))), np.asarray(best_w)
 
 
 def pool_gn_prefixes(final_J, bundle_sizes, weights, chunk=400):
