@@ -12,6 +12,11 @@ norms, public GN values are their square roots.
 Every LP max_{lambda in simplex} min_i (M lambda)_i is solved by HiGHS (dual simplex, feasibility tolerances 1e-9,
 one solver instance), warm-started from the basis of the previous LP of the same size; an LP with at least
 CG_MIN_ROWS rows is solved by constraint generation, which returns an optimum of the full LP.
+
+Relaxed-LP variant (CCP(exact_lp=False), off by default; config.VARIANTS["relaxed_lp"]): every LP of the preference
+selection with at least CG_MIN_ROWS rows is solved once on the constraint-generation working set (no rows added), so
+its solution need not satisfy the other rows; a CCP start then stops at the first step that decreases phi and keeps
+its best point.  This departs from Algorithm 2, whose CCP step solves the LP with all rows.
 """
 import warnings
 from itertools import combinations
@@ -199,14 +204,14 @@ def _highs_direct(M, warm=True):
     return np.array(sol.col_value), np.array(sol.row_dual)[:m]
 
 
-def _lp_cg(M):
+def _lp_cg(M, exact=True):
     """The LP of lp() by constraint generation.  HiGHS solves it on a working set of rows: the rows active at the
     previous optimum, the CG_INIT rows smallest at the previous maximizer (the center at first) and the smallest
     row of every column.  Every row outside the working set with (M lambda)_i < t - 1e-10 (stricter than the
     feasibility tolerance HiGHS applies inside) is violated; the CG_ADD most violated rows are added to the model
     and the LP is solved again from the current basis.  When no row is violated, lambda is optimal for the full LP
-    and the duals of the working set (zero elsewhere) are optimal duals.  Returns (x, row duals) as _highs_direct,
-    or None."""
+    and the duals of the working set (zero elsewhere) are optimal duals.  exact=False (relaxed-LP variant): no row is
+    checked or added; the working-set solution is returned.  Returns (x, row duals) as _highs_direct, or None."""
     m, K = M.shape
     ref = _CG.get("lam")
     ref = ref if ref is not None and len(ref) == K else np.ones(K) / K
@@ -223,7 +228,7 @@ def _lp_cg(M):
     while True:
         lam = np.maximum(x[1:], 0); lam /= lam.sum()
         gap = M @ lam - x[0]; gap[W] = 0.
-        viol = np.flatnonzero(gap < -1e-10)
+        viol = np.flatnonzero(gap < -1e-10) if exact else np.empty(0, dtype=int)
         if len(viol) == 0:
             idx = np.asarray(rows); full = np.zeros(m); full[idx] = duals
             _CG["rows"] = idx[duals < 0]; _CG["lam"] = lam
@@ -238,10 +243,10 @@ def _lp_cg(M):
         duals = np.r_[d[:n0], d[n0 + 1:]]
 
 
-def lp(M, return_dual_bound=False):
+def lp(M, return_dual_bound=False, exact=True):
     """max_{lambda in simplex} min_i (M lambda)_i: value, maximizer (and an upper bound from the duals)."""
     m, K = M.shape
-    fast = _lp_cg(M) if m >= CG_MIN_ROWS else None
+    fast = _lp_cg(M, exact) if m >= CG_MIN_ROWS else None
     if fast is None:
         fast = _highs_direct(M)
     if fast is not None:
@@ -267,20 +272,23 @@ def lp(M, return_dual_bound=False):
     return value, w
 
 
-def ccp_ascent(qs, w, maxiter):
+def ccp_ascent(qs, w, maxiter, exact=True):
     """CCP steps from w (paper Algorithm 2, inner loop): the LP for val(M^c) of the linearizations at the current
     point, then a move to its maximizer, until the predicted improvement delta_c <= 1e-8 max{1, phi} or after maxiter
-    LPs.  Returns (last point, largest phi seen after a step, the point where it was seen, number of LPs)."""
+    LPs.  exact=False (relaxed-LP variant): the LPs are solved on the working set only, and a step that decreases phi
+    ends the start.  Returns (last point, largest phi seen after a step, the point where it was seen, number of LPs)."""
     best, wb = -np.inf, None
     w = np.array(w, float)
     for count in range(1, maxiter + 1):
         qw = qs @ w; vals = qw @ w; old = float(vals.min())
-        lower, wn = lp(2 * qw - vals[:, None])
+        lower, wn = lp(2 * qw - vals[:, None], exact=exact)
         new = float(np.min((qs @ wn) @ wn))
         if new > best:
             best, wb = new, wn.copy()
         if new < old - 2e-8:
-            raise RuntimeError('CCP descent exceeds numerical tolerance')
+            if exact:
+                raise RuntimeError('CCP descent exceeds numerical tolerance')
+            break
         w = wn
         if lower - old <= 1e-8 * max(abs(old), 1.):
             break
@@ -303,8 +311,8 @@ class CCP:
     (Appendix A) or after maxiter LPs.  (iv) The selected weight is the point of largest phi found; the polished
     points update the pool.
     """
-    def __init__(self, K, nseeds, nstarts, maxiter, seed=42, boundary_resolution=None, keep_pool=0):
-        self.K = K; self.nseeds = nseeds; self.nstarts = nstarts; self.maxiter = maxiter
+    def __init__(self, K, nseeds, nstarts, maxiter, seed=42, boundary_resolution=None, keep_pool=0, exact_lp=True):
+        self.K = K; self.nseeds = nseeds; self.nstarts = nstarts; self.maxiter = maxiter; self.exact_lp = exact_lp
         self.rng = np.random.default_rng(seed)
         boundary = []
         if boundary_resolution is not None and K > 3:
@@ -344,7 +352,8 @@ class CCP:
             wA, ub = sw[1], sw[3] / scale
             self.sandwich = (self.n,) + sw[1:]
         else:
-            _, wA, ub = lp(np.diagonal(qs, axis1=1, axis2=2), return_dual_bound=True); self.lp_count += 1
+            _, wA, ub = lp(np.diagonal(qs, axis1=1, axis2=2), return_dual_bound=True, exact=self.exact_lp)
+            self.lp_count += 1
             self.sandwich = (self.n, wA, float(np.min(np.diagonal(Q, axis1=1, axis2=2) @ wA)), ub * scale)
         scores = self.scores / scale
         fresh = self.rng.dirichlet(np.ones(self.K), size=self.nseeds)
@@ -367,7 +376,7 @@ class CCP:
             if len(chosen) >= self.nstarts:
                 break
         for w in chosen:
-            w, value, point, count = ccp_ascent(qs, w, self.maxiter); self.lp_count += count
+            w, value, point, count = ccp_ascent(qs, w, self.maxiter, self.exact_lp); self.lp_count += count
             if value > best:
                 best, wb = value, point
             maxima.append(w)

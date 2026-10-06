@@ -23,7 +23,10 @@ ap = argparse.ArgumentParser()
 ap.add_argument("tasks", nargs="+", choices=tuple(config.TASKS))
 ap.add_argument("--repeats", type=int, default=5)
 ap.add_argument("--results", default=str(_setup.ROOT / "results"))
+ap.add_argument("--variant", choices=tuple(config.VARIANTS), help="a variant of config.VARIANTS")
 a = ap.parse_args()
+if a.variant:
+    config.apply_variant(a.variant)
 res = _setup.Path(a.results)
 
 

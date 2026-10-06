@@ -12,7 +12,10 @@ ap = argparse.ArgumentParser()
 ap.add_argument("task", choices=[t for t in config.TASKS if "surf" in config.TASKS[t]])
 ap.add_argument("--values", type=int, nargs="*", help="numbers of segments N (default: the configured ones)")
 ap.add_argument("--results", default=str(_setup.ROOT / "results"))
+ap.add_argument("--variant", choices=tuple(config.VARIANTS), help="a variant of config.VARIANTS")
 a = ap.parse_args()
+if a.variant:
+    config.apply_variant(a.variant)
 task = config.TASKS[a.task]; spec = task["surf"]
 model = envs.build(a.task)
 for n in a.values or spec["values"]:

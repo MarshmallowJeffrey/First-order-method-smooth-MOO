@@ -11,7 +11,10 @@ from mogym.adaptive import adaptive
 ap = argparse.ArgumentParser()
 ap.add_argument("task", choices=tuple(config.TASKS))
 ap.add_argument("--results", default=str(_setup.ROOT / "results"))
+ap.add_argument("--variant", choices=tuple(config.VARIANTS), help="a variant of config.VARIANTS")
 a = ap.parse_args()
+if a.variant:
+    config.apply_variant(a.variant)
 task = config.TASKS[a.task]
 model = envs.build(a.task); K = model["K"]
 stem = _setup.Path(a.results) / a.task / "adaptive" / "adaptive"

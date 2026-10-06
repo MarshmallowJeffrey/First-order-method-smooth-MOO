@@ -36,5 +36,21 @@ TASKS = {
 }
 
 
+# Relaxed-LP variant, for review (scripts: --variant relaxed_lp; run_all_relaxed.sh): Fruit Tree GRAB with every LP of
+# the CCP solved once on the constraint-generation working set (mogym.lambda_solvers) and M_A = 2, the setting chosen
+# by the same selection rule with this CCP.  Uniform and the evaluator are unchanged.
+VARIANTS = {
+    "relaxed_lp": {"fruittree_d6": dict(adaptive=dict(
+        inner_steps=2, lr=.1, checkpoint_count=120,
+        ccp=dict(nseeds=64, nstarts=1, maxiter=15, boundary_resolution=20, keep_pool=16, exact_lp=False)))},
+}
+
+
+def apply_variant(name):
+    """Replace the settings of the variant in TASKS (in place)."""
+    for task, settings in VARIANTS[name].items():
+        TASKS[task].update(settings)
+
+
 def smoothness(name):
     return np.asarray(L_ESTIMATES[name], float)

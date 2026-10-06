@@ -12,7 +12,10 @@ ap = argparse.ArgumentParser()
 ap.add_argument("task", choices=tuple(config.TASKS))
 ap.add_argument("--values", type=int, nargs="*", help="resolutions r (default: the configured ones)")
 ap.add_argument("--results", default=str(_setup.ROOT / "results"))
+ap.add_argument("--variant", choices=tuple(config.VARIANTS), help="a variant of config.VARIANTS")
 a = ap.parse_args()
+if a.variant:
+    config.apply_variant(a.variant)
 task = config.TASKS[a.task]; spec = task["uniform"]
 model = envs.build(a.task)
 pool = metrics.fixed_stratified_weights() if model["K"] > 3 else None

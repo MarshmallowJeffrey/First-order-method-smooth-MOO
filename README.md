@@ -175,6 +175,36 @@ Over the 5 timing runs, the same-time ratios range over [4.55, 4.94] (FishWood U
 SURF) and [1.01, 1.04] (Fruit Tree Uniform). The Gradient-Call values are exact. The CPU times depend on the
 machine.
 
+## Variant for review: relaxed LP in the CCP (Fruit Tree)
+
+This branch adds one variant of GRAB's preference selection, for review. It is off by default: `run_all.sh`, the
+settings, the results and the figures above are unchanged.
+
+```bash
+./run_all_relaxed.sh      # Fruit Tree only: results_relaxed/ and figures_relaxed/
+```
+
+**What changes** (`CCP(exact_lp=False)` in `mogym/lambda_solvers.py`, `config.VARIANTS["relaxed_lp"]`):
+- Every LP of the preference selection with at least 400 rows is solved once on the constraint-generation working set. These are the LP of each CCP step and the val(A) LP.
+  - The working set holds the rows active at the previous solution, the 40 rows smallest at the previous maximizer, and the smallest row of each column (about 46 of about 1,000 rows on average).
+  - No other row is checked or added, so the solution need not satisfy them.
+- A CCP start stops at the first step that decreases φ and keeps its best point. With exact LPs, a CCP step never decreases φ.
+- GRAB uses M_A = 2 (lr 0.1), the setting the selection rule picks with this CCP.
+- Unchanged: Uniform, the budget B = 48,000, the evaluator (fixed pool + CCP polishing with exact LPs), all other settings.
+
+**Departure from the paper.** The CCP step of Algorithm 2 maximizes the minorant over all rows of M^c. Here it uses only the working set:
+- The step is exact when the working set contains the active rows. With exact constraint generation this already holds for 78% of these LPs in the default Fruit Tree run.
+- The dual bound of val(A) stays a valid upper bound, by weak duality.
+
+**Results** (Fruit Tree, B = 48,000; CPU times are medians over 5 timing runs):
+
+| | GRAB at B | GRAB CPU | Preference selection | LPs | Uniform r=6: ratio to final GRAB (same calls / same time) | Points above the curve (calls / time) |
+|---|---|---|---|---|---|---|
+| Default (exact LPs, M_A = 5) | 7.9818e-4 | 6.1 s | 65% | 7,244 | 1.35× (1.27× / 1.04×) | 6/6, 5/6 |
+| Relaxed LP, M_A = 2 | 6.9851e-4 | 7.3 s | 65% | 5,295 | 1.54× (1.54× / 1.16×) | 6/6, 5/6 |
+
+The Uniform runs of the two rows are identical.
+
 ## Notes
 
 - `lambda_solvers.lp` calls HiGHS through SciPy's internal interface (SciPy 1.15), with the same model and options as `scipy.optimize.linprog(method="highs")`. If that interface is unavailable, it falls back to `linprog`, which gives the same solutions but runs more slowly.
