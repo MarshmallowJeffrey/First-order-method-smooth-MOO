@@ -12,7 +12,7 @@ import torch
 
 from . import config as C
 from .methods import SAME_LAMBDA_TOL, run_adaptive, run_surf, run_uniform
-from .meter import audit_k3, gn_k2_prefixes
+from .meter import CERT_GAP, audit_k3_certified, gn_k2_prefixes
 from .objective import make_problem
 from .steppers import STEP_RULE_BY_TAG
 
@@ -68,9 +68,11 @@ def run_leg(K, method, param, seed, out_dir, *, budget=C.BUDGET, step_rule=C.STE
         gn2 = [float(v) for v, _, _ in res]
         summary.update(audit="exact", audit_grid=int(audit_grid), audit_w=[float(w) for _, w, _ in res],
                        audit_upper=[float(u) for _, _, u in res])
-    else:
-        gn2, lams = audit_k3(Ms, rec.ck_m, rec.ck_grads, float(budget))
-        summary.update(audit="lower bound", audit_lam=lams)
+    else:                                            # certified interval [lower, upper] for GNS* (abm/certify.py)
+        gn2, upper, lams, certified = audit_k3_certified(Ms, rec.ck_m)
+        summary.update(audit="certified", audit_gap=CERT_GAP, audit_lam=lams,
+                       audit_gn_upper=[float(np.sqrt(max(v, 0.0))) for v in upper],
+                       audit_uncertified=int(sum(not c for c in certified)))
     summary["audit_gn2"] = gn2
     summary["audit_gn"] = [float(np.sqrt(max(v, 0.0))) for v in gn2]
     summary["audit_seconds"] = time.time() - t_audit

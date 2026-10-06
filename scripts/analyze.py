@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from abm import config as C  # noqa: E402
-from abm.analysis import TOL, checkpoint_marker, exact_marker_k2, geomean, plateau, suffix_max  # noqa: E402
+from abm.analysis import TOL, checkpoint_marker, exact_marker_k2, geomean, plateau, running_min, suffix_max  # noqa: E402
 from abm.fronts import LN3, front_2d, nondominated_kd  # noqa: E402
 
 
@@ -54,6 +54,11 @@ def analyze(K, runs_dir, workers=1):
                      "wall_seconds": sm["wall_seconds"], "decision_seconds": sm["decision_seconds"],
                      "audit_seconds": sm["audit_seconds"], "segments": sm["segments"],
                      "rejections": sm["rejections"], "device": sm["device"]}
+        if sm["method"] == "adaptive":
+            out[name]["selector"] = sm.get("selector")
+        if K == 3 and "audit_gn_upper" in sm:       # certified audits: upper ends, repaired by the running minimum
+            out[name]["audit_gn_upper"] = sm["audit_gn_upper"]
+            out[name]["final_upper"] = float(running_min(sm["audit_gn_upper"])[-1])
     baselines = [r for r in out.values() if r["method"] != "adaptive"]
     B_main = max([r["B_run"] for r in baselines if r["B_run"] is not None], default=None)
     for name, r in out.items():
@@ -85,10 +90,14 @@ def analyze(K, runs_dir, workers=1):
                       "x_median": float(np.median([r["marker"]["x"] for r in rs])),
                       "wall_geomean": geomean([r["marker"]["wall"] for r in rs]),
                       "n_plateau": int(sum(r["B_run"] is not None for r in rs))})
-    adaptive = {r["seed"]: r["final"] for r in out.values() if r["method"] == "adaptive"}
+    # GRAB at the end of the budget: the certified upper bound where there is one (K = 3), else the audit
+    adaptive = {r["seed"]: r.get("final_upper", r["final"]) for r in out.values() if r["method"] == "adaptive"}
+    selectors = sorted({r["selector"] for r in out.values() if r["method"] == "adaptive"})
     return {"K": K, "digits": list(C.DIGITS[K]), "tol": TOL, "B_main": B_main, "configs": stats,
             "adaptive_final": {str(s): v for s, v in sorted(adaptive.items())},
             "adaptive_final_geomean": geomean(list(adaptive.values())) if adaptive else None,
+            "adaptive_selector": selectors[0] if len(selectors) == 1 else selectors,
+            "adaptive_final_bound": "upper" if any("final_upper" in r for r in out.values()) else "audit",
             "runs": out}
 
 

@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from abm import config as C  # noqa: E402
-from abm.analysis import fit_trend, suffix_max, trend_curve  # noqa: E402
+from abm.analysis import fit_trend, running_min, suffix_max, trend_curve  # noqa: E402
 from abm.fronts import dominated_share, log_cells, mean_front_2d, mean_front_3d  # noqa: E402
 from abm.labels import place  # noqa: E402
 
@@ -52,12 +52,16 @@ def _save(fig, stem, pdf_dpi=None, **kw):
 
 def adaptive_curve(res):
     """The adaptive method over the seeds: at every checkpoint (the same budgets in every seed) the geometric mean
-    of the seeds' audited worst-case gradient norms (each repaired by its suffix maximum) and of their wall-clock
-    times.  Returns (gradient calls, wall-clock seconds, worst-case gradient norm)."""
+    of the seeds' worst-case gradient norms and of their wall-clock times.  Each seed's series is its certified upper
+    bound repaired by the running minimum where there is one (K = 3), else its audit repaired by the suffix maximum.
+    Returns (gradient calls, wall-clock seconds, worst-case gradient norm)."""
     runs = sorted((r for r in res["runs"].values() if r["method"] == "adaptive"), key=lambda r: r["seed"])
     if any(r["ck_grads"] != runs[0]["ck_grads"] for r in runs):
         raise ValueError("the adaptive runs have different checkpoints")
-    G = np.array([suffix_max(r["audit_gn"]) for r in runs])
+    if all("audit_gn_upper" in r for r in runs):
+        G = np.array([running_min(r["audit_gn_upper"]) for r in runs])
+    else:
+        G = np.array([suffix_max(r["audit_gn"]) for r in runs])
     W = np.array([r["ck_wall"] for r in runs], dtype=float)
     wall = np.where((W > 0).all(axis=0), np.exp(np.log(np.where(W > 0, W, 1.0)).mean(axis=0)), 0.0)
     return np.asarray(runs[0]["ck_grads"], float), wall, np.exp(np.log(G).mean(axis=0))

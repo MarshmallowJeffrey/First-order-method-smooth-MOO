@@ -7,18 +7,16 @@ envelope of m parabolas.  The envelope is evaluated exactly on a uniform grid of
 in closed form (the maximum of an envelope of convex quadratics is at an end point or at a crossing of two of them),
 and a certified upper bound follows from the slopes of the active quadratics on every cell.
 
-K = 3 (lower bound).  At every checkpoint: the best of two multistart CCP searches (8,192 seeds, 20 polished) and a
-simplex grid of resolution 500.  At the last checkpoint at or before B/8, B/4, B/2 and B additionally: SLSQP
-from 10 fixed starts and the previous level's maximizer, a CCP search with the row-wise LP transport, and a grid of
-resolution 1,000.  Each value is GN at a feasible lambda, hence a lower bound.
+K = 3 (certified).  At every checkpoint the simplicial branch and bound of abm/certify.py (the global optimization
+fallback of Appendix A.1) returns an interval [lower, upper] that contains the squared value, with
+upper <= (1 + CERT_GAP) lower.
 """
 
 from __future__ import annotations
 
 import numpy as np
-from scipy.optimize import minimize
 
-from .ccp import CCPConfig, CCPSolver
+from .certify import certify_k3_prefixes
 from .grid import simplex_grid
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -123,15 +121,22 @@ def gn_k2_prefixes(Ms, ck_m, grid_points=200_001):
 
 
 # ---------------------------------------------------------------------------------------------------------------
-#  K = 3: lower bounds
+#  K = 3: certified bounds (abm/certify.py)
 # ---------------------------------------------------------------------------------------------------------------
-HEAVY_CCP = dict(N0=8192, r=20)
-CHEAP_SEEDS = (1, 2)
-GRID_RES, GRID_RES_FULL = 500, 1000
+CERT_GAP = 1e-3            # relative width of the certified interval [lower, upper] for GNS*
+CERT_TIME_LIMIT = 900.0    # seconds per checkpoint; the bounds stay valid if it is reached
+
+
+def audit_k3_certified(Ms, ck_m, gap=CERT_GAP, time_limit=CERT_TIME_LIMIT):
+    """Certified bounds of GNS* = max_lam min_i lam^T M_i lam at all checkpoints (simplicial branch and bound).
+    Returns (lower, upper, lams, certified), squared units."""
+    res = certify_k3_prefixes(Ms, ck_m, gap=gap, time_limit=time_limit)
+    return ([r["lower"] for r in res], [r["upper"] for r in res], [r["lam"] for r in res],
+            [bool(r["certified"]) for r in res])
 
 
 def grid_maxmin_k3(Ms, resolution, chunk=4096):
-    """Exact max of min_i lam^T M_i lam over the simplex grid of the given resolution (K = 3)."""
+    """Exact max of min_i lam^T M_i lam over the simplex grid of the given resolution (K = 3; used by the tests)."""
     Ms = np.asarray(Ms, dtype=float)
     lams = simplex_grid(3, resolution)
     Q = np.stack([Ms[:, 0, 0], Ms[:, 1, 1], Ms[:, 2, 2],
@@ -146,116 +151,3 @@ def grid_maxmin_k3(Ms, resolution, chunk=4096):
         if float(mins[j]) > best:
             best, best_lam = float(mins[j]), Bl[j].copy()
     return best, best_lam
-
-
-def _slsqp_starts(K, prev_lam):
-    """Centroid, vertices, near-vertices (0.8), the previous maximizer and the edge midpoints."""
-    EPS, NEAR = 1e-8, 0.8
-    starts = [np.full(K, 1.0 / K)]
-    for k in range(K):
-        e = np.full(K, EPS)
-        e[k] = 1.0 - (K - 1) * EPS
-        starts.append(e)
-    for k in range(K):
-        e = np.full(K, (1.0 - NEAR) / (K - 1))
-        e[k] = NEAR
-        starts.append(e)
-    if prev_lam is not None:
-        starts.append(np.clip(prev_lam, EPS, 1.0))
-    for a in range(K):
-        for b in range(a + 1, K):
-            e = np.full(K, EPS)
-            e[a] = 0.5 - (K - 2) * 0.5 * EPS
-            e[b] = 0.5 - (K - 2) * 0.5 * EPS
-            starts.append(e)
-    return starts
-
-
-def slsqp_max_gn(Ms, prev_lam=None):
-    """Multistart SLSQP on max_lam min_i lam^T M_i lam (ftol 1e-6, 100 iterations); every candidate is scored at
-    its projection onto the simplex.  Returns (value, lam)."""
-    Ms = np.asarray(Ms, dtype=float)
-    K = Ms.shape[1]
-
-    def neg_gn(lam):
-        return -float(np.min(np.einsum('k,ikl,l->i', lam, Ms, lam)))
-
-    def neg_gn_jac(lam):
-        vals = np.einsum('k,ikl,l->i', lam, Ms, lam)
-        return -(2.0 * (Ms[int(np.argmin(vals))] @ lam))
-
-    def project(v):
-        v = np.maximum(np.asarray(v, dtype=float), 0.0)
-        s = float(v.sum())
-        return np.full(K, 1.0 / K) if (not np.isfinite(s) or s <= 0.0) else v / s
-
-    constraints = [{"type": "eq", "fun": lambda l: float(np.sum(l) - 1.0), "jac": lambda l: np.ones(K)}]
-    starts = _slsqp_starts(K, prev_lam)
-    best_val, best_lam = np.inf, project(starts[0])
-    for lam0 in starts:
-        lam0 = project(lam0)
-        v0 = neg_gn(lam0)
-        if v0 < best_val:
-            best_val, best_lam = float(v0), lam0
-        try:
-            res = minimize(neg_gn, lam0, jac=neg_gn_jac, method="SLSQP", bounds=[(1e-8, 1.0)] * K,
-                           constraints=constraints, options={"ftol": 1e-6, "maxiter": 100})
-        except Exception:
-            continue
-        lam_res = project(res.x)
-        v_res = neg_gn(lam_res)
-        if np.isfinite(v_res) and v_res < best_val:
-            best_val, best_lam = float(v_res), lam_res
-    return float(-best_val), best_lam
-
-
-def _heavy_ccp(Ms, seed, transport):
-    return CCPSolver(3, CCPConfig(seed=int(seed), **HEAVY_CCP), transport=transport).solve(Ms)
-
-
-def audit_checkpoint_k3(Ms):
-    """Per-checkpoint lower bound: two CCP searches and the grid of resolution 500.  Returns (value, lam)."""
-    Ms = np.asarray(Ms, dtype=float)
-    vals, lams = [], []
-    for s in CHEAP_SEEDS:
-        v, lam = _heavy_ccp(Ms, s, "bulk")
-        vals.append(float(v))
-        lams.append([float(t) for t in lam])
-    v_grid, lam_grid = grid_maxmin_k3(Ms, GRID_RES)
-    j = int(np.argmax(vals))
-    if v_grid > vals[j]:
-        return float(v_grid), [float(t) for t in lam_grid]
-    return vals[j], lams[j]
-
-
-def audit_level_k3(Ms, prev_lam):
-    """Additional instruments at the level checkpoints: SLSQP, CCP (row transport, seed 1), grid 1,000."""
-    Ms = np.asarray(Ms, dtype=float)
-    v_i, lam_i = slsqp_max_gn(Ms, prev_lam)
-    v_c, lam_c = _heavy_ccp(Ms, 1, "rows")
-    value, lam = (float(v_c), np.asarray(lam_c, float)) if v_c >= v_i else (float(v_i), np.asarray(lam_i, float))
-    lam = [float(t) for t in lam]
-    v_g, lam_g = grid_maxmin_k3(Ms, GRID_RES_FULL)
-    if v_g > value:
-        value, lam = float(v_g), [float(t) for t in lam_g]
-    return value, lam
-
-
-def audit_k3(Ms, ck_m, ck_grads, budget):
-    """Lower bounds of max_lam min_i lam^T M_i lam at all checkpoints; returns (values, lambdas)."""
-    values, lams = [], []
-    for m in ck_m:
-        v, lam = audit_checkpoint_k3(Ms[:m])
-        values.append(v)
-        lams.append(lam)
-    ck = np.asarray(ck_grads)
-    levels = [budget / 8, budget / 4, budget / 2, budget]
-    level_idx = sorted(set([int(np.nonzero(ck <= L + 1e-9)[0][-1]) for L in levels if np.any(ck <= L + 1e-9)]
-                           + [len(ck_m) - 1]))
-    prev = None
-    for i in level_idx:
-        v, lam = audit_level_k3(Ms[:ck_m[i]], prev)
-        if v > values[i]:
-            values[i], lams[i] = v, lam
-        prev = np.asarray(lams[i], dtype=float)
-    return values, lams

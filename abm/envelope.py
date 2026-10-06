@@ -107,7 +107,7 @@ def envelope_eval(s, w, a, b, c, x):
 class EnvelopeSelector:
     """Step 1 of GRAB for K = 2 with the exact envelope.  solve(grams) takes the bundle's Gram matrices (all of them,
     in bundle order), merges the new ones into the stored envelope and returns (phi(lambda*), lambda*) with
-    lambda* = (1 - s*, s*): the same interface as CCPSolver.solve."""
+    lambda* = (1 - s*, s*): the same interface as CCPCGSelector.solve (abm/ccp_cg.py)."""
 
     def __init__(self):
         self.n = 0

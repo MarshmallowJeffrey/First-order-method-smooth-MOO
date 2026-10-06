@@ -1,5 +1,5 @@
 {
- "note": "short CPU runs of the code of this repository (Apple M-series CPU; torch threads as listed); they are reproduced bit for bit on that machine. The adaptive runs use the lambda-search of the paper (config.SELECTOR: the exact envelope for K = 2, Algorithm 2 with constraint generation for K = 3).",
+ "note": "short CPU runs of the code of this repository (Apple M-series CPU; torch threads as listed); they are reproduced bit for bit on that machine. The adaptive runs use the lambda-search of the paper (config.SELECTOR: the exact envelope for K = 2, Algorithm 2 with constraint generation for K = 3). The K = 3 audits are certified intervals (abm/certify.py): the K = 3 reference stores the lower end (audit_gn) and the upper end (audit_gn_upper).",
  "runs": {
   "K2_adaptive": {
    "K": 2,
@@ -103,13 +103,18 @@
    ],
    "audit_gn": [
     14.36776173523931,
-    1.6574473763321975,
-    0.7385036686096966
+    1.657078641225197,
+    0.7384262254194158
    ],
    "segments": 85,
    "rejections": 0,
    "threads": 2,
-   "selector": "ccp_cg"
+   "selector": "ccp_cg",
+   "audit_gn_upper": [
+    14.36776173523931,
+    1.6579063755194885,
+    0.738751251263451
+   ]
   }
  }
 }

@@ -1,9 +1,11 @@
 """From audited runs to the numbers of the paper: plateau test, markers, geometric means, trend fits.
 
 g(t) is the audited worst-case gradient norm at the checkpoints t (budget in gradient calls).  The true value is
-non-increasing in t (the bundle only grows) and every audit is a lower bound of it (K = 3; for K = 2 a grid value
-within its certified upper bound), so a later audit proves every earlier one low: the series is repaired by its
-suffix maximum.
+non-increasing in t (the bundle only grows) and every audit is a lower bound of it (K = 2: a grid value within its
+certified upper bound; K = 3: the lower end of the certified interval of abm/certify.py), so a later audit proves every
+earlier one low: the series is repaired by its suffix maximum.  For K = 3 the upper ends of the certified intervals
+are repaired by their running minimum (an earlier upper bound also bounds every later value); the figures and the
+main table draw GRAB by this upper bound and the baselines by the lower bound.
 
 Plateau: a run of budget B has plateaued if g(B/4) <= 1.05 g(B) (less than 5 % gained over the last two budget
 doublings); g(L) is the value at the last checkpoint at or before L.  The levels B/8, B/4, B/2 are tested as well
@@ -33,6 +35,11 @@ TOL = 0.05
 def suffix_max(values):
     v = np.asarray(values, dtype=float)
     return np.maximum.accumulate(v[::-1])[::-1]
+
+
+def running_min(values):
+    v = np.asarray(values, dtype=float)
+    return np.minimum.accumulate(v)
 
 
 def geomean(values):

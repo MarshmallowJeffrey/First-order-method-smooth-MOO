@@ -1,7 +1,7 @@
 """Short reproduction checks (CPU, about 5 minutes):
 
-1. training + audit: four short runs (K = 2: adaptive, uniform r = 3, SURF N = 3; K = 3: adaptive) against reference
-   values (tests/reference_short_runs.json);
+1. training + audit (K = 3: the certified interval): four short runs (K = 2: adaptive, uniform r = 3, SURF N = 3;
+   K = 3: adaptive) against reference values (tests/reference_short_runs.json);
 2. screening of {4,9} against results/screening_k2.json;
 3. results/: the configuration statistics and the numbers quoted in the paper follow from the per-run records.
 
@@ -45,6 +45,10 @@ def test_short_runs():
         exact = sm["ck_grads"] == r["ck_grads"] and sm["audit_gn"] == r["audit_gn"]
         assert sm["segments"] == r["segments"] and sm["rejections"] == r["rejections"], name
         assert _close(sm["ck_grads"], r["ck_grads"]) and _close(sm["audit_gn"], r["audit_gn"]), name
+        if "audit_gn_upper" in r:                     # K = 3: the certified interval
+            exact = exact and sm["audit_gn_upper"] == r["audit_gn_upper"]
+            assert _close(sm["audit_gn_upper"], r["audit_gn_upper"]), name
+            assert all(lo <= up for lo, up in zip(sm["audit_gn"], sm["audit_gn_upper"])), name
         print(f"  {name}: worst-case GN {sm['audit_gn'][-1]:.6e} "
               f"({'bit-identical' if exact else 'within rtol'} to the reference)", flush=True)
 
@@ -58,7 +62,7 @@ def test_screening_pair_4_9():
 
 def test_results_consistency():
     for K, quoted in ((2, {"adaptive": 9.82e-4, ("uniform", 60): 6.86e-3, ("surf", 38): 6.27e-3}),
-                      (3, {"adaptive": 1.57e-2, ("uniform", 24): 9.04e-2})):
+                      (3, {"adaptive": 1.61e-2, ("uniform", 24): 9.04e-2})):
         res = json.loads((ROOT / "results" / f"k{K}.json").read_text())
         for s in res["configs"]:
             runs = [r for r in res["runs"].values() if r["method"] == s["method"] and r["param"] == s["param"]]

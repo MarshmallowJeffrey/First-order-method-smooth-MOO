@@ -152,7 +152,8 @@ class CGGameLP:
 class CCPCGSelector:
     """Algorithm 2 with constraint generation; stateful across calls (bundle copy, local maximizers of the previous
     call, random stream, LP hint), one instance per run.  solve(grams) takes the bundle's Gram matrices (all of them,
-    in bundle order; only the new ones are copied) and returns (phi(lam), lam), as CCPSolver.solve does."""
+    in bundle order; only the new ones are copied) and returns (phi(lam), lam), as EnvelopeSelector.solve does
+    (abm/envelope.py)."""
 
     def __init__(self, K: int, config: CCPCGConfig | None = None):
         self.K = int(K)
