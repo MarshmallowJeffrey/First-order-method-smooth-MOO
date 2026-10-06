@@ -54,6 +54,7 @@ def adaptive(model, L, budget, path, *, lr, inner_steps, state_tol, checkpoint_c
     metric = exact_metric if K == 2 else no_estimate
     rec.checkpoint(n, F[:n], J[:n], count, metric)
     lambdas = []; continued = 0; lambda_time = 0.
+    # checkpoint at the end of the first outer iteration that completes at or after every budget / checkpoint_count calls
     thresholds = np.linspace(0, budget, checkpoint_count + 1)[1:]; threshold = 0
     while count + K <= budget:
         t = time.perf_counter(); lam = solver.select(); lambda_time += time.perf_counter() - t
@@ -77,10 +78,10 @@ def adaptive(model, L, budget, path, *, lr, inner_steps, state_tol, checkpoint_c
         X, F, J, G, TR = _grow(n, X, F, J, G, TR)
         X[n], F[n], J[n] = best[1:]; TR[n] = tid
         G[n] = J[n] @ J[n].T; solver.add(G[n]); n += 1
-        if threshold < len(thresholds) and count >= thresholds[threshold] - K:
+        if threshold < len(thresholds) and count >= thresholds[threshold]:
             gn = rec.checkpoint(n, F[:n], J[:n], count, metric)
             print(f'{model["name"]} GRAB calls={count} GN={gn:.5g}', flush=True)
-            while threshold < len(thresholds) and count >= thresholds[threshold] - K:
+            while threshold < len(thresholds) and count >= thresholds[threshold]:
                 threshold += 1
     if rec.rows[-1]['component_gradients'] != count:
         rec.checkpoint(n, F[:n], J[:n], count, metric)

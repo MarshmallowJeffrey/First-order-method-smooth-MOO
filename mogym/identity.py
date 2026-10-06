@@ -68,6 +68,12 @@ def run_identity(run_spec, model):
                 source_sha256=source_sha256(), versions=versions(), model_sha256=model_sha256(model), git=git_state())
 
 
+def fingerprint(meta):
+    """What a stored run was computed from and what it produced: its identity and the SHA-256 of its arrays."""
+    stored = meta.get("identity", {})
+    return dict({k: stored.get(k) for k in MATCHED}, npz_sha256=meta.get("npz_sha256"))
+
+
 def reusable(json_path, run_spec, model):
     """True if the stored run has the current identity and intact arrays; False if there is no stored run;
     RuntimeError if a stored run differs."""

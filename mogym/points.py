@@ -31,10 +31,15 @@ def timing(results, task):
     return json.loads(f.read_text())["runs"] if f.exists() else {}
 
 
-def _cpu(times, key, rows):
-    """Median CPU time per checkpoint and the CPU time of every repeat (the stored run alone without repeats)."""
+def _cpu(times, key, meta):
+    """Median CPU time per checkpoint and the CPU time of every repeat (the stored run alone without repeats).  The
+    timing entry must belong to the stored run: same fingerprint and checkpoint calls."""
+    rows = meta["checkpoints"]
     if key in times:
-        reps = np.asarray(times[key]["cpu"], float)
+        t = times[key]
+        if t.get("run") != identity.fingerprint(meta) or t["calls"] != [r["component_gradients"] for r in rows]:
+            raise RuntimeError(f"{key}: timing.json was measured for another run; rerun scripts/time_repeats.py")
+        reps = np.asarray(t["cpu"], float)
         return np.median(reps, axis=0), reps
     reps = np.asarray([[r["train_cpu"] for r in rows]], float)
     return reps[0], reps
@@ -56,7 +61,7 @@ def points(results, task):
                 skipped.append((method, v, f"point at {c['component_gradients']:,} calls > B"))
                 continue
             i = m["checkpoints"].index(c)
-            med, reps = _cpu(times, f"{sub}/{pre}{v}", m["checkpoints"])
+            med, reps = _cpu(times, f"{sub}/{pre}{v}", m)
             out.append(dict(method=method, param=v, calls=c["component_gradients"], cpu=float(med[i]),
                             cpu_repeats=reps[:, i].tolist(), gn=c["gn"], iterations=m.get("sweeps", m.get("rounds"))))
     return out, skipped
@@ -80,11 +85,11 @@ def adaptive_curve(results, task, K):
         need = [n for n in sorted({c["bundle_size"] for c in cps}) if str(n) not in cache["values"]]
         if need:
             J = np.load(stem.with_suffix(".npz"))["J"]
-            for n, v in zip(need, metrics.pool_gn_prefixes(J, need, metrics.fixed_stratified_weights())):
+            for n, v in zip(need, metrics.pool_ccp_prefixes(J, need, metrics.fixed_stratified_weights())):
                 cache["values"][str(n)] = float(v)
             side.write_text(json.dumps(cache))
         vals = [cache["values"][str(c["bundle_size"])] for c in cps]
-    med, reps = _cpu(timing(results, task), "adaptive/adaptive", cps)
+    med, reps = _cpu(timing(results, task), "adaptive/adaptive", meta)
     return meta, [dict(calls=c["component_gradients"], cpu=float(med[i]), cpu_repeats=reps[:, i].tolist(), gn=v)
                   for i, (c, v) in enumerate(zip(cps, vals))]
 

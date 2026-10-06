@@ -9,9 +9,9 @@ norms, public GN values are their square roots.
             first one in case of ties).
   CCP       K>2: multi-start convex-concave procedure (paper Algorithm 2).
 
-Every LP max_{lambda in simplex} min_i (M lambda)_i is solved by HiGHS (dual simplex, feasibility tolerances 1e-9),
-warm-started from the basis of the previous LP of the same size; an LP with at least CG_MIN_ROWS rows is solved by
-constraint generation, which returns an optimum of the full LP.
+Every LP max_{lambda in simplex} min_i (M lambda)_i is solved by HiGHS (dual simplex, feasibility tolerances 1e-9,
+one solver instance), warm-started from the basis of the previous LP of the same size; an LP with at least
+CG_MIN_ROWS rows is solved by constraint generation, which returns an optimum of the full LP.
 """
 import warnings
 from itertools import combinations
@@ -20,7 +20,7 @@ import numpy as np
 from scipy.optimize import linprog
 
 CG_MIN_ROWS, CG_INIT, CG_ADD = 400, 40, 40
-_HIGHS = {}  # HiGHS module, options and the basis of the previous LP
+_HIGHS = {}  # HiGHS module, the solver instance and the basis of the previous LP
 _CG = {}     # rows active at the previous constraint-generation optimum and its maximizer
 
 
@@ -141,10 +141,9 @@ class Envelope:
         return max(float(np.min((cs[:, 0] * x + cs[:, 1]) * x + cs[:, 2])), 0.), lam
 
 
-def _highs_direct(M, warm=True):
-    """The LP of lp() solved by HiGHS with the model and options scipy.optimize.linprog(method='highs') uses, the
-    options validated once.  Returns (x, row duals), or None if HiGHS is not reachable this way or does not report
-    an optimal model (lp() then calls linprog)."""
+def _highs():
+    """HiGHS through SciPy's internal interface, with the options scipy.optimize.linprog(method='highs') uses, and one
+    solver instance; None if HiGHS is not reachable this way (lp() then calls linprog)."""
     if not _HIGHS:
         try:
             import scipy.optimize._highspy._core as _h
@@ -157,13 +156,29 @@ def _highs_direct(M, warm=True):
         o.dual_feasibility_tolerance = 1e-9; o.log_to_console = False; o.output_flag = False
         o.primal_feasibility_tolerance = 1e-9; o.simplex_strategy = s_c.SimplexStrategy.kSimplexStrategyDual
         o.threads = 1
-        _HIGHS.update(h=_h, options=o, inf=_h.kHighsInf)
-    if _HIGHS["h"] is None:
+        highs = _h._Highs()
+        _HIGHS.update(h=None if highs.passOptions(o) == _h.HighsStatus.kError else _h, highs=highs, inf=_h.kHighsInf)
+    return _HIGHS if _HIGHS["h"] is not None else None
+
+
+def _optimal(H):
+    _h, highs = H["h"], H["highs"]
+    return highs.run() != _h.HighsStatus.kError and highs.getModelStatus() == _h.HighsModelStatus.kOptimal
+
+
+def _highs_direct(M, warm=True):
+    """The LP of lp() passed to the HiGHS instance and solved.  Returns (x, row duals), or None if HiGHS is not
+    reachable or does not report an optimal model."""
+    H = _highs()
+    if H is None:
         return None
-    _h, inf = _HIGHS["h"], _HIGHS["inf"]
-    from scipy.sparse import csc_matrix
+    _h, highs, inf = H["h"], H["highs"], H["inf"]
     m, K = M.shape
-    A = csc_matrix(np.vstack((np.column_stack([np.ones(m), -M]), np.array([np.r_[0., np.ones(K)]]))))
+    # [1, -M; 0, 1'] in column-wise (CSC) form, as scipy.sparse.csc_matrix gives it: column by column, rows in
+    # ascending order, exact zeros left out
+    AT = np.empty((K + 1, m + 1)); AT[0, :m] = 1.; AT[0, m] = 0.; AT[1:, :m] = -M.T; AT[1:, m] = 1.
+    nz = AT != 0
+    start = np.zeros(K + 2, dtype=np.int32); np.cumsum(nz.sum(axis=1), out=start[1:])
     lp_ = _h.HighsLp()
     lp_.num_col_ = K + 1; lp_.num_row_ = m + 1
     lp_.a_matrix_.num_col_ = K + 1; lp_.a_matrix_.num_row_ = m + 1
@@ -171,16 +186,15 @@ def _highs_direct(M, warm=True):
     lp_.col_cost_ = np.r_[-1., np.zeros(K)]
     lp_.col_lower_ = np.r_[-inf, np.zeros(K)]; lp_.col_upper_ = np.r_[inf, np.ones(K)]
     lp_.row_lower_ = np.r_[np.full(m, -inf), 1.]; lp_.row_upper_ = np.r_[np.zeros(m), 1.]
-    lp_.a_matrix_.start_ = A.indptr; lp_.a_matrix_.index_ = A.indices; lp_.a_matrix_.value_ = A.data
-    highs = _h._Highs()
-    if highs.passOptions(_HIGHS["options"]) == _h.HighsStatus.kError or highs.passModel(lp_) == _h.HighsStatus.kError:
+    lp_.a_matrix_.start_ = start; lp_.a_matrix_.index_ = np.nonzero(nz)[1].astype(np.int32); lp_.a_matrix_.value_ = AT[nz]
+    if highs.passModel(lp_) == _h.HighsStatus.kError:
         return None
-    if warm and _HIGHS.get("basis_shape") == (m, K):
-        highs.setBasis(_HIGHS["basis"])
-    if highs.run() == _h.HighsStatus.kError or highs.getModelStatus() != _h.HighsModelStatus.kOptimal:
+    if warm and H.get("basis_shape") == (m, K):
+        highs.setBasis(H["basis"])
+    if not _optimal(H):
         return None
     if warm:
-        _HIGHS["basis"], _HIGHS["basis_shape"] = highs.getBasis(), (m, K)
+        H["basis"], H["basis_shape"] = highs.getBasis(), (m, K)
     sol = highs.getSolution()
     return np.array(sol.col_value), np.array(sol.row_dual)[:m]
 
@@ -189,30 +203,39 @@ def _lp_cg(M):
     """The LP of lp() by constraint generation.  HiGHS solves it on a working set of rows: the rows active at the
     previous optimum, the CG_INIT rows smallest at the previous maximizer (the center at first) and the smallest
     row of every column.  Every row outside the working set with (M lambda)_i < t - 1e-10 (stricter than the
-    feasibility tolerance HiGHS applies inside) is violated; the CG_ADD most violated rows are added and the LP
-    is solved again.  When no row is violated, lambda is optimal for the full LP and the duals of the working set
-    (zero elsewhere) are optimal duals.  Returns (x, row duals) as _highs_direct, or None."""
+    feasibility tolerance HiGHS applies inside) is violated; the CG_ADD most violated rows are added to the model
+    and the LP is solved again from the current basis.  When no row is violated, lambda is optimal for the full LP
+    and the duals of the working set (zero elsewhere) are optimal duals.  Returns (x, row duals) as _highs_direct,
+    or None."""
     m, K = M.shape
     ref = _CG.get("lam")
     ref = ref if ref is not None and len(ref) == K else np.ones(K) / K
-    W = np.zeros(m, bool); W[np.argsort(M @ ref, kind='stable')[:CG_INIT]] = True; W[M.argmin(axis=0)] = True
+    W = np.zeros(m, bool); W[np.argpartition(M @ ref, CG_INIT)[:CG_INIT]] = True; W[M.argmin(axis=0)] = True
     hint = _CG.get("rows")
     if hint is not None:
         W[hint[hint < m]] = True
+    rows = list(np.flatnonzero(W)); n0 = len(rows)  # model rows: rows[:n0], the simplex row, then rows[n0:]
+    out = _highs_direct(M[rows], warm=False)
+    if out is None:
+        return None
+    H = _HIGHS; highs = H["highs"]
+    x, duals = out
     while True:
-        rows = np.flatnonzero(W)
-        out = _highs_direct(M[rows], warm=False)
-        if out is None:
-            return None
-        x, marg = out
         lam = np.maximum(x[1:], 0); lam /= lam.sum()
         gap = M @ lam - x[0]; gap[W] = 0.
         viol = np.flatnonzero(gap < -1e-10)
         if len(viol) == 0:
-            full = np.zeros(m); full[rows] = marg
-            _CG["rows"] = rows[marg < 0]; _CG["lam"] = lam
+            idx = np.asarray(rows); full = np.zeros(m); full[idx] = duals
+            _CG["rows"] = idx[duals < 0]; _CG["lam"] = lam
             return x, full
-        W[viol[np.argsort(gap[viol], kind='stable')[:CG_ADD]]] = True
+        new = viol[np.argsort(gap[viol], kind='stable')[:CG_ADD]]; k = len(new)
+        W[new] = True; rows.extend(new)
+        highs.addRows(k, np.full(k, -H["inf"]), np.zeros(k), k * (K + 1), np.arange(0, k * (K + 1), K + 1, dtype=np.int32),
+                      np.tile(np.arange(K + 1, dtype=np.int32), k), np.column_stack([np.ones(k), -M[new]]).ravel())
+        if not _optimal(H):
+            return None
+        sol = highs.getSolution(); x = np.array(sol.col_value); d = np.array(sol.row_dual)
+        duals = np.r_[d[:n0], d[n0 + 1:]]
 
 
 def lp(M, return_dual_bound=False):
@@ -242,6 +265,26 @@ def lp(M, return_dual_bound=False):
         dual /= dual.sum()
         return value, w, float(np.max(dual @ M))
     return value, w
+
+
+def ccp_ascent(qs, w, maxiter):
+    """CCP steps from w (paper Algorithm 2, inner loop): the LP for val(M^c) of the linearizations at the current
+    point, then a move to its maximizer, until the predicted improvement delta_c <= 1e-8 max{1, phi} or after maxiter
+    LPs.  Returns (last point, largest phi seen after a step, the point where it was seen, number of LPs)."""
+    best, wb = -np.inf, None
+    w = np.array(w, float)
+    for count in range(1, maxiter + 1):
+        qw = qs @ w; vals = qw @ w; old = float(vals.min())
+        lower, wn = lp(2 * qw - vals[:, None])
+        new = float(np.min((qs @ wn) @ wn))
+        if new > best:
+            best, wb = new, wn.copy()
+        if new < old - 2e-8:
+            raise RuntimeError('CCP descent exceeds numerical tolerance')
+        w = wn
+        if lower - old <= 1e-8 * max(abs(old), 1.):
+            break
+    return w, best, wb, count
 
 
 class CCP:
@@ -324,27 +367,19 @@ class CCP:
             if len(chosen) >= self.nstarts:
                 break
         for w in chosen:
-            w = w.copy()
-            for _ in range(self.maxiter):
-                qw = qs @ w; vals = qw @ w; old = float(vals.min())
-                lower, wn = lp(2 * qw - vals[:, None]); self.lp_count += 1
-                new = float(np.min((qs @ wn) @ wn))
-                if new > best:
-                    best, wb = new, wn.copy()
-                if new < old - 2e-8:
-                    raise RuntimeError('CCP descent exceeds numerical tolerance')
-                w = wn
-                if lower - old <= 1e-8 * max(abs(old), 1.):
-                    break
+            w, value, point, count = ccp_ascent(qs, w, self.maxiter); self.lp_count += count
+            if value > best:
+                best, wb = value, point
             maxima.append(w)
         self.previous = maxima
         if self.keep_pool > 0:  # greedy, newest first: keep a point if it is > 0.08 from every point kept so far
             cand = np.asarray([np.asarray(w, float) for w in maxima + list(self.pool)]).reshape(-1, self.K)
-            kept = np.empty_like(cand); n = 0
-            for w in cand:
-                if n == 0 or np.sqrt(((kept[:n] - w) ** 2).sum(axis=1)).min() > .08:
-                    kept[n] = w; n += 1
-            self.pool = [kept[i].copy() for i in range(min(n, self.keep_pool))]
+            far = np.sqrt(((cand[:, None, :] - cand[None, :, :]) ** 2).sum(axis=2)) > .08
+            keep = []
+            for i in range(len(cand)):
+                if not keep or far[i, keep].all():
+                    keep.append(i)
+            self.pool = [cand[i].copy() for i in keep[:self.keep_pool]]
         if best > ub + 1e-7:
             raise RuntimeError('CCP bound violation')
         return max(0., best * scale), wb, max(best, ub) * scale

@@ -31,8 +31,8 @@ TASKS = {
     "fruittree_d6": dict(
         uniform=dict(M=5, lr=.1, values=[1, 2, 3, 4, 5, 6]),
         adaptive=dict(inner_steps=5, lr=.1, checkpoint_count=120,
-                      ccp=dict(nseeds=64, nstarts=1, maxiter=15, boundary_resolution=20, keep_pool=64)),
-        budget=60000, every=500),
+                      ccp=dict(nseeds=64, nstarts=1, maxiter=15, boundary_resolution=20, keep_pool=16)),
+        budget=48000, every=400),
 }
 
 

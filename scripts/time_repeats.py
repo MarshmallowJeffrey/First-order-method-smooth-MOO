@@ -3,7 +3,9 @@
 every configuration of every task before repeat k + 1), serially with one numerical thread.  Each repeat must
 reproduce the stored run exactly (checkpoint Gradient Calls and GN; GRAB: also its weights lambda_t).  Writes
 results/<task>/timing.json with the training CPU time at every checkpoint of every repeat (the stored run is
-repeat 1); make_figure.py then plots the median CPU time and reports the range.
+repeat 1), together with the fingerprint of the stored run (mogym.identity.fingerprint) and its checkpoint calls;
+make_figure.py then plots the median CPU time and reports the range, and stops if an entry does not belong to the
+stored run.
 
     python scripts/time_repeats.py fishwood fruittree_d6 --repeats 5
 """
@@ -12,7 +14,7 @@ import json
 import shutil
 
 import _setup  # noqa: F401  (one thread, repository on sys.path)
-from mogym import config, envs, metrics
+from mogym import config, envs, identity, metrics
 from mogym.adaptive import adaptive
 from mogym.surf import surf
 from mogym.uniform import uniform
@@ -54,7 +56,7 @@ for task in a.tasks:
     timing[task] = {}
     for key, _ in runs(task):
         meta = json.loads((res / task / f"{key}.json").read_text())
-        timing[task][key] = dict(calls=[c["component_gradients"] for c in meta["checkpoints"]],
+        timing[task][key] = dict(run=identity.fingerprint(meta), calls=[c["component_gradients"] for c in meta["checkpoints"]],
                                  cpu=[[c["train_cpu"] for c in meta["checkpoints"]]], signature=signature(meta))
 for k in range(2, a.repeats + 1):
     for task in a.tasks:

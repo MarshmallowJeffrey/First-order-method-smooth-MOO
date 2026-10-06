@@ -28,11 +28,11 @@ from the finite models; no trajectories are sampled.
 ```
 
 The script runs every configuration of both tasks, then the CPU-time repeats, then the figures. Everything runs
-serially with one numerical thread and takes about 20 minutes on the machine below: about 6 minutes for the runs, the rest for the four timing repeats.
+serially with one numerical thread and takes about 22 minutes on the machine below: about 6 minutes for the runs, the rest for the four timing repeats.
 
 Outputs:
 
-- `results/<task>/...`: one JSON file per run (settings, checkpoints with Gradient Calls, CPU time and GN, timings) and one `.npz` file with the returned policies. `results/<task>/timing.json` holds the CPU times of the repeats.
+- `results/<task>/...`: one JSON file per run (settings, checkpoints with Gradient Calls, CPU time and GN, timings) and one `.npz` file with the returned policies. `results/<task>/timing.json` holds the CPU times of the repeats, each entry tied to the identity, arrays and checkpoint calls of its stored run; `make_figure.py` stops if they do not match.
 - `figures/<task>_convergence.png`: the figure.
 - `figures/<task>_summary.json`: the numbers.
 
@@ -73,7 +73,7 @@ Without it, `make_figure.py` uses the CPU times of the single stored run.
 | `mogym/uniform.py` | uniform discretization (paper Algorithm 6), run to the GN plateau |
 | `mogym/surf.py` | SURF (Algorithm 1 of the SURF paper), K=2, run to the GN plateau |
 | `mogym/lambda_solvers.py` | preference-weight selection: exact envelope (K=2, paper Appendix A.4.1) and multi-start CCP (K=6, paper Algorithm 2) |
-| `mogym/metrics.py` | reported metric: exact for K=2, a fixed pool of 23,992 weights for K=6 |
+| `mogym/metrics.py` | reported metric: exact for K=2; for K=6 a fixed pool of 23,992 weights refined by CCP polishing |
 | `mogym/plateau.py` | stopping rule of the baseline runs and the plotted point |
 | `mogym/recorder.py` | checkpoints; training time excludes the metric evaluation |
 | `mogym/identity.py` | identity of a stored run |
@@ -110,13 +110,13 @@ following:
     - the K vertices and λ_A;
     - N = 64 points drawn uniformly from the simplex, drawn anew at every selection;
     - the maximizers of the previous selection;
-    - a pool of at most 64 earlier local maximizers, newest first, pairwise distance above 0.08;
+    - a pool of at most 16 earlier local maximizers, newest first, pairwise distance above 0.08;
     - the center, the 19 interior points of each two-objective edge (multiples of 1/20), and the centers of the three-objective faces.
   - **Screening.** φ is evaluated on all seeds in one batched contraction. Values are normalized by the largest φ at the vertices, the center and the edge and face points. If the best seed is within a relative 1e-8 of val(A), it is returned.
   - **Polishing.** Otherwise the r = 1 best seed is polished by CCP steps. It stops when the predicted improvement δ_c ≤ τ = 1e-8·max{1, φ}, or after c_max = 15 LPs.
-  - **LPs.** HiGHS (dual simplex, feasibility tolerances 1e-9), warm-started from the basis of the previous LP when that LP has the same size. LPs with at least 400 rows are solved by constraint generation, which returns an optimum of the full LP:
+  - **LPs.** HiGHS (dual simplex, feasibility tolerances 1e-9, one solver instance), warm-started from the basis of the previous LP when that LP has the same size. LPs with at least 400 rows are solved by constraint generation, which returns an optimum of the full LP:
     - HiGHS solves the LP on a working set of rows: the rows active at the previous solution, the 40 smallest at the previous maximizer, and the smallest row of each column.
-    - The 40 most violated remaining rows are added until no row is violated by more than 1e-10.
+    - The 40 most violated remaining rows are added to the model, and the LP is solved again from the current basis, until no row is violated by more than 1e-10.
 
 **Uniform discretization** (Algorithm 6). The grid G_r = {λ ∈ Δ: rλ integral} is visited in snake order, in sweeps of
 M_U Adam steps per weight.
@@ -147,11 +147,14 @@ M_U Adam steps per weight.
 | Task | Uniform | SURF | GRAB | Budget B |
 |---|---|---|---|---|
 | FishWood | M_U=50, lr 0.03, r = 2, 4, …, 512 | K_S=25, lr 0.03, N = 2, 4, …, 128 and 208 | M_A=1, lr 0.01, envelope | 108,000 |
-| Fruit Tree (d=6) | M_U=5, lr 0.1, r = 1, …, 6 | – | M_A=5, lr 0.1, CCP (N=64, r=1, c_max=15) | 60,000 |
+| Fruit Tree (d=6) | M_U=5, lr 0.1, r = 1, …, 6 | – | M_A=5, lr 0.1, CCP (N=64, r=1, c_max=15, pool 16) | 48,000 |
 
 **Metric.**
 - FishWood: exact.
-- Fruit Tree: the maximum over a fixed pool of 23,992 weights. The pool has the vertices, the center, 199 points per edge, and 500 random points per face with 3 to 6 objectives. It is a lower estimate, the same for all methods.
+- Fruit Tree: a fixed pool of 23,992 weights, refined by CCP polishing.
+  - The pool has the vertices, the center, 199 points per edge, and 500 random points per face with 3 to 6 objectives.
+  - Polishing: from each of the 32 best pool weights (pairwise distance above 0.08), CCP steps (Algorithm 2) climb to a local maximum, stopping when δ_c ≤ 1e-8·max{1, φ} or after 200 LPs.
+  - The metric is the largest value found. Every value is GN at an actual weight, so the metric is a lower estimate. The evaluator is the same for all methods.
 
 **Figures.**
 - GRAB is drawn as an orange curve, Uniform as blue squares and SURF as red triangles.
@@ -165,11 +168,11 @@ M_U Adam steps per weight.
 
 | Task | GRAB (end of budget) | Uniform, lowest point | SURF, lowest point |
 |---|---|---|---|
-| FishWood | 2.0235e-5 at 108,000 calls / 41.8 s | 2.4495e-4 (r=512), 12.11× (11.50× / 4.94×) | 6.3154e-4 (N=208), 31.21× (29.31× / 12.44×) |
-| Fruit Tree | 7.3540e-4 at 60,000 calls / 11.8 s | 1.0273e-3 (r=6), 1.40× (1.40× / 1.01×) | – |
+| FishWood | 2.0235e-5 at 108,000 calls / 42.7 s | 2.4495e-4 (r=512), 12.11× (11.50× / 4.94×) | 6.3154e-4 (N=208), 31.21× (29.31× / 12.19×) |
+| Fruit Tree | 7.9818e-4 at 48,000 calls / 6.1 s | 1.0764e-3 (r=6), 1.35× (1.27× / 1.04×) | – |
 
-Over the 5 timing runs, the same-time ratios range over [4.89, 5.10] (FishWood Uniform), [12.19, 12.54] (FishWood
-SURF) and [1.01, 1.03] (Fruit Tree Uniform). The Gradient-Call values are exact. The CPU times depend on the
+Over the 5 timing runs, the same-time ratios range over [4.55, 4.94] (FishWood Uniform), [11.21, 12.59] (FishWood
+SURF) and [1.01, 1.04] (Fruit Tree Uniform). The Gradient-Call values are exact. The CPU times depend on the
 machine.
 
 ## Notes
