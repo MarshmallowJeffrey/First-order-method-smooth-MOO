@@ -1,4 +1,5 @@
-"""The lambda-search of the adaptive bundle method: multistart convex-concave procedure (CCP).
+"""Multistart convex-concave procedure (CCP): the lower-bound search of the K = 3 audits (abm/meter.py).  The
+lambda-search of the adaptive method for K = 3 is Algorithm 2 in abm/ccp_cg.py, which uses the helpers below.
 
 For a bundle with Gram matrices Q_i = J_i J_i^T (m x K x K), phi_i(lam) = lam^T Q_i lam and
 phi(lam) = min_i phi_i(lam), the squared gradient norm of the bundle at lam; the search approximates
@@ -16,7 +17,7 @@ argmax_{lam in Delta_K} phi(lam).
    the next call.
 
 The game LP is passed to HiGHS either in one block with the previous basis restored ("bulk", used for the
-decisions of the adaptive method and the per-checkpoint audits) or row by row with the coefficients rewritten in
+per-checkpoint audits) or row by row with the coefficients rewritten in
 place ("rows", used by the heavy CCP of the K = 3 full audits).  Both warm-start the dual simplex.
 """
 

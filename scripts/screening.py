@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Conflict screening of all 45 digit pairs (K = 2) or all 120 digit triples (K = 3), Appendix C.1.
+"""Conflict screening of all 45 digit pairs (K = 2) or all 120 digit triples (K = 3): how {4,9} and {4,7,9} were chosen.
 
     python scripts/screening.py --K 2
     python scripts/screening.py --K 3

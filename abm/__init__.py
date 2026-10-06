@@ -9,7 +9,8 @@ objective   the pooled objectives F_k = L_k + rho * L_pool + (mu/2) ||theta||^2 
 steppers    step rules (constant step, Barzilai-Borwein, AdaGrad, Adam)
 training    one SVRG segment, the budget meter, run records
 envelope    the exact lower envelope for K = 2: the lambda-search of the adaptive method for K = 2
-ccp         the multistart CCP: the lambda-search of the adaptive method for K = 3 and the K = 3 audits
+ccp_cg      Algorithm 2 (multistart CCP) with constraint generation: the lambda-search of the adaptive method for K = 3
+ccp         the multistart CCP of the K = 3 audits
 methods     the adaptive bundle method, uniform discretization and SURF
 meter       worst-case gradient norm of a bundle: exact for K = 2, a lower bound for K = 3
 analysis    plateau test, markers and trend fits

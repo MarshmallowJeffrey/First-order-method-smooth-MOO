@@ -1,14 +1,13 @@
 #!/usr/bin/env python
-"""The step-rule experiment (Appendix C.1): the adaptive bundle method with each of the eleven step rules,
-three sampling seeds, 10,000 gradient calls on {4,9}.
+"""The step-rule experiment: the adaptive bundle method with each of the eleven step rules, three sampling seeds,
+10,000 gradient calls on {4,9}.
 
     python scripts/step_rules.py --device cuda
 
 Runs go to runs/step_rules_k2/<rule>_adaptive_seed<s>/ (or --runs); once every rule has a run for each of the
 three seeds, the summary (curves and the board: mean and range over the seeds of the final worst-case gradient norm,
 from the exact audits) goes to results/step_rules_k2.json.  The adaptive method chooses lambda as in the paper
-(config.SELECTOR; recorded as `selector`): the exact envelope since 2026-10-04; the earlier runs with CCP are in
-results/step_rules_k2_ccp.json.
+(config.SELECTOR: the exact envelope; recorded as `selector`).
 """
 
 from __future__ import annotations
@@ -43,7 +42,7 @@ def board(runs_dir, seeds):
                       "final_per_seed": finals, "final_mean": float(np.mean(finals)),
                       "rejections": [int(sm["rejections"]) for sm in sms]}
     ranked = sorted(rules, key=lambda t: rules[t]["final_mean"])
-    selectors = {json.loads((runs_dir / leg_name("adaptive", None, s, tag) / "summary.json").read_text()).get("selector", "ccp")
+    selectors = {json.loads((runs_dir / leg_name("adaptive", None, s, tag) / "summary.json").read_text())["selector"]
                  for tag, _, _ in STEP_RULES for s in seeds}
     if len(selectors) != 1:
         raise ValueError(f"runs with different lambda searches in {runs_dir}: {selectors}")

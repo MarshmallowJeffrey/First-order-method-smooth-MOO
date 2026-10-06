@@ -1,5 +1,5 @@
 {
- "note": "short CPU runs of the original code of the paper (Apple M-series CPU; torch threads as listed); the code of this repository reproduces them bit for bit on that machine 2026-10-04: K2_adaptive now uses the exact envelope selection of the paper (config.SELECTOR); its earlier reference with the CCP lambda-search is kept as K2_adaptive_ccp.",
+ "note": "short CPU runs of the code of this repository (Apple M-series CPU; torch threads as listed); they are reproduced bit for bit on that machine. The adaptive runs use the lambda-search of the paper (config.SELECTOR: the exact envelope for K = 2, Algorithm 2 with constraint generation for K = 3).",
  "runs": {
   "K2_adaptive": {
    "K": 2,
@@ -30,36 +30,6 @@
    "rejections": 13,
    "threads": 4,
    "selector": "envelope"
-  },
-  "K2_adaptive_ccp": {
-   "K": 2,
-   "method": "adaptive",
-   "param": null,
-   "seed": 41,
-   "budget": 1500.0,
-   "cadence": null,
-   "ck_grads": [
-    0.0,
-    254.47791852105442,
-    508.95583704210884,
-    763.4337555631633,
-    1017.9116740842177,
-    1272.3895926052721,
-    1495.8336186237589
-   ],
-   "audit_gn": [
-    10.440649709789776,
-    0.464832114006389,
-    0.14898804580289166,
-    0.0764357196627227,
-    0.05735540939271166,
-    0.0500751676712421,
-    0.03613435113746862
-   ],
-   "segments": 241,
-   "rejections": 14,
-   "threads": 4,
-   "selector": "ccp"
   },
   "K2_uniform_r3": {
    "K": 2,
@@ -133,12 +103,13 @@
    ],
    "audit_gn": [
     14.36776173523931,
-    1.6574473763321977,
-    0.7385036685333511
+    1.6574473763321975,
+    0.7385036686096966
    ],
    "segments": 85,
    "rejections": 0,
-   "threads": 2
+   "threads": 2,
+   "selector": "ccp_cg"
   }
  }
 }

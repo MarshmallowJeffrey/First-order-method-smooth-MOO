@@ -1,18 +1,16 @@
 #!/usr/bin/env python
-"""Run legs of the MNIST experiments (Section 4.1): one leg = one method, one resolution, one seed, B gradient calls.
+"""Run legs of the MNIST experiments (Section 5.1): one leg = one method, one resolution, one seed, B gradient calls.
 
     python scripts/run.py --K 2 --legs adaptive,uniform:60,surf:38 --seeds 41,42,43 --device cuda
     python scripts/run.py --K 3 --legs uniform:24 --seeds 41
-    python scripts/run.py --K 2 --legs adaptive --selector ccp --device cuda     (-> runs/k2_ccp)
 
 Each leg writes runs/k<K>/<leg>/summary.json (checkpoints, audited worst-case gradient norm, timings) and grams.npz
 (Gram matrices, objective values, budget and lambda of every bundle point).  A leg whose summary.json exists is
 skipped.  ``--legs all`` runs every leg of the paper (K = 2: 111 legs, K = 3: 48 legs); on one RTX A5000 a K = 2 leg
-takes 1 hour, a K = 3 leg 1 to 3 hours (adaptive: 3.8 hours, mostly the CCP lambda-search) plus the audits.
+takes 1 hour, a K = 3 leg 1 to 3 hours (adaptive: 1.2 hours) plus the audits.
 
-The adaptive method chooses lambda as in the paper (config.SELECTOR: the exact envelope for K = 2, CCP for K = 3).
---selector ccp runs the K = 2 adaptive method with CCP instead (its earlier runs, results/k2_ccp.json; 5 hours per
-leg); such legs go to runs/k<K>_<selector>.
+The adaptive method chooses lambda as in the paper (config.SELECTOR): the exact envelope for K = 2 (abm/envelope.py),
+Algorithm 2 with constraint generation for K = 3 (abm/ccp_cg.py).
 """
 
 from __future__ import annotations
@@ -43,9 +41,7 @@ def main():
     ap.add_argument("--budget", type=float, default=C.BUDGET)
     ap.add_argument("--device", default="cpu", help="cpu or cuda")
     ap.add_argument("--threads", type=int, default=4, help="torch CPU threads")
-    ap.add_argument("--out", default=None, help="default: runs/k<K>; runs/k<K>_<selector> for another selector")
-    ap.add_argument("--selector", choices=("ccp", "envelope"), default=None,
-                    help="lambda search of the adaptive method; default: the paper's (envelope for K = 2, ccp for K = 3)")
+    ap.add_argument("--out", default=None, help="default: runs/k<K>")
     a = ap.parse_args()
     if a.legs == "all":
         legs = paper_legs(a.K)
@@ -54,21 +50,14 @@ def main():
         for item in a.legs.split(","):
             method, _, p = item.strip().partition(":")
             legs.append((method, int(p) if p else None))
-    selector = a.selector or C.SELECTOR[a.K]
-    if selector == "envelope" and a.K != 2:
-        ap.error("--selector envelope: K = 2 only")
-    if selector != C.SELECTOR[a.K] and any(m != "adaptive" for m, _ in legs):
-        ap.error("another selector than the paper's: the adaptive leg only")
-    default_out = ROOT / "runs" / (f"k{a.K}" if selector == C.SELECTOR[a.K] else f"k{a.K}_{selector}")
-    out = Path(a.out) if a.out else default_out
+    out = Path(a.out) if a.out else ROOT / "runs" / f"k{a.K}"
     for seed in [int(s) for s in a.seeds.split(",")]:
         for method, param in legs:
             d = out / leg_name(method, param, seed)
             if (d / "summary.json").exists():
                 print(f"[skip] {d} exists", flush=True)
                 continue
-            run_leg(a.K, method, param, seed, d, budget=a.budget, device=a.device, threads=a.threads,
-                    selector=selector)
+            run_leg(a.K, method, param, seed, d, budget=a.budget, device=a.device, threads=a.threads)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,7 @@
-"""Short reproduction checks (CPU, about 6 minutes):
+"""Short reproduction checks (CPU, about 5 minutes):
 
-1. training + audit: five short runs (K = 2: adaptive with the envelope selection of the paper and with the earlier
-   CCP lambda-search, uniform r = 3, SURF N = 3; K = 3: adaptive) against reference values
-   (tests/reference_short_runs.json);
+1. training + audit: four short runs (K = 2: adaptive, uniform r = 3, SURF N = 3; K = 3: adaptive) against reference
+   values (tests/reference_short_runs.json);
 2. screening of {4,9} against results/screening_k2.json;
 3. results/: the configuration statistics and the numbers quoted in the paper follow from the per-run records.
 
@@ -59,7 +58,7 @@ def test_screening_pair_4_9():
 
 def test_results_consistency():
     for K, quoted in ((2, {"adaptive": 9.82e-4, ("uniform", 60): 6.86e-3, ("surf", 38): 6.27e-3}),
-                      (3, {"adaptive": 1.61e-2, ("uniform", 24): 9.04e-2})):
+                      (3, {"adaptive": 1.57e-2, ("uniform", 24): 9.04e-2})):
         res = json.loads((ROOT / "results" / f"k{K}.json").read_text())
         for s in res["configs"]:
             runs = [r for r in res["runs"].values() if r["method"] == s["method"] and r["param"] == s["param"]]

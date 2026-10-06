@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-"""The figures of Section 4.1 and Appendix C.1, drawn from results/ (no training, no audits):
+"""The MNIST figures (Section 5.1: Figure 1 = worst-case gradient norm, Figure 2 = fronts) and further figures, drawn
+from results/ (no training, no audits):
 
     figures/mnist_worst_gn_k2.pdf    worst-case gradient norm vs gradient calls and time, {4,9}
     figures/mnist_worst_gn_k3.pdf    the same for {4,7,9}
-    figures/mnist_worst_gn_k2_vs_ccp.pdf   {4,9} with the earlier GRAB curve (CCP lambda-search) added
     figures/mnist_fronts.pdf         linear scalarization fronts (mean of three seeds): {4,9} left, {4,7,9} right
     figures/mnist_step_rules_k2.pdf  step-rule experiment, {4,9}
 
@@ -143,12 +143,6 @@ def worst_gn(K, extra=(), stem=None):
         if info["hard"]:
             print(f"  warning ({xlabel}): labels with a hard clash: {info['hard']}")
     _save(fig, stem or f"mnist_worst_gn_k{K}")
-
-
-def worst_gn_k2_vs_ccp():
-    """{4,9}: the figure of the paper with the earlier GRAB curve added (CCP lambda-search, results/k2_ccp.json)."""
-    worst_gn(2, extra=[(f"{NAME['adaptive']} (CCP)", RESULTS / "k2_ccp.json",
-                        dict(ls="-", color="#7f7f7f", lw=2.0, zorder=2.5))], stem="mnist_worst_gn_k2_vs_ccp")
 
 
 def _front_k2_panel(ax):
@@ -306,7 +300,6 @@ def step_rules_k2():
 
 def main():
     worst_gn(2)
-    worst_gn_k2_vs_ccp()
     worst_gn(3)
     fronts()
     step_rules_k2()

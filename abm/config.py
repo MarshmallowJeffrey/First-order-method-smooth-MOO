@@ -1,8 +1,8 @@
-"""Settings of the paper's MNIST experiments (Section 4.1 and Appendix C.1)."""
+"""Settings of the paper's MNIST experiments (Section 5.1 and Appendix D.1)."""
 
 from __future__ import annotations
 
-from .ccp import CCPConfig
+from .ccp_cg import CCPCGConfig
 
 DIGITS = {2: (4, 9), 3: (4, 7, 9)}               # chosen by the conflict screening
 RHO = {2: 1.0 / 9.0, 3: 3.0 / 17.0}              # every class keeps a weight of at least 5 %
@@ -20,9 +20,10 @@ SEEDS = (41, 42, 43)                             # mini-batch sampling seeds (th
 BUDGET = 480_000.0                               # gradient calls
 SEGMENTS = 5                                     # per decision / grid visit / SURF slot and round
 STEP_RULE = "adam_alpha0.001_beta20.9"           # Adam(1e-3, beta2 = 0.9), the winner of the step-rule experiment
-SELECTOR = {2: "envelope", 3: "ccp"}             # lambda search of the adaptive method: the exact lower envelope for
-                                                 # K = 2 (Appendix A.4.1), multistart CCP for K = 3 (Appendix A.4)
-CCP_DECISIONS = CCPConfig(N0=2000, r=10, seed=0)
+SELECTOR = {2: "envelope", 3: "ccp_cg"}          # lambda search of the adaptive method: the exact lower envelope for
+                                                 # K = 2 (Appendix A.4.1), Algorithm 2 (multistart CCP, Appendix A.4)
+                                                 # with constraint generation for K = 3
+CCP_CG_DECISIONS = CCPCGConfig(N=2000, r=10, seed=0)               # Algorithm 2 for K = 3 (abm/ccp_cg.py)
 
 INF = float("inf")
 SCHEDULE = {2: [(20_000.0, 250.0), (80_000.0, 1_000.0), (INF, 2_000.0)],     # checkpoint every ... gradient calls
@@ -40,9 +41,10 @@ STEP_RULE_BUDGET = 10_000.0
 STEP_RULE_CADENCE = 200.0
 STEP_RULE_AUDIT_GRID = 20_001
 
-# warm-start ablation (adaptive method, four starts; Adam and the seeds and audit grid of the step-rule experiment)
-WARM_START_BUDGET = {2: 10_000.0, 3: 20_000.0}
-WARM_START_CADENCE = {2: 200.0, 3: 400.0}
+# warm-start ablation on {4,9} (adaptive method, four starts; Adam and the seeds and audit grid of the step-rule
+# experiment)
+WARM_START_BUDGET = 10_000.0
+WARM_START_CADENCE = 200.0
 
 # drawn (and fitted) in the worst-case gradient norm figure; the other configurations are listed in the appendix
 # tables (marked with a dagger)
@@ -55,5 +57,5 @@ FRONT_LEGS = {2: {"uniform": 60, "surf": 38, "seeds": (41, 42, 43)},
               3: {"uniform": 24, "seeds": (41, 42, 43)}}
 FRONT_WINDOW = {2: 0.13, 3: 0.5}
 
-# the best configuration of each baseline (Table in Section 4.1)
+# the best configuration of each baseline (tables/mnist_main.tex)
 BEST = {2: {"uniform": 60, "surf": 38}, 3: {"uniform": 24}}

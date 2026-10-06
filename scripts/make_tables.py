@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-"""The tables of Section 4.1 and Appendix C.1 as LaTeX tabulars (booktabs), from results/:
+"""The MNIST tables as LaTeX tabulars (booktabs), from results/:
 
     tables/mnist_main.tex         best configuration of each baseline vs the adaptive method
     tables/mnist_k2_full.tex      {4,9}: all configurations
     tables/mnist_k3_full.tex      {4,7,9}: all configurations
     tables/step_rules_k2.tex      step-rule experiment
-    tables/warm_start.tex         warm start of the adaptive method, {4,9} and {4,7,9}
+    tables/warm_start.tex         warm start of the adaptive method, {4,9}
     tables/screening_pairs.tex    screening, top six pairs
     tables/screening_triples.tex  screening, top six triples
 
@@ -112,19 +112,16 @@ def step_rules(res):
 WARM_START_ROWS = {"A": ("last accepted point", "kept while $\\lambda$ is unchanged"),
                    "B": ("last accepted point", "new at every decision"),
                    "C": ("lowest $F_\\lambda$ in the bundle", "new at every decision"),
-                   "D": ("rule of Algorithms~2--6", "new at every decision")}
+                   "D": ("rule of Step~2 of Algorithm~1", "new at every decision")}
 
 
 def warm_start(res):
-    """Final worst-case gradient norm x 10^3: mean over the seeds, per start rule and K."""
-    lines = ["\\begin{tabular}{lllcc}", "\\toprule",
-             " & Start of a decision & Adam state & $\\{4,9\\}$ & $\\{4,7,9\\}$ \\\\", "\\midrule"]
+    """Final worst-case gradient norm x 10^3 on {4,9}: mean over the seeds, per start rule."""
+    lines = ["\\begin{tabular}{lllc}", "\\toprule",
+             " & Start of a decision & Adam state & $\\{4,9\\}$ \\\\", "\\midrule"]
     for v, (start, state) in WARM_START_ROWS.items():
-        cells = []
-        for K in (2, 3):
-            f = np.asarray(res[K]["variants"][v]["final_per_seed"]) * 1e3
-            cells.append(f"${f.mean():.2f}$")
-        lines.append(f"{v} & {start} & {state} & {cells[0]} & {cells[1]} \\\\")
+        f = np.asarray(res["variants"][v]["final_per_seed"]) * 1e3
+        lines.append(f"{v} & {start} & {state} & ${f.mean():.2f}$ \\\\")
     write("warm_start.tex", lines + ["\\bottomrule", "\\end{tabular}"])
 
 
@@ -146,7 +143,7 @@ def main():
     full_k2(res[2])
     full_k3(res[3])
     step_rules(json.loads((RESULTS / "step_rules_k2.json").read_text()))
-    warm_start({K: json.loads((RESULTS / f"warm_start_k{K}.json").read_text()) for K in (2, 3)})
+    warm_start(json.loads((RESULTS / "warm_start_k2.json").read_text()))
     screening(json.loads((RESULTS / "screening_k2.json").read_text()),
               json.loads((RESULTS / "screening_k3.json").read_text()))
 

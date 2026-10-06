@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-"""From the run folders to results/k<K>.json (the numbers behind the figures and tables of Section 4.1 and
-Appendix C.1) and results/k<K>_fronts.json (the front points of the legs in the front figure).
+"""From the run folders to results/k<K>.json (the numbers behind the figures and tables of Section 5.1 and
+Appendix D.1) and results/k<K>_fronts.json (the front points of the legs in the front figure).
 
     python scripts/analyze.py --K 2 [--runs runs/k2] [--workers 6]
     python scripts/analyze.py --K 3 [--runs runs/k3]

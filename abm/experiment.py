@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import time
 from pathlib import Path
@@ -10,7 +11,7 @@ import numpy as np
 import torch
 
 from . import config as C
-from .methods import run_adaptive, run_surf, run_uniform
+from .methods import SAME_LAMBDA_TOL, run_adaptive, run_surf, run_uniform
 from .meter import audit_k3, gn_k2_prefixes
 from .objective import make_problem
 from .steppers import STEP_RULE_BY_TAG
@@ -25,8 +26,8 @@ def run_leg(K, method, param, seed, out_dir, *, budget=C.BUDGET, step_rule=C.STE
             audit_grid=C.AUDIT_GRID_K2, device="cpu", threads=None, start="chain", reset="new_lambda",
             selector=None):
     """Runs one leg and writes <out_dir>/summary.json and grams.npz; returns the summary.  start / reset: the
-    adaptive method's warm start; selector: its lambda search, "ccp" or "envelope" (K = 2; see methods.run_adaptive),
-    by default the one of the paper (config.SELECTOR).  Other values than "chain" / "new_lambda" / "ccp" are recorded."""
+    adaptive method's warm start (values other than "chain" / "new_lambda" are recorded); selector: its lambda search,
+    "ccp_cg" or "envelope" (K = 2; see methods.run_adaptive), by default the one of the paper (config.SELECTOR)."""
     selector = selector or C.SELECTOR[K]
     if threads:
         torch.set_num_threads(int(threads))
@@ -40,7 +41,8 @@ def run_leg(K, method, param, seed, out_dir, *, budget=C.BUDGET, step_rule=C.STE
     print(f"[{tag}] problem built in {time.time() - t_build:.1f}s (n={problem.n}, d={problem.d}, "
           f"{problem.device_description})", flush=True)
     if method == "adaptive":
-        rec = run_adaptive(problem, rule, budget, schedule, C.SEGMENTS, C.CCP_DECISIONS, start=start, reset=reset,
+        ccp_config = C.CCP_CG_DECISIONS if selector == "ccp_cg" else None
+        rec = run_adaptive(problem, rule, budget, schedule, C.SEGMENTS, ccp_config, start=start, reset=reset,
                            selector=selector)
     elif method == "uniform":
         rec = run_uniform(problem, rule, budget, schedule, int(param), C.SEGMENTS)
@@ -74,8 +76,14 @@ def run_leg(K, method, param, seed, out_dir, *, budget=C.BUDGET, step_rule=C.STE
     summary["audit_seconds"] = time.time() - t_audit
     if method == "surf":
         summary["surf_rounds"] = rec.surf_rounds
-    if method == "adaptive" and selector != "ccp":
+    if method == "adaptive":
         summary["selector"] = selector
+    if method == "adaptive" and selector == "ccp_cg":
+        summary["selector_config"] = dataclasses.asdict(C.CCP_CG_DECISIONS)
+        summary["same_lambda_tol"] = SAME_LAMBDA_TOL["ccp_cg"]
+        summary["selector_stats"] = rec.selector_stats
+    if method == "adaptive" and rec.certified:
+        summary["certified"] = True
     if method == "adaptive" and (start, reset) != ("chain", "new_lambda"):
         si, ci = np.asarray(rec.start_index), np.asarray(rec.chain_index)
         summary.update(start=start, reset=reset, decisions=int(si.size),

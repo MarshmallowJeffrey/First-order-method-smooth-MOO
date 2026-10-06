@@ -1,9 +1,9 @@
 """The three methods.  All use the same segment, step rule, budget meter and bundle (every segment end point).
 
 Adaptive bundle method: one chain of points.  Every decision chooses lambda on the current bundle (K = 2: the
-maximizer of the exact lower envelope; K = 3: multistart CCP) and runs s segments from the last accepted point; the
-step rule's state (Adam moments) is reset only when lambda changes.  (Other starts and resets, for the warm-start
-ablation: see run_adaptive.)
+maximizer of the exact lower envelope; K = 3: Algorithm 2, the multistart CCP, with constraint generation) and runs s
+segments from the last accepted point; the step rule's state (Adam moments) is reset only when lambda changes.  (Other
+starts and resets, for the warm-start ablation: see run_adaptive.)
 
 Uniform discretization with resolution r: the snake-ordered grid of Delta_K, visited forward and backward; each
 visit runs s segments at the node.  The first visit of a node starts from the last accepted point of the run and
@@ -25,7 +25,7 @@ import time
 import numpy as np
 from scipy.interpolate import PchipInterpolator
 
-from .ccp import CCPConfig, CCPSolver
+from .ccp_cg import CCPCGConfig, CCPCGSelector
 from .envelope import EnvelopeSelector
 from .grid import node_index, snake_grid
 from .model import initial_point
@@ -44,50 +44,68 @@ def _epoch_len(problem):
 
 START_RULES = ("chain", "lowest_f", "paper")
 STATE_RESETS = ("new_lambda", "every_decision")
-SELECTORS = ("ccp", "envelope")
+SELECTORS = ("ccp_cg", "envelope")
+SAME_LAMBDA_TOL = {"ccp_cg": 1e-8}                 # l1; see lambda_changed
+
+
+def lambda_changed(lam, prev_lam, selector):
+    """Whether the step rule sees a new lambda (reset "new_lambda").  ccp_cg ends at the maximizer of its last LP
+    (Algorithm 2), so a point chosen again comes back with rounding noise (in the K = 3 runs of the paper at most
+    1e-10 in l1, except three of about 31,000 decisions): a change of at most SAME_LAMBDA_TOL[selector] in l1 counts
+    as none.  The envelope returns a point chosen again exactly: exact comparison."""
+    if prev_lam is None:
+        return True
+    tol = SAME_LAMBDA_TOL.get(selector)
+    if tol is None:
+        return not np.array_equal(lam, prev_lam)
+    return float(np.abs(np.asarray(lam) - np.asarray(prev_lam)).sum()) > tol
 
 
 def run_adaptive(problem, step_rule, budget, schedule, s=5, ccp_config=None, start="chain", reset="new_lambda",
-                 selector="ccp"):
+                 selector="ccp_cg"):
     """The adaptive bundle method; returns the RunRecord.
 
     start: where the s segments of a decision begin
         "chain"     the last accepted point (the runs of the paper)
         "lowest_f"  the bundle point with the lowest F_lambda
-        "paper"     the bundle point with the lowest F_lambda - ||grad F_lambda||^2 / (2 L_lambda), the start of
-                    Algorithms 2-6, with L_lambda = lambda^T L from the estimated L
-    reset: when the step rule's state is reset: "new_lambda" (when lambda changes; the runs of the paper) or
-        "every_decision".  The warm-start ablation (scripts/warm_start.py) varies both.
-    selector: how a decision chooses lambda: "ccp" (multistart CCP, Appendix A.4) or "envelope" (K = 2 only: the
-        maximizer of the exact lower envelope, Appendix A.4.1 / abm/envelope.py).  The runs of the paper use envelope
-        for K = 2 and ccp for K = 3 (config.SELECTOR; experiment.run_leg passes it).  No tolerance epsilon: the run
-        always continues with the chosen lambda.
+        "paper"     the bundle point with the lowest F_lambda - ||grad F_lambda||^2 / (2 L_lambda), Step 2 of
+                    Algorithm 1, with L_lambda = lambda^T L from the estimated L
+    reset: when the step rule's state is reset: "new_lambda" (when lambda changes, see lambda_changed; the runs of
+        the paper) or "every_decision".  The warm-start ablation (scripts/warm_start.py) varies both.
+    selector: how a decision chooses lambda: "ccp_cg" (Algorithm 2 of Appendix A.4 with constraint generation,
+        abm/ccp_cg.py; ccp_config is its CCPCGConfig) or "envelope" (K = 2 only: the maximizer of the exact lower
+        envelope, Appendix A.4.1 / abm/envelope.py).  The runs of the paper use config.SELECTOR (experiment.run_leg
+        passes it).  The runs set no tolerance epsilon: the run always continues with the chosen lambda (a
+        CCPCGConfig with eps would end the run with a certificate once val(A) <= eps^2).
     """
     if start not in START_RULES or reset not in STATE_RESETS:
         raise ValueError(f"start {start!r} / reset {reset!r}")
     if selector not in SELECTORS or (selector == "envelope" and problem.K != 2):
         raise ValueError(f"selector {selector!r} for K = {problem.K}")
+    if selector == "ccp_cg" and ccp_config is not None and not isinstance(ccp_config, CCPCGConfig):
+        raise TypeError(f"selector 'ccp_cg' takes a CCPCGConfig, not a {type(ccp_config).__name__}")
     name, params = step_rule
     K, batch = problem.K, problem.stoch.batch_size
     epoch_len = _epoch_len(problem)
     x0 = initial_point(K, INIT_SEED)
     rec = RunRecord(problem, x0, budget, schedule)
     stepper = make_stepper(name, problem.d, params)
-    solver = CCPSolver(K, ccp_config or CCPConfig(), transport="bulk") if selector == "ccp" else EnvelopeSelector()
+    solver = CCPCGSelector(K, ccp_config or CCPCGConfig()) if selector == "ccp_cg" else EnvelopeSelector()
     chain = (x0.copy(), rec.f0, rec.J0)
     chain_i = 0                                    # bundle index of the last accepted point
     points = None if start == "chain" else [chain]  # every bundle point (x, f, J), for the other start rules
     rec.start_index, rec.chain_index = [], []
+    rec.certified = False
     L_scale, prev_lam = 1.0, None
     rec.start_clock()
     while rec.budget.allows_segment(epoch_len, batch):
         t_dec = time.time()
-        if selector == "ccp":
-            grams = np.asarray(rec.grams, dtype=float)
-            _, lam = solver.solve(grams)
-        else:                                      # the envelope keeps its own state; only the new points are read
-            _, lam = solver.solve(rec.grams)
-            grams = np.asarray(rec.grams, dtype=float) if start == "paper" else None
+        _, lam = solver.solve(rec.grams)           # the selector keeps its own copy; only the new points are read
+        grams = np.asarray(rec.grams, dtype=float) if start == "paper" else None
+        if lam is None:                            # ccp_cg with eps: the bundle is certified (Algorithm 1, Step 1)
+            rec.decision_seconds += time.time() - t_dec
+            rec.certified = True
+            break
         lam = np.asarray(lam, dtype=float)
         L_lam = float(lam @ problem.L)
         start_i = chain_i
@@ -101,7 +119,7 @@ def run_adaptive(problem, step_rule, budget, schedule, s=5, ccp_config=None, sta
         rec.chain_index.append(chain_i)
         chain_i = start_i
         rec.decision_seconds += time.time() - t_dec
-        if reset == "every_decision" or prev_lam is None or not np.array_equal(lam, prev_lam):
+        if reset == "every_decision" or lambda_changed(lam, prev_lam, selector):
             stepper.on_lambda_change(lam, L_lam, L_scale)
         prev_lam = lam
         retries = 0
@@ -123,6 +141,11 @@ def run_adaptive(problem, step_rule, budget, schedule, s=5, ccp_config=None, sta
             stepper.on_segment_result(accepted, L_lam, L_scale)
             rec.checkpoint_if_due()
     rec.finish()
+    if selector == "ccp_cg":                       # time per step of Algorithm 2, LP and constraint-generation counts
+        lp = solver.lp
+        rec.selector_stats = dict(solver.stats, lp=solver.cfg.lp, lp_solves=getattr(lp, "solves", None),
+                                  cg_rounds=getattr(lp, "rounds", None), cg_max_rows=getattr(lp, "max_rows", None),
+                                  cg_fallbacks=getattr(lp, "fallbacks", None))
     return rec
 
 
