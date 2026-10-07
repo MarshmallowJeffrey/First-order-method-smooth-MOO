@@ -39,10 +39,9 @@ the finite models; no trajectories are sampled.
 ./run_all.sh
 ```
 
-The script runs every configuration of both tasks, the CPU-time repeats, the Fruit Tree upper bounds and the figures.
-The runs and the timing repeats are serial with one numerical thread (about 10 minutes on the machine below,
-mostly the evaluation of the Uniform runs, which is not part of the measured time; each further timing repeat takes
-about as long again). The upper bounds are computed afterwards with six processes (about 11 minutes).
+The script runs every configuration of both tasks, the Fruit Tree upper bounds and the figures. The runs are serial
+with one numerical thread (about 10 minutes on the machine below, mostly the evaluation of the Uniform runs, which is
+not part of the measured time). The upper bounds are computed afterwards with six processes (about 11 minutes).
 
 Outputs:
 
@@ -51,7 +50,7 @@ Outputs:
   its bundle points).
 - `results/fruittree_d6/adaptive/adaptive_metric.json`, `adaptive_upper.json`: GRAB's lower estimate and upper bound
   at every checkpoint.
-- `results/<task>/timing.json`: the CPU times of the timing repeats.
+- `results/<task>/timing.json`: the CPU times of the optional timing repeats (`time_repeats.py`).
 - `figures/<task>_convergence.png` and `figures/<task>_summary.json`: the convergence figure and its numbers.
 - `figures/fruittree_d6_bounds_grid_calls.png`, `..._cpu.png`, `fruittree_d6_bounds_grid.json`: the comparison along
   every Uniform run, one panel per resolution r.
@@ -61,10 +60,10 @@ Python 3.13.5, NumPy 2.1.3 (OpenBLAS 0.3.21), SciPy 1.15.3 (HiGHS), Gymnasium 1.
 with one numerical thread and no GPU.
 
 The runs are deterministic: Gradient Calls, GN and the selected weights are identical in every repeat; only CPU
-time varies. With `time_repeats.py` the figures plot the median CPU time over the repeats and the summaries report
-the range; without it they use the CPU time of the single stored run. The upper bounds stop at a time limit per
+time varies. The optional `time_repeats.py` reruns every configuration; the figures then plot the median CPU time
+over the repeats and the summaries report the range. Without it they use the CPU time of the single stored run. The upper bounds stop at a time limit per
 checkpoint and therefore depend slightly on the machine. **The figures and numbers below are from a single timed
-run; the timing repeats are still to be run.**
+run.**
 
 ## Running a single task
 
@@ -72,7 +71,7 @@ run; the timing repeats are still to be run.**
 python scripts/run_uniform.py     fishwood       # Uniform, every configured r, each run to its GN plateau
 python scripts/run_surf.py        fishwood       # SURF (K=2), every configured N, each run to its GN plateau
 python scripts/run_adaptive.py    fishwood       # GRAB, to the budget B of the task
-python scripts/time_repeats.py    fishwood fruittree_d6 --repeats 5   # CPU time over 5 runs
+python scripts/time_repeats.py    fishwood fruittree_d6 --repeats 5   # optional: CPU time over 5 runs
 python scripts/upper_bounds.py    fruittree_d6   # K>2: upper bounds on GRAB's GN* at every checkpoint
 python scripts/make_figure.py     fishwood       # convergence figure + summary
 python scripts/make_bounds_grid.py fruittree_d6  # K>2: comparison along every Uniform run
