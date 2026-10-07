@@ -48,7 +48,7 @@ again if missing).
 | `data.py`, `model.py`, `objective.py` | MNIST, the network, the objectives F_k and their full and stochastic oracles |
 | `steppers.py`, `training.py` | step rules (Adam and others), one SVRG segment, the budget meter, the run record |
 | `envelope.py` | Step 1 of GRAB for K = 2: the exact lower envelope (Appendix A.4.1, Algorithms 3-5) |
-| `ccp_cg.py`, `ccp.py` | Step 1 of GRAB for K = 3: Algorithm 2 (multistart CCP, Appendix A.4), its linear programs solved by constraint generation (`ccp.py`: shared helpers) |
+| `ccp_cg.py` | Step 1 of GRAB for K = 3: Algorithm 2 (multistart CCP, Appendix A.4), its linear programs solved by constraint generation |
 | `methods.py` | GRAB, uniform discretization and SURF |
 | `meter.py`, `certify.py` | the worst-case gradient norm of a bundle: exact for K = 2, a certified interval for K = 3 (simplicial branch and bound) |
 | `analysis.py`, `fronts.py`, `labels.py` | plateau test, markers, trend fits; fronts; label placement in the figures |
@@ -77,7 +77,7 @@ evaluation at the returned point.
 | in the paper | file |
 |---|---|
 | Figure 1(a): worst-case gradient norm, {4,9} | `figures/mnist_worst_gn_k2.pdf` |
-| Figure 1(b): worst-case gradient norm, {4,7,9} | `figures/mnist_worst_gn_k3.pdf` |
+| Figure 1(b): certified bounds on the worst-case gradient norm, {4,7,9} (GRAB: upper bound; uniform discretization: lower bound) | `figures/mnist_worst_gn_k3.pdf` |
 | Figure 2: linear scalarization fronts, {4,9} (left) and {4,7,9} (right) | `figures/mnist_fronts.pdf` |
 
 | further material | file |

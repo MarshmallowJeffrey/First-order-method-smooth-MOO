@@ -1,6 +1,7 @@
 """Step 1 of GRAB for K = 3: the multistart CCP of Algorithm 2 (Appendix A.4), every game LP solved by constraint
-generation.  It is the lambda-search of the adaptive method for K = 3 (selector "ccp_cg"); abm/ccp.py holds the
-multistart CCP of the K = 3 audits.
+generation.  It is the lambda-search of the adaptive method for K = 3 (selector "ccp_cg").  The module is
+self-contained: uniform sampling of the simplex, phi and the matrix-game LP (HiGHS, with scipy as the fallback) are at
+the top.
 
 For a bundle with Gram matrices Q_i (m x K x K), phi_i(lam) = lam^T Q_i lam and phi(lam) = min_i phi_i(lam).  One call
 of ``solve``, step by step as in Algorithm 2:
@@ -35,14 +36,135 @@ from __future__ import annotations
 import time
 import warnings
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 import highspy
 import numpy as np
-
-from .ccp import GameLP, _active_set, _project_simplex, _scipy_game, sample_simplex_exp
+from scipy.optimize import linprog
 
 SCREEN_BLOCK = 2048          # bundle rows per block of the batched contraction
+
+
+# ---------------------------------------------------------------------------------------------------------------
+#  helpers: uniform points on the simplex, phi, the matrix-game LP
+# ---------------------------------------------------------------------------------------------------------------
+def sample_simplex_exp(n: int, K: int, rng: np.random.Generator) -> np.ndarray:
+    """n uniform points on Delta_K (normalized Exp(1) vectors)."""
+    if n <= 0:
+        return np.zeros((0, K))
+    E = rng.standard_exponential(size=(n, K))
+    s = E.sum(axis=1, keepdims=True)
+    s[s <= 0.0] = 1.0
+    return E / s
+
+
+def _phi_terms(Q: np.ndarray, lam: np.ndarray):
+    """G[i] = Q_i lam (m, K) and phi_i(lam) (m,)."""
+    G = Q @ lam
+    return G, G @ lam
+
+
+def _project_simplex(lam: np.ndarray, K: int) -> np.ndarray:
+    lam = np.maximum(np.asarray(lam, dtype=float), 0.0)
+    s = float(lam.sum())
+    if not np.isfinite(s) or s <= 0.0:
+        return np.full(K, 1.0 / K)
+    return lam / s
+
+
+def _active_set(phis: np.ndarray, tol: float) -> frozenset:
+    lo = float(np.min(phis))
+    return frozenset(np.nonzero(phis <= lo + tol * max(1.0, abs(lo)))[0].tolist())
+
+
+def _scipy_game(M: np.ndarray) -> Tuple[float, np.ndarray]:
+    """max{t : M lam >= t 1, lam in Delta_K} by scipy (HiGHS): the fallback when the HiGHS solve fails."""
+    m, K = M.shape
+    res = linprog(np.r_[np.zeros(K), -1.0], A_ub=np.c_[-M, np.ones(m)], b_ub=np.zeros(m),
+                  A_eq=np.r_[np.ones(K), 0.0].reshape(1, -1), b_eq=[1.0],
+                  bounds=[(0.0, None)] * K + [(None, None)], method="highs")
+    if not res.success:
+        raise RuntimeError(f"game LP failed: {res.message}")
+    x = np.asarray(res.x, dtype=float)
+    return float(x[K]), x[:K].copy()
+
+
+class GameLP:
+    """max{t : M lam >= t 1, sum(lam) = 1, lam >= 0} for successive payoffs M (m x K): the whole LP by HiGHS (dual
+    simplex), with the previous basis restored (grown bundles: the new rows basic).  Algorithm 2 uses it only when run
+    with the full LP (CCPCGConfig.lp = "full"), for checks.  Columns (lam_1..lam_K, t); rows: the m payoff rows, then
+    the simplex equality."""
+
+    def __init__(self, K: int):
+        self.K = int(K)
+        self.m = 0
+        self._h = None
+        self._basis, self._basis_m = None, None
+        self._warned = False
+
+    def _new_highs(self):
+        h = highspy.Highs()
+        h.setOptionValue("output_flag", False)
+        h.setOptionValue("presolve", "off")          # keep the basis usable
+        h.setOptionValue("solver", "simplex")
+        return h
+
+    def _lp_of(self, M):
+        m, K = M.shape
+        INF = highspy.kHighsInf
+        lp = highspy.HighsLp()
+        lp.num_col_ = K + 1
+        lp.num_row_ = m + 1
+        lp.col_cost_ = np.r_[np.zeros(K), -1.0]
+        lp.col_lower_ = np.r_[np.zeros(K), -INF]
+        lp.col_upper_ = np.full(K + 1, INF)
+        lp.row_lower_ = np.r_[np.zeros(m), 1.0]
+        lp.row_upper_ = np.r_[np.full(m, INF), 1.0]
+        lp.a_matrix_.format_ = highspy.MatrixFormat.kRowwise
+        payoff = np.hstack([M, -np.ones((m, 1))]).ravel()
+        lp.a_matrix_.value_ = np.concatenate([payoff, np.ones(K)])
+        lp.a_matrix_.index_ = np.concatenate([np.tile(np.arange(K + 1), m), np.arange(K)]).astype(np.int32)
+        lp.a_matrix_.start_ = np.concatenate([np.arange(0, m * (K + 1) + 1, K + 1),
+                                              [m * (K + 1) + K]]).astype(np.int32)
+        return lp
+
+    def _basis_for(self, m):
+        if self._basis is None or self._basis_m is None:
+            return None
+        if m == self._basis_m:
+            return self._basis
+        if m > self._basis_m:
+            b = highspy.HighsBasis()
+            b.valid = True
+            b.col_status = list(self._basis.col_status)
+            rs = list(self._basis.row_status)
+            b.row_status = rs[:-1] + [highspy.HighsBasisStatus.kBasic] * (m - self._basis_m) + rs[-1:]
+            return b
+        return None
+
+    def solve(self, M: np.ndarray) -> Tuple[float, np.ndarray]:
+        """Returns (t*, lam*)."""
+        M = np.ascontiguousarray(np.asarray(M, dtype=float))
+        m, K = M.shape
+        if self._h is None:
+            self._h = self._new_highs()
+        h = self._h
+        basis = self._basis_for(m)
+        h.passModel(self._lp_of(M))
+        if basis is not None:
+            h.setBasis(basis)
+        h.run()
+        self.m = m
+        if h.getModelStatus() != highspy.HighsModelStatus.kOptimal:
+            if not self._warned:
+                warnings.warn("HiGHS did not reach an optimal game LP; using scipy for this solve.", RuntimeWarning)
+                self._warned = True
+            self._basis, self._basis_m = None, None
+            return _scipy_game(M)
+        self._basis = h.getBasis()
+        self._basis_m = m
+        x = np.asarray(h.getSolution().col_value, dtype=float)
+        return float(x[K]), x[:K].copy()
 
 
 @dataclass
@@ -57,7 +179,7 @@ class CCPCGConfig:
     dedup_phi_rel: float = 1e-9    # ... or with the same active set and phi within this relative distance
     active_tol: float = 1e-9       # active set: phi_i within this relative distance of phi
     eps: Optional[float] = None    # certificate test val(A) <= eps^2 (None: no test)
-    lp: str = "cg"                 # "cg": constraint generation; "full": the whole LP (abm.ccp.GameLP), for checks
+    lp: str = "cg"                 # "cg": constraint generation; "full": the whole LP (GameLP above), for checks
     work: int = 200                # constraint generation: rows of the first working set ...
     add: int = 200                 # ... rows added per round at most
     cg_tol: float = 1e-12          # ... violation tolerance, relative to max{1, |t|}
@@ -161,7 +283,7 @@ class CCPCGSelector:
         if cfg.lp not in ("cg", "full"):
             raise ValueError(f"lp {cfg.lp!r}")
         self.rng = np.random.default_rng(cfg.seed)
-        self.lp = CGGameLP(self.K, cfg.work, cfg.add, cfg.cg_tol) if cfg.lp == "cg" else GameLP(self.K, "bulk")
+        self.lp = CGGameLP(self.K, cfg.work, cfg.add, cfg.cg_tol) if cfg.lp == "cg" else GameLP(self.K)
         self.n = 0
         self.Q = np.empty((1024, self.K, self.K))
         self.A = np.empty((1024, self.K))                            # [Q_i]_kk

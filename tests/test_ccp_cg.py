@@ -21,8 +21,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from abm.ccp import _phi_terms, _scipy_game  # noqa: E402
-from abm.ccp_cg import CCPCGConfig, CCPCGSelector, CGGameLP  # noqa: E402
+from abm.ccp_cg import CCPCGConfig, CCPCGSelector, CGGameLP, _phi_terms, _scipy_game  # noqa: E402
 from abm.methods import lambda_changed  # noqa: E402
 
 

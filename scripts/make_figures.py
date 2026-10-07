@@ -3,7 +3,7 @@
 from results/ (no training, no audits):
 
     figures/mnist_worst_gn_k2.pdf    worst-case gradient norm vs gradient calls and time, {4,9}
-    figures/mnist_worst_gn_k3.pdf    the same for {4,7,9}
+    figures/mnist_worst_gn_k3.pdf    the same for {4,7,9}: certified bounds (GRAB its upper bound, the markers lower bounds)
     figures/mnist_fronts.pdf         linear scalarization fronts (mean of three seeds): {4,9} left, {4,7,9} right
     figures/mnist_step_rules_k2.pdf  step-rule experiment, {4,9}
 
@@ -38,6 +38,7 @@ COL = {"adaptive": "#ff7f0e", "uniform": "#1f77b4", "surf": "#d62728"}
 MARK = {"uniform": "s", "surf": "^"}
 NAME = {"adaptive": "GRAB", "uniform": "Unif Discrtztn", "surf": "SURF"}
 YLAB = r"$\max_{\lambda\in\Delta_K}\,\mathrm{GN}(\lambda,B_t)$"
+YLAB_K3 = r"Bound on $\mathrm{GN}^*(B_t)$"      # K = 3: certified bounds; the legend says which (GRAB upper, baselines lower)
 
 
 def _save(fig, stem, pdf_dpi=None, **kw):
@@ -70,7 +71,9 @@ def adaptive_curve(res):
 def worst_gn(K, extra=(), stem=None):
     """Markers: the drawn configurations (geometric means over the seeds); dashed: fitted trends; curve: the
     adaptive method (geometric mean over the seeds).  extra: further adaptive curves (label, results file, line
-    style), drawn below the main curve and added to the legend after GRAB."""
+    style), drawn below the main curve and added to the legend after GRAB.  K = 3: the curves are certified upper
+    bounds and the markers certified lower bounds of GN*(B_t) = max_lambda GN(lambda, B_t), as the legend and the
+    y-axis say."""
     res = json.loads((RESULTS / f"k{K}.json").read_text())
     fams = ("uniform", "surf") if K == 2 else ("uniform",)
     drawn = {"uniform": C.FIGURE_UNIFORM_R[K], "surf": C.FIGURE_SURF_N}
@@ -124,7 +127,7 @@ def worst_gn(K, extra=(), stem=None):
         mv = (axv > 0) & (axv <= xmax)
         lines += [(ev[(ev > 0) & (ev <= xmax)], ey[(ev > 0) & (ev <= xmax)]) for ev, ey in extra_curves]
         per_axis.append((ax, xlabel, items, lines + [(axv[mv], ad_y[mv])], float(ad_y[mv].min()), float(ad_y[mv].max())))
-    axs[0].set_ylabel(YLAB, fontsize=FS["label"])
+    axs[0].set_ylabel(YLAB if K == 2 else YLAB_K3, fontsize=FS["label"])
     y_lo = min(p[4] for p in per_axis) / 1.35                         # below the visible adaptive curve
     y_hi = 1.9 * max(it["y"] for p in per_axis for it in p[2])         # room above the top markers for their labels
     if K == 3:
@@ -136,8 +139,9 @@ def worst_gn(K, extra=(), stem=None):
                                                                          minor_thresholds=(3, 3)))
         axs[0].tick_params(axis="y", which="minor", labelsize=FS["tick"] - 1)
         axs[1].tick_params(axis="y", which="both", labelleft=False)
-    names = ([NAME["adaptive"]] + [label for label, _, _ in extra]
-             + [f"{NAME[f]} ({'r' if f == 'uniform' else 'N'})" for f in fams])
+    up, lo = (": upper bound", ": lower bound") if K == 3 else ("", "")
+    names = ([NAME["adaptive"] + up] + [label + up for label, _, _ in extra]
+             + [f"{NAME[f]} ({'r' if f == 'uniform' else 'N'}){lo}" for f in fams])
     fig.legend([handles["adaptive"]] + [handles[f"extra{i}"] for i in range(len(extra))] + [handles[f] for f in fams],
                names, loc="upper center", ncol=len(names), fontsize=FS["legend"], frameon=False,
                bbox_to_anchor=(0.5, 1.0))
