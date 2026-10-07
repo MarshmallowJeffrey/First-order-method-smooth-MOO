@@ -8,10 +8,11 @@ bound (abm/certify.py; the global optimization fallback of Appendix A.1), to a r
 For every leg folder (summary.json with ck_m, and grams.npz) without certified.json, the first form writes
 certified.json: per checkpoint the certified lower and upper bound of GN* (square roots), whether the gap was reached,
 the point attaining the lower bound, the splits and the seconds.  Legs are independent; each worker uses one thread.
-The second form writes the bounds into summary.json: audit_gn = the larger of the certified lower bound and the earlier
-lower bound (both are values of phi at feasible points), audit_gn_upper = the certified upper bound, audit =
-"certified", audit_gap, audit_seconds = the seconds of the certified audit; the earlier values are kept as
-audit_gn_previous and audit_seconds_previous.  New legs (scripts/run.py) are audited this way directly.
+The second form writes the bounds into summary.json, the same fields as a new leg (scripts/run.py audits new legs
+this way directly): audit_gn = the certified lower bound, audit_gn_upper = the certified upper bound, audit =
+"certified", audit_gap, audit_uncertified, audit_seconds = the seconds of the certified audit, and, where the summary
+has them, audit_gn2 (the squared lower bound) and audit_lam (the point attaining it).  The values of an earlier audit
+are kept under the same names with the suffix _previous; nothing uses them.
 """
 
 from __future__ import annotations
@@ -57,18 +58,24 @@ def certify_leg(args):
 
 
 def update_summary(d):
+    """certified.json -> summary.json (see the module docstring); returns whether summary.json changed."""
     sm = json.loads((d / "summary.json").read_text())
-    if sm.get("audit") == "certified":
-        return False
     c = json.loads((d / "certified.json").read_text())
     if c["ck_grads"] != sm["ck_grads"]:
         raise ValueError(f"{d}: checkpoints differ")
-    prev = [float(v) for v in sm["audit_gn"]]
-    sm["audit_gn_previous"] = prev
-    sm["audit_gn"] = [max(a, b) for a, b in zip(c["lower_gn"], prev)]
-    sm["audit_gn_upper"] = c["upper_gn"]
-    sm["audit_seconds_previous"], sm["audit_seconds"] = sm["audit_seconds"], c["total_seconds"]
-    sm.update(audit="certified", audit_gap=c["gap"], audit_uncertified=int(sum(not x for x in c["certified"])))
+    new = {"audit": "certified", "audit_gap": c["gap"], "audit_gn": c["lower_gn"], "audit_gn_upper": c["upper_gn"],
+           "audit_uncertified": int(sum(not x for x in c["certified"])), "audit_seconds": c["total_seconds"]}
+    if "audit_gn2" in sm:
+        new["audit_gn2"] = [v * v for v in c["lower_gn"]]
+    if "audit_lam" in sm:
+        new["audit_lam"] = c["lam"]
+    if all(sm.get(k) == v for k, v in new.items()):
+        return False
+    if sm.get("audit") != "certified" or "audit_gn_previous" in sm:     # values of an earlier audit: kept once
+        for k in ("audit_gn", "audit_seconds", "audit_gn2", "audit_lam"):
+            if k in sm and f"{k}_previous" not in sm:
+                sm[f"{k}_previous"] = sm[k]
+    sm.update(new)
     (d / "summary.json").write_text(json.dumps(sm, indent=1))
     return True
 

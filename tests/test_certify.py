@@ -3,8 +3,8 @@
 1. random bundles: the lower bound is phi at the returned point (all rows), the upper bound is at least the maximum of
    phi on a fine simplex grid, and upper <= (1 + gap) lower;
 2. a bundle of one point: lower = upper = its largest diagonal entry (a convex quadratic is maximal at a vertex);
-3. the saved K = 3 runs, if present (runs/k3/adaptive_seed41): at the last checkpoint the certified interval contains
-   the stored lower bound or lies above it.
+3. the saved K = 3 runs, if present (runs/k3/adaptive_seed41): at the last checkpoint a fresh certified interval
+   overlaps the stored one (both contain the true value).
 
     python tests/test_certify.py        (or: python -m pytest tests)
 """
@@ -64,10 +64,11 @@ def test_saved_run():
     m = sm["ck_m"][-1]
     Q = np.load(d / "grams.npz")["gram_stack"][:m]
     r = certify_k3(Q, gap=1e-3)
-    stored = float(sm.get("audit_gn_previous", sm["audit_gn"])[-1]) ** 2
-    assert r["upper"] >= stored * (1.0 - 1e-12)
+    lo = float(sm["audit_gn"][-1]) ** 2
+    up = float(sm["audit_gn_upper"][-1]) ** 2 if "audit_gn_upper" in sm else np.inf
+    assert r["upper"] >= lo * (1.0 - 1e-12) and r["lower"] <= up * (1.0 + 1e-12)
     print(f"  adaptive_seed41, last checkpoint: GN* in [{np.sqrt(r['lower']):.6e}, {np.sqrt(r['upper']):.6e}], stored "
-          f"lower bound {np.sqrt(stored):.6e}")
+          f"[{np.sqrt(lo):.6e}, {np.sqrt(up):.6e}]")
 
 
 if __name__ == "__main__":

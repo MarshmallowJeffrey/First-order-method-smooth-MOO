@@ -190,9 +190,8 @@ All settings are in `abm/config.py`.
   not bit-reproducible across GPU models and library versions, so rerun values agree with `results/` up to the
   run-to-run variation; wall-clock times depend on the hardware.
 * The K = 3 legs of the paper were audited after training, on a CPU, by `scripts/certify_k3.py --runs runs/k3
-  --workers 8` and `--update-summary` (the same branch and bound that `scripts/run.py` applies to new legs).  Their
-  recorded lower end is the larger of the certified lower bound and the value of an earlier lower-bound audit of the
-  same bundle (both are values of φ at feasible points), so a fresh audit can be lower by at most the gap of 10⁻³.
+  --workers 8` and `--update-summary`: the same branch and bound that `scripts/run.py` applies to new legs, and the
+  recorded bounds are those of the branch and bound alone.
 * Some baseline legs of the paper were run in two parts (the first 240,000 or 320,000 gradient calls, then continued
   from the saved state).  The continuation reproduces a single run bit for bit, so `scripts/run.py` runs every leg in
   one go.
