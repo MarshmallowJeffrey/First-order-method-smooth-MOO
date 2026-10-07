@@ -38,7 +38,6 @@ COL = {"adaptive": "#ff7f0e", "uniform": "#1f77b4", "surf": "#d62728"}
 MARK = {"uniform": "s", "surf": "^"}
 NAME = {"adaptive": "GRAB", "uniform": "Unif Discrtztn", "surf": "SURF"}
 YLAB = r"$\max_{\lambda\in\Delta_K}\,\mathrm{GN}(\lambda,B_t)$"
-YLAB_K3 = r"Bound on $\mathrm{GN}^*(B_t)$"      # K = 3: certified bounds; the legend says which (GRAB upper, baselines lower)
 
 
 def _save(fig, stem, pdf_dpi=None, **kw):
@@ -72,8 +71,8 @@ def worst_gn(K, extra=(), stem=None):
     """Markers: the drawn configurations (geometric means over the seeds); dashed: fitted trends; curve: the
     adaptive method (geometric mean over the seeds).  extra: further adaptive curves (label, results file, line
     style), drawn below the main curve and added to the legend after GRAB.  K = 3: the curves are certified upper
-    bounds and the markers certified lower bounds of GN*(B_t) = max_lambda GN(lambda, B_t), as the legend and the
-    y-axis say."""
+    bounds and the markers certified lower bounds of GN*(B_t) = max_lambda GN(lambda, B_t), as the legend says; the
+    K = 3 figure has no y-axis label."""
     res = json.loads((RESULTS / f"k{K}.json").read_text())
     fams = ("uniform", "surf") if K == 2 else ("uniform",)
     drawn = {"uniform": C.FIGURE_UNIFORM_R[K], "surf": C.FIGURE_SURF_N}
@@ -127,7 +126,8 @@ def worst_gn(K, extra=(), stem=None):
         mv = (axv > 0) & (axv <= xmax)
         lines += [(ev[(ev > 0) & (ev <= xmax)], ey[(ev > 0) & (ev <= xmax)]) for ev, ey in extra_curves]
         per_axis.append((ax, xlabel, items, lines + [(axv[mv], ad_y[mv])], float(ad_y[mv].min()), float(ad_y[mv].max())))
-    axs[0].set_ylabel(YLAB if K == 2 else YLAB_K3, fontsize=FS["label"])
+    if K == 2:                                   # K = 3: no y-axis label; the legend says which bounds are drawn
+        axs[0].set_ylabel(YLAB, fontsize=FS["label"])
     y_lo = min(p[4] for p in per_axis) / 1.35                         # below the visible adaptive curve
     y_hi = 1.9 * max(it["y"] for p in per_axis for it in p[2])         # room above the top markers for their labels
     if K == 3:
