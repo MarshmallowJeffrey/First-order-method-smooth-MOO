@@ -18,10 +18,11 @@ lp_options; the defaults are used everywhere else, e.g. by the reported metric):
   warm_cg   constraint generation starts from the rows of the previous LP whose slacks were nonbasic, with their
             basis statuses (the other rows basic), instead of a cold start; the result is again an optimum;
   relaxed   constraint generation solves the LP on its initial working set only, without checking or adding the
-            other rows.  This is a relaxation: its maximizer need not be optimal for the full LP and its value is at
-            least the full optimum, so a predicted improvement computed from it is at least the exact one; its dual,
-            extended by zeros, still gives a valid upper bound (Proposition 9).  Values are always evaluated
-            exactly on every row.
+            other rows.  This is a relaxation: its maximizer need not be optimal for the full LP, and its dual,
+            extended by zeros, still gives a valid upper bound (Proposition 9).  The returned value is
+            min_i (M lambda)_i at that maximizer over all rows, which is at most the full optimum; a predicted
+            improvement computed from it is therefore at most the exact one, and the CCP stopping test becomes a
+            heuristic that may stop early.  Values are always evaluated exactly on every row.
 """
 import warnings
 from contextlib import contextmanager
@@ -345,7 +346,8 @@ def lp(M, return_dual_bound=False):
 def ccp_ascent(qs, w, maxiter, tau=1e-8):
     """CCP steps from w (Algorithm 2, inner loop): the LP for val(M^c) of the linearizations at the current
     point, then a move to its maximizer, until the predicted improvement delta_c <= tau max{1, phi} or after maxiter
-    LPs.  With exact LPs phi does not decrease; with relaxed LPs (lp_options) a step that lowers phi ends the start.
+    LPs.  With exact LPs phi does not decrease; with relaxed LPs (lp_options) the improvement is computed at the
+    working-set maximizer and is at most delta_c, and a step that lowers phi ends the start.
     Returns (last point, largest phi seen after a step, the point where it was seen, number of LPs)."""
     best, wb = -np.inf, None
     w = np.array(w, float)

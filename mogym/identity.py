@@ -1,10 +1,11 @@
 """Identity of a stored run: what it was computed from.
 
 A run file records the settings it was started with (`run_spec`, written by the run scripts), the SHA-256 of the
-package source, the package versions, the SHA-256 of the MDP model and the SHA-256 of its .npz arrays.  The run
+package source (its code without comments and docstrings), the package versions, the SHA-256 of the MDP model and the SHA-256 of its .npz arrays.  The run
 scripts reuse a stored run only if all of these match the current ones and the arrays are intact; otherwise they
 stop with an error instead of silently skipping or overwriting.
 """
+import ast
 import hashlib
 import json
 import subprocess
@@ -26,10 +27,22 @@ def file_sha256(path):
     return sha256_bytes(Path(path).read_bytes())
 
 
+def code_sha256(path):
+    """SHA-256 of the code of a Python file: its syntax tree without docstrings (comments are not part of it), so
+    that editing comments or docstrings leaves it unchanged."""
+    tree = ast.parse(Path(path).read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.body \
+                and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Constant) \
+                and isinstance(node.body[0].value.value, str):
+            node.body = node.body[1:] or [ast.Pass()]
+    return sha256_bytes(ast.dump(tree, include_attributes=False).encode())
+
+
 def source_sha256():
     h = hashlib.sha256()
     for f in sorted(PACKAGE.glob("*.py")):
-        h.update(f.name.encode()); h.update(f.read_bytes())
+        h.update(f.name.encode()); h.update(code_sha256(f).encode())
     return h.hexdigest()
 
 

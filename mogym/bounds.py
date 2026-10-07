@@ -14,8 +14,9 @@ mogym.metrics) the leaves of largest bound are taken in batches: a leaf bounded 
 n_k, otherwise it is split at the midpoint of its longest edge and both halves are bounded; a leaf keeps the smaller of
 its own bound and its parent's.  The checkpoint stops when the largest bound is at most ((1 + gap) l_k)^2 or its time
 is spent.  Leaves whose bound is at most ((1 + gap) min_k l_k)^2 would never be split again and are dropped.  The
-reported bound is max(sqrt(largest remaining bound), (1 + gap) min_k l_k), times 1 + GUARD against rounding (float64
-Gram matrices, LP duals and vertices); it is non-increasing in k.  The stored leaves are capped; a split adds one
+reported bound is max(sqrt(largest remaining bound), (1 + gap) min_k l_k); it is non-increasing in k.  The construction
+is valid in exact arithmetic; the computations use float64, and the reported bound is multiplied by 1 + GUARD as a
+safeguard against rounding.  The stored leaves are capped; a split adds one
 leaf, so a batch splits at most as many leaves as there are free slots, and a checkpoint stops when nothing is left to
 split or re-bound.
 

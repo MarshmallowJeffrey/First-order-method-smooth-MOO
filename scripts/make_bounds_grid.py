@@ -63,7 +63,7 @@ for key, xlabel in (("calls", "Gradient Calls"), ("cpu", "Time (s)")):
         x0 = min(x.min(), x_ex.min()) if len(x_ex) else x.min()
         xl, xr = x0 / 1.25, x.max() * 1.1
         g0 = np.flatnonzero(gx[key] <= x0 + 1e-12)[-1]
-        sel = (np.arange(len(curve)) >= g0) & (gx[key] <= x.max() * 1.02)
+        sel = (np.arange(len(curve)) >= g0) & (gx[key] <= x.max() + 1e-12)
         gxs = np.concatenate([[xl], gx[key][sel][1:], [x.max()]]); gys = np.concatenate([gub[sel], [gub[sel][-1]]])
         ax.fill_between(x, ub, lb, where=lb > ub, color=C["ok"], lw=0, zorder=1)
         ax.step(gxs, gys, where="post", color=C["grab"], lw=1.8, zorder=3)

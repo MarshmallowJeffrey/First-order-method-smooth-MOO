@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import lambda_solvers as ls
+from . import identity, lambda_solvers as ls
 
 POOL_SEED = 20260910
 POOL_PER_FACE = 500
@@ -42,9 +42,10 @@ def fixed_stratified_weights(K=6, seed=POOL_SEED, per_face=POOL_PER_FACE):
 
 
 def evaluator_sha256():
-    """Fingerprint of the K>2 evaluator: the source of this module and of the LP / CCP code, and the fixed pool."""
-    h = hashlib.sha256(Path(__file__).read_bytes())
-    h.update(Path(ls.__file__).read_bytes())
+    """Fingerprint of the K>2 evaluator: the code of this module and of the LP / CCP code (without comments and
+    docstrings), and the fixed pool."""
+    h = hashlib.sha256(identity.code_sha256(__file__).encode())
+    h.update(identity.code_sha256(ls.__file__).encode())
     h.update(np.ascontiguousarray(fixed_stratified_weights()).tobytes())
     return h.hexdigest()
 
