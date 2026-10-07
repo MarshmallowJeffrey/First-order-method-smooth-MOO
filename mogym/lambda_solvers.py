@@ -1,4 +1,5 @@
-"""Preference-vector selection: approximate maximization of min_i lambda' Q_i lambda over the simplex, problem (14).
+"""Preference-vector selection: approximate maximization of min_i lambda' Q_i lambda over the simplex,
+the squared form of the selection problem (6).
 
 Q_i = J_i J_i' is the Gram matrix of bundle point i (J_i: K x d Jacobian); internal values are squared gradient
 norms, public GN values are their square roots.
