@@ -40,7 +40,7 @@ the finite models; no trajectories are sampled.
 ```
 
 The script runs every configuration of both tasks, the CPU-time repeats, the Fruit Tree upper bounds and the figures.
-The runs and the timing repeats are serial with one numerical thread (about 15 minutes on the machine below,
+The runs and the timing repeats are serial with one numerical thread (about 10 minutes on the machine below,
 mostly the evaluation of the Uniform runs, which is not part of the measured time; each further timing repeat takes
 about as long again). The upper bounds are computed afterwards with six processes (about 11 minutes).
 
@@ -269,17 +269,17 @@ bounds on the ratios of the true GN*.
 
 | Task | GRAB at B | Uniform, lowest point | SURF, lowest point |
 |---|---|---|---|
-| FishWood | 3.1905e-5 at 157,000 calls / 18.4 s | 1.8808e-4 (r=512, 149,032 calls / 13.9 s): 5.89× (5.65× / 4.87×) | 5.0727e-4 (N=256, 150,902 calls / 13.1 s): 15.90× (15.34× / 12.48×) |
+| FishWood | 3.1905e-5 at 157,000 calls / 18.4 s | 1.8808e-4 (r=512, 149,032 calls / 13.4 s): 5.89× (5.65× / 4.70×) | 5.0727e-4 (N=256, 150,902 calls / 13.0 s): 15.90× (15.34× / 12.44×) |
 | Fruit Tree | upper bound 8.1185e-4 at 60,000 calls / 2.8 s | 1.0012e-3 (r=6, 55,026 calls / 2.5 s): ≥ 1.23× (≥ 1.23× / ≥ 1.23×) | – |
 
 - Baseline points that GRAB's curve (FishWood) or upper bound (Fruit Tree) lies below, within the same Gradient
   Calls / the same CPU time: FishWood Uniform 4/9 / 4/9 (r = 64, …, 512; the coarse grids reach their plateau within
   23,102 calls, while GRAB is still descending), SURF 7/8 / 6/8; Fruit Tree Uniform 6/6 / 5/6 (r = 1 at 0.02 s, before
   GRAB's first checkpoint after θ₀).
-- Fruit Tree upper bounds: within 0.9%–4.9% of GRAB's lower estimate at checkpoints 2–121 (median 1.0%).
+- Fruit Tree upper bounds: within 0.9%–4.8% of GRAB's lower estimate at checkpoints 2–121 (median 1.0%).
 - Fruit Tree along every Uniform run within B (`make_bounds_grid.py`), smallest lb(UD)/ub(GRAB) for r = 1, …, 6:
   same Gradient Calls 1.200, 1.190, 1.212, 1.186, 1.089, 1.064; same CPU time (from GRAB's first checkpoint after θ₀,
-  0.023 s; one Uniform checkpoint per r is earlier) 1.200, 1.003, 1.096, 1.186, 1.144, 1.148.
+  0.024 s; one Uniform checkpoint per r is earlier) 1.200, 1.003, 1.096, 1.186, 1.158, 1.148.
 
 The Gradient-Call values are exact. The CPU times depend on the machine.
 
