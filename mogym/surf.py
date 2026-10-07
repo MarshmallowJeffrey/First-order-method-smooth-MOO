@@ -8,8 +8,9 @@ fine w-grid and damps the CDF update, Phi_{t+1} = alpha Phi~_t + (1 - alpha) Phi
 N+1 policies.  A slot keeps its Adam state while its weight moves by at most state_tol from one round to the next
 and gets a new state otherwise.
 
-The run stops by the rule of mogym.plateau on the per-round GN; readiness: the slot weights (including the next
-round's) moved <= weight_tol over the window, and P95 over slots of ||grad F_lambda_n(slot n)|| <= max(own_floor,
+The run stops by the rule of mogym.plateau, checked at the end of every block of ceil(check_steps / inner_steps)
+rounds on the GN there; readiness: the slot weights (including the next round's) moved <= weight_tol from round to
+round over the rounds of the window, and P95 over slots of ||grad F_lambda_n(slot n)|| <= max(own_floor,
 own_ratio * GN).  `rounds` is a safety cap.  theta_0 is evaluated once, inside the training time, and counts K
 Gradient Calls; each Adam step counts K.
 
@@ -49,6 +50,7 @@ def surf(model, N_segments, path, *, rounds, inner_steps, inner_lr, every, budge
     slots = [(x0.copy(), f0, j0) for _ in quantiles]
     slot_opts, slot_w = [None] * len(quantiles), [None] * len(quantiles)
     mark = every
+    per_check = plateau_rule.block(rule, inner_steps)  # rounds per check of the stopping rule
     for _ in range(rounds):
         current_w = np.interp(quantiles, F_vals, fine_w)
         weight_history.append(current_w.copy())
@@ -84,19 +86,20 @@ def surf(model, N_segments, path, *, rounds, inner_steps, inner_lr, every, budge
         count = K * (steps + 1)
         gn = rec.checkpoint(len(slots), np.array([z[1] for z in slots]), np.array([z[2] for z in slots]), count,
                             kind='round')
-        round_gn.append(gn)
-        nxt = np.interp(quantiles, F_vals, fine_w)
-        ws = weight_history[-rule["window"]:] + [nxt]
-        moves = [float(np.max(np.abs(a - b))) for a, b in zip(ws[1:], ws[:-1])]
-        ready = len(moves) == rule["window"] and max(moves) <= rule["weight_tol"]
-        lam = np.column_stack([1.0 - current_w, current_w])
-        own = np.linalg.norm(np.einsum('nkd,nk->nd', rec.last_J, lam), axis=1)
-        own_p95.append(float(np.quantile(own, .95)))
-        ready = ready and own_p95[-1] <= max(rule["own_floor"], rule["own_ratio"] * gn)
-        trigger, stop = plateau_rule.update(round_gn, trigger, ready, rule)
-        if stop:
-            status = 'plateau'
-            break
+        if len(weight_history) % per_check == 0:
+            round_gn.append(gn)
+            nxt = np.interp(quantiles, F_vals, fine_w)
+            ws = weight_history[-rule["window"] * per_check:] + [nxt]
+            moves = [float(np.max(np.abs(a - b))) for a, b in zip(ws[1:], ws[:-1])]
+            ready = len(moves) == rule["window"] * per_check and max(moves) <= rule["weight_tol"]
+            lam = np.column_stack([1.0 - current_w, current_w])
+            own = np.linalg.norm(np.einsum('nkd,nk->nd', rec.last_J, lam), axis=1)
+            own_p95.append(float(np.quantile(own, .95)))
+            ready = ready and own_p95[-1] <= max(rule["own_floor"], rule["own_ratio"] * gn)
+            trigger, stop = plateau_rule.update(round_gn, trigger, ready, rule)
+            if stop:
+                status = 'plateau'
+                break
         if s_vals[-1] <= 1e-14:  # degenerate front (as in the SURF notebooks)
             status = 'zero_arc_length'
             break

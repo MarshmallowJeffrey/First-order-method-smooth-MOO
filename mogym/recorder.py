@@ -1,8 +1,8 @@
 """Checkpoint logging with training-time accounting.
 
 Training wall/CPU time excludes the time spent inside checkpoint() (metric evaluation) and the final
-reward reporting in finish().  finish() writes <path>.npz (the output policies theta, their objectives F, Jacobians J and
-rewards) and <path>.json (settings, checkpoints, timings, the run identity of mogym.identity and the SHA-256 of
+reward reporting in finish().  finish() writes <path>.npz (the output policies theta, their objectives F, Jacobians J
+- Uniform: their Gram matrices Q instead - and rewards) and <path>.json (settings, checkpoints, timings, the run identity of mogym.identity and the SHA-256 of
 the .npz).
 """
 import json
@@ -37,7 +37,7 @@ class Recorder:
         self.evalwall += time.perf_counter() - t; self.evalcpu += time.process_time() - c
         return gn
 
-    def finish(self, path, theta, F, J, extra=None):
+    def finish(self, path, theta, F, J, extra=None, Q=None):
         t = time.perf_counter(); c = time.process_time()
         rr = (np.array([self.oracle.evaluate(x, False)[1] for x in theta]) if self.save_arrays
               else np.empty((0,)))
@@ -51,7 +51,8 @@ class Recorder:
         if self.run_spec is not None:
             meta['identity'] = identity.run_identity(self.run_spec, self.model)
         if self.save_arrays:
-            np.savez_compressed(path.with_suffix('.npz'), theta=theta, F=F, J=J, rewards=rr)
+            arrays = dict(J=J) if J is not None else dict(Q=Q)  # Uniform stores the Gram matrices of its bundle
+            np.savez_compressed(path.with_suffix('.npz'), theta=theta, F=F, rewards=rr, **arrays)
             meta['npz_sha256'] = identity.file_sha256(path.with_suffix('.npz'))
         path.with_suffix('.json').write_text(json.dumps(meta, indent=2))
         return meta

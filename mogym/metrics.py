@@ -1,11 +1,12 @@
-"""Reported metric max_{lambda in simplex} GN(lambda, B), GN(lambda, B) = min_i ||J_i' lambda||.
+"""Worst-case gradient norm max_{lambda in simplex} GN(lambda, B), GN(lambda, B) = min_i ||J_i' lambda||.
 
   K=2  exact (lower envelope of parabolas).
   K=6  maximum over one fixed pool of 23,992 weights (vertices, center, 199 points per edge, 500 random
        points per face with 3..6 objectives), refined by CCP polishing: from each of the POLISH_STARTS best pool
-       weights (pairwise distance > 0.08), CCP steps (paper Algorithm 2) to a local maximum, at most POLISH_MAXITER
-       LPs.  Every value is GN at an actual weight, so the result is a numerical lower estimate; the evaluator is the
-       same for every method.
+       weights (pairwise distance > 0.08), CCP steps with exact LPs to a local maximum, at most POLISH_MAXITER LPs.
+       Every value is GN at an actual weight, so the result is a lower bound on the maximum (the same evaluator for
+       every method).  The figures use it for the baselines; for GRAB they use the upper bounds of mogym.bounds, which
+       start from it.
 
 All evaluators return (gn, argmax weight).
 """

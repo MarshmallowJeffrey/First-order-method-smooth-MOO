@@ -1,7 +1,8 @@
-"""GRAB (paper Algorithm 1) with an Adam inner solver.
+"""GRAB (Algorithm 1) with an Adam inner solver.
 
 Outer iteration t (no tolerance epsilon; the run stops when the budget is spent):
-  1. lambda_t: approximate maximizer of GN(.; B_{t-1}) (K=2: exact envelope; K>2: multi-start CCP; mogym.lambda_solvers).
+  1. lambda_t: a preference vector with large GN(.; B_{t-1}) (K=2: the exact maximizer from the envelope; K>2: the
+     CCP selection of mogym.lambda_solvers with the options of the configuration).
   2. theta_0^(t) = argmin over the bundle of F_lambda_t - ||grad F_lambda_t||^2 / (2 L_lambda_t), L_lambda = sum_k
      lambda_k L_k, the first minimizer in the stored order.
   3. inner_steps Adam steps on F_lambda_t.  Every inner solve belongs to a trajectory, which keeps its last iterate

@@ -1,6 +1,6 @@
 """Number labels next to the markers of the trend figures.
 
-Taken unchanged from the MNIST experiments of the paper (branch adaptive-bundle-mnist, abm/labels.py), so that
+Taken unchanged from the MNIST experiments (branch adaptive-bundle-mnist, abm/labels.py), so that
 both sets of figures share one style.
 
 Every candidate position of every label is scored and the cheapest kept.

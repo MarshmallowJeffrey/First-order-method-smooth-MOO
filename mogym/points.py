@@ -1,10 +1,12 @@
-"""Reading the runs back: the plotted baseline points and the adaptive curve.
+"""Reading the runs back: the plotted baseline points, the GRAB curve and its upper bounds.
 
 Results layout (created by the scripts):
-  results/<task>/uniform/r<r>.json|.npz      one Uniform run per resolution r, run to its GN plateau
-  results/<task>/surf/N<N>.json|.npz         one SURF run per N (K=2), run to its GN plateau
-  results/<task>/adaptive/adaptive.json|.npz the GRAB run; adaptive_metric.json caches the K>2 metric
-  results/<task>/timing.json                 CPU times of the timing repeats (scripts/time_repeats.py)
+  results/<task>/uniform/r<r>.json|.npz        one Uniform run per resolution r, run to its GN plateau
+  results/<task>/surf/N<N>.json|.npz           one SURF run per N (K=2), run to its GN plateau
+  results/<task>/adaptive/adaptive.json|.npz   the GRAB run
+  results/<task>/adaptive/adaptive_metric.json K>2: the lower estimate (mogym.metrics) at every GRAB checkpoint
+  results/<task>/adaptive/adaptive_upper.json  K>2: the upper bound (mogym.bounds) at every GRAB checkpoint
+  results/<task>/timing.json                   CPU times of the timing repeats (scripts/time_repeats.py)
 """
 import json
 import math
@@ -92,6 +94,31 @@ def adaptive_curve(results, task, K):
     med, reps = _cpu(timing(results, task), "adaptive/adaptive", meta)
     return meta, [dict(calls=c["component_gradients"], cpu=float(med[i]), cpu_repeats=reps[:, i].tolist(), gn=v)
                   for i, (c, v) in enumerate(zip(cps, vals))]
+
+
+def bounds_key(results, task):
+    """What the upper bounds of the GRAB run belong to: its arrays (checked against the stored run), the evaluator of
+    the lower estimates and the bound settings."""
+    stem = Path(results) / task / "adaptive" / "adaptive"
+    meta = json.loads(stem.with_suffix(".json").read_text())
+    sha = identity.file_sha256(stem.with_suffix(".npz"))
+    if meta["npz_sha256"] != sha:
+        raise RuntimeError(f"{task}: adaptive.npz does not match adaptive.json")
+    return dict(npz_sha256=sha, evaluator=metrics.evaluator_sha256(), settings=config.BOUNDS)
+
+
+def upper_curve(results, task, K):
+    """The GRAB curve with the upper bound of scripts/upper_bounds.py in place of the lower estimate ("lower" keeps
+    the latter).  The stored bounds must belong to the stored run and the current settings, checkpoint by checkpoint."""
+    meta, curve = adaptive_curve(results, task, K)
+    f = Path(results) / task / "adaptive" / "adaptive_upper.json"
+    if not f.exists():
+        raise RuntimeError(f"{task}: no upper bounds; run scripts/upper_bounds.py {task}")
+    ub = json.loads(f.read_text())
+    if ub.get("key") != bounds_key(results, task) or [(r["calls"], r["bundle_size"]) for r in ub["rows"]] != \
+            [(c["component_gradients"], c["bundle_size"]) for c in meta["checkpoints"]]:
+        raise RuntimeError(f"{task}: adaptive_upper.json belongs to another run or settings; rerun scripts/upper_bounds.py")
+    return meta, [dict(c, lower=c["gn"], gn=r["upper"]) for c, r in zip(curve, ub["rows"])]
 
 
 def best_within(curve, field, x):

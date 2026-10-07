@@ -1,32 +1,57 @@
-"""Preference-vector selection: approximate maximization of min_i lambda' Q_i lambda over the simplex (paper (14)).
+"""Preference-vector selection: approximate maximization of min_i lambda' Q_i lambda over the simplex, problem (14).
 
 Q_i = J_i J_i' is the Gram matrix of bundle point i (J_i: K x d Jacobian); internal values are squared gradient
 norms, public GN values are their square roots.
 
   Envelope  K=2: exact lower envelope of the convex parabolas q_i(x) = lambda' Q_i lambda, lambda = (x, 1 - x)
-            (paper Appendix A.4.1).  It is built by inserting one parabola at a time, which gives the same envelope
-            as the divide and conquer of Algorithm 3; the selected weight is the piece end of largest value (the
-            first one in case of ties).
-  CCP       K>2: multi-start convex-concave procedure (paper Algorithm 2).
+            (Appendix A.2).  It is built by inserting one parabola at a time, which gives the same envelope as
+            the divide and conquer of Algorithms 4 and 5; the selected weight is the piece end of largest value (the
+            first one in case of ties), as in Algorithm 3.
+  CCP       K>2: multi-start convex-concave procedure (the CCP component of Algorithm 2).
 
-Every LP max_{lambda in simplex} min_i (M lambda)_i is solved by HiGHS (dual simplex, feasibility tolerances 1e-9,
-one solver instance), warm-started from the basis of the previous LP of the same size; an LP with at least
-CG_MIN_ROWS rows is solved by constraint generation, which returns an optimum of the full LP.
+Every LP max_{lambda in simplex} min_i (M lambda)_i is solved by HiGHS (dual simplex, feasibility tolerances 1e-9),
+warm-started from the basis of the previous LP of the same size; an LP with at least CG_MIN_ROWS rows is solved by
+constraint generation, which returns an optimum of the full LP.  LP options (set by CCP for its own LPs only, see
+lp_options; the defaults are used everywhere else, e.g. by the reported metric):
+  presolve  HiGHS presolve on (default) or off (a second solver instance; off gives the same solutions here);
+  warm_cg   constraint generation starts from the rows of the previous LP whose slacks were nonbasic, with their
+            basis statuses (the other rows basic), instead of a cold start; the result is again an optimum;
+  relaxed   constraint generation solves the LP on its initial working set only, without checking or adding the
+            other rows.  This is a relaxation: its maximizer need not be optimal for the full LP and its value is at
+            least the full optimum, so a predicted improvement computed from it is at least the exact one; its dual,
+            extended by zeros, still gives a valid upper bound (Proposition 9).  Values are always evaluated
+            exactly on every row.
 """
 import warnings
+from contextlib import contextmanager
 from itertools import combinations
 
 import numpy as np
 from scipy.optimize import linprog
 
 CG_MIN_ROWS, CG_INIT, CG_ADD = 400, 40, 40
-_HIGHS = {}  # HiGHS module, the solver instance and the basis of the previous LP
-_CG = {}     # rows active at the previous constraint-generation optimum and its maximizer
+_HIGHS = {}     # HiGHS module, the solver instance (presolve on) and the basis of its previous LP
+_HIGHS_NP = {}  # the same with presolve off
+_CG = {}        # rows active at the previous constraint-generation optimum and its maximizer
+_CGW = {}       # warm_cg: the final working set and basis of the previous constraint-generation LP
+_OPT = dict(presolve=True, warm_cg=False, relaxed=False)
+
+
+@contextmanager
+def lp_options(**options):
+    """LP options for the LPs solved inside the block (see the module docstring)."""
+    saved = dict(_OPT); _OPT.update(options)
+    try:
+        yield
+    finally:
+        _OPT.clear(); _OPT.update(saved)
 
 
 def reset_lp_state():
-    """Forget the warm-start basis and the constraint-generation rows (at the start of a run)."""
-    _HIGHS.pop("basis", None); _HIGHS.pop("basis_shape", None); _CG.clear()
+    """Forget the warm-start bases and the constraint-generation rows (at the start of a run)."""
+    for H in (_HIGHS, _HIGHS_NP):
+        H.pop("basis", None); H.pop("basis_shape", None)
+    _CG.clear(); _CGW.clear()
 
 
 def roots(c):
@@ -141,7 +166,7 @@ class Envelope:
         return max(float(np.min((cs[:, 0] * x + cs[:, 1]) * x + cs[:, 2])), 0.), lam
 
 
-def _highs():
+def _highs_presolve_on():
     """HiGHS through SciPy's internal interface, with the options scipy.optimize.linprog(method='highs') uses, and one
     solver instance; None if HiGHS is not reachable this way (lp() then calls linprog)."""
     if not _HIGHS:
@@ -157,21 +182,49 @@ def _highs():
         o.primal_feasibility_tolerance = 1e-9; o.simplex_strategy = s_c.SimplexStrategy.kSimplexStrategyDual
         o.threads = 1
         highs = _h._Highs()
-        _HIGHS.update(h=None if highs.passOptions(o) == _h.HighsStatus.kError else _h, highs=highs, inf=_h.kHighsInf)
+        _HIGHS.update(h=None if highs.passOptions(o) == _h.HighsStatus.kError else _h, highs=highs, inf=_h.kHighsInf,
+                      options=o)
     return _HIGHS if _HIGHS["h"] is not None else None
+
+
+def _highs():
+    """The solver instance for the current options (presolve off: a second instance with otherwise equal options)."""
+    H = _highs_presolve_on()
+    if H is None or _OPT["presolve"]:
+        return H
+    if not _HIGHS_NP:
+        _h = H["h"]; o = _h.HighsOptions()
+        for k in ("dual_feasibility_tolerance", "primal_feasibility_tolerance", "simplex_strategy", "highs_debug_level"):
+            setattr(o, k, getattr(H["options"], k))
+        o.presolve = "off"; o.log_to_console = False; o.output_flag = False; o.threads = 1
+        highs = _h._Highs(); highs.passOptions(o)
+        _HIGHS_NP.update(h=_h, highs=highs, inf=_h.kHighsInf)
+    return _HIGHS_NP
 
 
 def _optimal(H):
     _h, highs = H["h"], H["highs"]
-    return highs.run() != _h.HighsStatus.kError and highs.getModelStatus() == _h.HighsModelStatus.kOptimal
+    status = highs.run()
+    if status == _h.HighsStatus.kError and _reset_scheduler(_h):
+        status = highs.run()
+    return status != _h.HighsStatus.kError and highs.getModelStatus() == _h.HighsModelStatus.kOptimal
 
 
-def _highs_direct(M, warm=True):
-    """The LP of lp() passed to the HiGHS instance and solved.  Returns (x, row duals), or None if HiGHS is not
-    reachable or does not report an optimal model."""
-    H = _highs()
-    if H is None:
-        return None
+def _reset_scheduler(_h):
+    """HiGHS runs on a global task scheduler fixed by the first solve in the process; if another HiGHS user (e.g.
+    scipy.optimize.linprog without a `threads` option) started it with a different number of threads, run() refuses
+    our one-thread instance.  Destroys that scheduler so that the next run() starts one with our setting; False if
+    this HiGHS build does not offer it."""
+    reset = getattr(_h._Highs, "resetGlobalScheduler", None)
+    if reset is None:
+        return False
+    reset(True)
+    return True
+
+
+def _highs_direct(M, H, warm=True, basis=None):
+    """The LP of lp() passed to the solver instance H and solved, warm-started from the basis of the previous LP of
+    the same size (warm) or from `basis`.  Returns (x, row duals), or None if HiGHS does not report an optimal model."""
     _h, highs, inf = H["h"], H["highs"], H["inf"]
     m, K = M.shape
     # [1, -M; 0, 1'] in column-wise (CSC) form, as scipy.sparse.csc_matrix gives it: column by column, rows in
@@ -191,6 +244,8 @@ def _highs_direct(M, warm=True):
         return None
     if warm and H.get("basis_shape") == (m, K):
         highs.setBasis(H["basis"])
+    if basis is not None:
+        highs.setBasis(basis)
     if not _optimal(H):
         return None
     if warm:
@@ -202,11 +257,16 @@ def _highs_direct(M, warm=True):
 def _lp_cg(M):
     """The LP of lp() by constraint generation.  HiGHS solves it on a working set of rows: the rows active at the
     previous optimum, the CG_INIT rows smallest at the previous maximizer (the center at first) and the smallest
-    row of every column.  Every row outside the working set with (M lambda)_i < t - 1e-10 (stricter than the
-    feasibility tolerance HiGHS applies inside) is violated; the CG_ADD most violated rows are added to the model
-    and the LP is solved again from the current basis.  When no row is violated, lambda is optimal for the full LP
-    and the duals of the working set (zero elsewhere) are optimal duals.  Returns (x, row duals) as _highs_direct,
-    or None."""
+    row of every column (warm_cg: also the rows of the previous LP whose slacks were nonbasic, started from their
+    basis statuses).  Every row outside the working set with (M lambda)_i < t - 1e-10 (stricter than the feasibility
+    tolerance HiGHS applies inside) is violated; the CG_ADD most violated rows are added to the model and the LP is
+    solved again from the current basis.  When no row is violated, lambda is optimal for the full LP and the duals
+    of the working set (zero elsewhere) are optimal duals.  relaxed: no row is checked or added.  Returns (x, row
+    duals) as _highs_direct, or None."""
+    H = _highs()
+    if H is None:
+        return None
+    _h, highs = H["h"], H["highs"]
     m, K = M.shape
     ref = _CG.get("lam")
     ref = ref if ref is not None and len(ref) == K else np.ones(K) / K
@@ -215,18 +275,28 @@ def _lp_cg(M):
     if hint is not None:
         W[hint[hint < m]] = True
     rows = list(np.flatnonzero(W)); n0 = len(rows)  # model rows: rows[:n0], the simplex row, then rows[n0:]
-    out = _highs_direct(M[rows], warm=False)
+    basis = None
+    if _OPT["warm_cg"] and _CGW.get("K") == K and all(r < m for r in _CGW["nonbasic"]):
+        nb = _CGW["nonbasic"]
+        W[list(nb)] = True; rows = list(np.flatnonzero(W)); n0 = len(rows)
+        basis = _h.HighsBasis(); basis.col_status = list(_CGW["col_status"])
+        basis.row_status = [nb.get(r, _h.HighsBasisStatus.kBasic) for r in rows] + [_CGW["simplex_status"]]
+        basis.valid = True
+    out = _highs_direct(M[rows], H, warm=False, basis=basis)
     if out is None:
         return None
-    H = _HIGHS; highs = H["highs"]
     x, duals = out
     while True:
         lam = np.maximum(x[1:], 0); lam /= lam.sum()
         gap = M @ lam - x[0]; gap[W] = 0.
-        viol = np.flatnonzero(gap < -1e-10)
+        viol = np.empty(0, dtype=int) if _OPT["relaxed"] else np.flatnonzero(gap < -1e-10)
         if len(viol) == 0:
             idx = np.asarray(rows); full = np.zeros(m); full[idx] = duals
             _CG["rows"] = idx[duals < 0]; _CG["lam"] = lam
+            if _OPT["warm_cg"]:
+                fb = highs.getBasis(); rs = list(fb.row_status); order = list(idx[:n0]) + [None] + list(idx[n0:])
+                _CGW.update(K=K, col_status=list(fb.col_status), simplex_status=rs[n0],
+                            nonbasic={r: st for r, st in zip(order, rs) if r is not None and st != _h.HighsBasisStatus.kBasic})
             return x, full
         new = viol[np.argsort(gap[viol], kind='stable')[:CG_ADD]]; k = len(new)
         W[new] = True; rows.extend(new)
@@ -239,11 +309,15 @@ def _lp_cg(M):
 
 
 def lp(M, return_dual_bound=False):
-    """max_{lambda in simplex} min_i (M lambda)_i: value, maximizer (and an upper bound from the duals)."""
+    """max_{lambda in simplex} min_i (M lambda)_i: (value, maximizer[, dual bound]).  The value is min_i (M lambda)_i
+    at the returned maximizer, evaluated on all rows; the maximizer is optimal for the full LP unless the relaxed
+    option is on (then for the working-set LP).  The dual bound is max_k (w' M)_k for the dual distribution w over
+    the rows (projected onto the simplex), valid for any such w (Proposition 9, (22)), relaxed or not."""
     m, K = M.shape
     fast = _lp_cg(M) if m >= CG_MIN_ROWS else None
     if fast is None:
-        fast = _highs_direct(M)
+        H = _highs()
+        fast = None if H is None else _highs_direct(M, H)
     if fast is not None:
         x, marg = fast
     else:
@@ -267,10 +341,11 @@ def lp(M, return_dual_bound=False):
     return value, w
 
 
-def ccp_ascent(qs, w, maxiter):
-    """CCP steps from w (paper Algorithm 2, inner loop): the LP for val(M^c) of the linearizations at the current
-    point, then a move to its maximizer, until the predicted improvement delta_c <= 1e-8 max{1, phi} or after maxiter
-    LPs.  Returns (last point, largest phi seen after a step, the point where it was seen, number of LPs)."""
+def ccp_ascent(qs, w, maxiter, tau=1e-8):
+    """CCP steps from w (Algorithm 2, inner loop): the LP for val(M^c) of the linearizations at the current
+    point, then a move to its maximizer, until the predicted improvement delta_c <= tau max{1, phi} or after maxiter
+    LPs.  With exact LPs phi does not decrease; with relaxed LPs (lp_options) a step that lowers phi ends the start.
+    Returns (last point, largest phi seen after a step, the point where it was seen, number of LPs)."""
     best, wb = -np.inf, None
     w = np.array(w, float)
     for count in range(1, maxiter + 1):
@@ -280,31 +355,46 @@ def ccp_ascent(qs, w, maxiter):
         if new > best:
             best, wb = new, wn.copy()
         if new < old - 2e-8:
-            raise RuntimeError('CCP descent exceeds numerical tolerance')
+            if not _OPT["relaxed"]:
+                raise RuntimeError('CCP descent exceeds numerical tolerance')
+            break
         w = wn
-        if lower - old <= 1e-8 * max(abs(old), 1.):
+        if lower - old <= tau * max(abs(old), 1.):
             break
     return w, best, wb, count
 
 
 class CCP:
-    """Multi-start CCP (paper Algorithm 2) with N = nseeds, r = nstarts and iteration cap maxiter.
+    """Multi-start CCP (the CCP component of Algorithm 2) with N = nseeds, r = nstarts, c_max = maxiter and
+    the local stopping tolerance tau.
 
-    Each selection: (i) the LP for val(A) (paper Proposition 10) gives its maximizer lambda_A and, from its dual,
-    an upper bound; it is solved again only when a row added since the last solve cuts lambda_A, otherwise lambda_A,
+    A full selection: (i) the LP for val(A) (Proposition 9) gives its maximizer lambda_A (with relaxed LPs: of
+    the working-set LP) and, from its dual, an upper bound; it is solved again only when a row added since the last solve cuts lambda_A, otherwise lambda_A,
     val(A) and the bound are unchanged.  (ii) Seeds: the K vertices, lambda_A, N points drawn uniformly from the
     simplex anew at every selection, the polished points of the previous selection and a pool of at most keep_pool
     earlier local maxima (newest first, pairwise distance > 0.08); in addition the center and, for K > 3, the
     boundary_resolution - 1 interior grid points of every edge and the centers of the 3-faces.  phi is evaluated on
-    all seeds in one batched contraction; values are divided by the largest phi at the vertices, the center and the
-    edge and face points.  If the best seed is within a relative 1e-8 of the upper bound, it is returned.
-    (iii) Otherwise the r best seeds more than 0.08 apart are polished by CCP steps (the LP for val(M^c), then a
-    move to its maximizer); a start stops when the predicted improvement delta_c is at most 1e-8 max{1, phi}
-    (Appendix A) or after maxiter LPs.  (iv) The selected weight is the point of largest phi found; the polished
-    points update the pool.
+    all seeds; values are divided by the largest phi at the vertices, the center and the edge and face points.  If
+    the best seed is within a relative 1e-8 of the upper bound, it is returned.  (iii) Otherwise the r best seeds
+    more than 0.08 apart are polished by CCP steps (the LP for val(M^c), then a move to its maximizer); a start stops
+    when the predicted improvement delta_c is at most tau max{1, phi} (phi normalized as in (ii)) or after maxiter
+    LPs.  (iv) The selected weight is the point of largest phi found; the polished points update the pool.
+
+    Options (the defaults give the procedure above):
+      lazy, lazy_rho  a full selection at every lazy-th call; at the other calls the selected weight is the best of
+                      the seeds of (ii) (the last lambda_A, the previous selection, the pool, N fresh draws), without
+                      LPs, unless its phi is below lazy_rho times that of the last full selection (then a full one);
+      screen          exact screening of the fresh seeds (r = 1 only): phi of a fresh seed is accumulated over blocks of
+                      bundle points, newest first, and the seed is dropped as soon as it cannot exceed the best value
+                      of the seeds before it (it cannot be selected); phi of the retained seeds of (ii) is kept from
+                      the previous call and updated with the new bundle points only;
+      presolve, warm_cg, relaxed   LP options of the LPs of this selection (module docstring).
     """
-    def __init__(self, K, nseeds, nstarts, maxiter, seed=42, boundary_resolution=None, keep_pool=0):
-        self.K = K; self.nseeds = nseeds; self.nstarts = nstarts; self.maxiter = maxiter
+    def __init__(self, K, nseeds, nstarts, maxiter, seed=42, boundary_resolution=None, keep_pool=0, tau=1e-8,
+                 lazy=1, lazy_rho=.5, screen=False, presolve=True, warm_cg=False, relaxed=False):
+        self.K = K; self.nseeds = nseeds; self.nstarts = nstarts; self.maxiter = maxiter; self.tau = tau
+        self.lazy, self.lazy_rho, self.screen = int(lazy), float(lazy_rho), bool(screen)
+        self.lp_opts = dict(presolve=bool(presolve), warm_cg=bool(warm_cg), relaxed=bool(relaxed))
         self.rng = np.random.default_rng(seed)
         boundary = []
         if boundary_resolution is not None and K > 3:
@@ -321,6 +411,7 @@ class CCP:
         self.Q = np.empty((64, K, K)); self.n = 0; self.has_zero = False  # Gram matrices of the bundle
         self.sandwich = None  # (rows at the last val(A) LP, lambda_A, min_i (A lambda_A)_i, dual bound)
         self.previous = []; self.pool = []; self.keep_pool = int(keep_pool); self.lp_count = 0
+        self.calls = 0; self.full_calls = 0; self.last_phi = None; self.seed_cache = {}
 
     def add(self, Q):
         if self.n == len(self.Q):
@@ -333,9 +424,63 @@ class CCP:
         return self.solve()[1]
 
     def solve(self):
-        """(phi value, selected weight, upper bound), unnormalized."""
+        """(phi value, selected weight, upper bound or inf after a selection without LPs), unnormalized."""
+        self.calls += 1
+        with lp_options(**self.lp_opts):
+            if self.lazy > 1 and (self.calls - 1) % self.lazy != 0 and self.last_phi is not None:
+                out = self._without_lp()
+                if out is not None:
+                    return out
+            self.full_calls += 1
+            out = self._full()
+            self.last_phi = out[0]
+            return out
+
+    def _phi_seeds(self, extra, qs, bar, nfresh):
+        """phi (normalized) of the extra seeds, the last nfresh of them fresh draws; with screening a fresh seed that
+        cannot exceed bar or the seeds before it gets -inf (see the class docstring)."""
+        E = (extra[:, :, None] * extra[:, None, :]).reshape(len(extra), -1); Qf = qs.reshape(len(qs), -1)
+        if not self.screen or self.nstarts != 1 or len(qs) <= 320 or nfresh == 0:
+            return (E @ Qf.T).min(axis=1)
+        h = len(extra) - nfresh; out = np.full(len(extra), -np.inf); n = len(Qf)
+        if h:  # retained seeds: their minimum over the points seen before, updated with the new points only
+            new_cache = {}
+            for i in range(h):
+                key = extra[i].tobytes(); val, seen = self.seed_cache.get(key, (np.inf, 0))
+                if seen < n:
+                    val = min(val, float((E[i] @ self.Q[seen:n].reshape(n - seen, -1).T).min()))
+                new_cache[key] = (val, n); out[i] = val / self._scale
+            self.seed_cache = new_cache
+            bar = max(bar, float(out[:h].max()))
+        alive = np.arange(h, len(extra)); run = np.full(len(alive), np.inf); st = n - 1; block = 256
+        while st >= 0:  # newest points first, a first block of 256 points, then 1,024
+            lo = max(0, st - block + 1); block = 1024
+            run = np.minimum(run, (E[alive] @ Qf[lo:st + 1].T).min(axis=1))
+            k = run > bar; alive, run = alive[k], run[k]
+            st = lo - 1
+            if len(alive) == 0:
+                break
+        out[alive] = run
+        return out
+
+    def _without_lp(self):
+        """The best of the fixed seeds, the last lambda_A, the previous selection, the pool and N fresh draws; None
+        (a full selection follows) if its phi is below lazy_rho times that of the last full selection."""
+        Q = self.Q[:self.n]; scale = max(float(np.max(self.scores)), 1e-300); qs = Q / scale; self._scale = scale
+        fresh = self.rng.dirichlet(np.ones(self.K), size=self.nseeds)
+        wA = [self.sandwich[1]] if self.sandwich is not None else []
+        extra = np.vstack(wA + self.previous + list(self.pool) + [fresh])
+        es = self._phi_seeds(extra, qs, float(np.max(self.scores / scale)), len(fresh))
+        seeds = np.vstack([self.seeds, extra]); scores = np.r_[self.scores / scale, es]
+        k = int(np.argmax(scores)); best = float(scores[k])
+        if best * scale < self.lazy_rho * self.last_phi:
+            return None
+        self.previous = [seeds[k].copy()]
+        return max(0., best * scale), seeds[k].copy(), np.inf
+
+    def _full(self):
         Q = self.Q[:self.n]
-        scale = max(float(np.max(self.scores)), 1e-300)
+        scale = max(float(np.max(self.scores)), 1e-300); self._scale = scale
         if self.has_zero:
             return 0., np.eye(self.K)[0], 0.
         qs = Q / scale
@@ -349,8 +494,7 @@ class CCP:
         scores = self.scores / scale
         fresh = self.rng.dirichlet(np.ones(self.K), size=self.nseeds)
         extra = np.vstack([wA] + self.previous + list(self.pool) + [fresh])
-        # phi of the other seeds as one matrix product (w w')_flat . (Q_i)_flat
-        es = ((extra[:, :, None] * extra[:, None, :]).reshape(len(extra), -1) @ qs.reshape(len(qs), -1).T).min(axis=1)
+        es = self._phi_seeds(extra, qs, float(np.max(scores)), len(fresh))
         seeds = np.vstack([self.seeds, extra]); scores = np.r_[scores, es]
         order = np.argsort(-scores, kind='stable')
         best = float(scores[order[0]]); wb = seeds[order[0]].copy()
@@ -367,7 +511,7 @@ class CCP:
             if len(chosen) >= self.nstarts:
                 break
         for w in chosen:
-            w, value, point, count = ccp_ascent(qs, w, self.maxiter); self.lp_count += count
+            w, value, point, count = ccp_ascent(qs, w, self.maxiter, self.tau); self.lp_count += count
             if value > best:
                 best, wb = value, point
             maxima.append(w)

@@ -1,10 +1,14 @@
-"""Convergence figure of one task and the numbers reported in the paper.
+"""Convergence figure of one task and its reported numbers.
 
-Left: max_lambda GN(lambda, B_t) against Gradient Calls; right: against training CPU time.  The style is that of
-the MNIST figures of the paper: GRAB as an orange curve, one blue square per Uniform r and one red triangle per
-SURF N (mogym.points), each family with a dashed descriptive trend c + a (x/s)^(-p) fitted by least squares on
-the logarithms (s = median x) from its leftmost to its rightmost point, and number labels placed by
+Left: the worst-case gradient norm max_lambda GN(lambda, B_t) against Gradient Calls; right: against training CPU
+time.  The style is that of the MNIST figures: GRAB in orange, one blue square per Uniform r and one red
+triangle per SURF N (mogym.points), each family with a dashed descriptive trend c + a (x/s)^(-p) fitted by least
+squares on the logarithms (s = median x) from its leftmost to its rightmost point, and number labels placed by
 scripts/labels.py.  The x axis runs to the larger of the GRAB budget and 1.1 x the farthest point.
+  K=2  exact values; GRAB is drawn as a curve.
+  K>2  GRAB: its upper bound at every checkpoint (scripts/upper_bounds.py), drawn as a step line (a bound holds until
+       the next checkpoint, since the bundle only grows); baselines: their values, each the GN at an actual weight
+       and hence a lower bound on their maximum.  All comparisons below then use GRAB's upper bound.
 
 CPU times are the medians over the timing repeats of scripts/time_repeats.py (the single run if it was not run).
 Also prints and writes figures/<task>_summary.json: the GRAB value at the budget B, each baseline's lowest point and
@@ -26,6 +30,7 @@ from mogym import config, envs, points
 COL = {"grab": "#ff7f0e", "Uniform": "#1f77b4", "SURF": "#d62728"}
 MARK = {"Uniform": "s", "SURF": "^"}
 NAME = {"Uniform": "Unif Discrtztn (r)", "SURF": "SURF (N)"}
+BOUND = {"grab": " (upper bound)", "Uniform": " (lower bound)", "SURF": " (lower bound)"}
 YLAB = r"$\max_{\lambda\in\Delta_K}\,\mathrm{GN}(\lambda,B_t)$"
 FS = dict(label=16, tick=14, legend=14, num=11)
 
@@ -73,7 +78,7 @@ from labels import place  # noqa: E402
 
 task = a.task
 K = envs.build(task)["K"]
-meta, curve = points.adaptive_curve(a.results, task, K)
+meta, curve = (points.upper_curve if K > 2 else points.adaptive_curve)(a.results, task, K)
 pts, skipped = points.points(a.results, task)
 groups = {m: sorted([p for p in pts if p["method"] == m], key=lambda p: p["param"]) for m in ("Uniform", "SURF")}
 groups = {m: g for m, g in groups.items() if g}
@@ -84,7 +89,14 @@ fig, axs = plt.subplots(1, 2, figsize=(12.0, 4.6), sharey=True)
 per_axis, handles = [], {}
 for ax, f, xlabel in ((axs[0], "calls", "Gradient Calls"), (axs[1], "cpu", "Time (s)")):
     m = ad["calls"] > 0
-    handles["grab"], = ax.plot(ad[f][m], ad["gn"][m], "-", color=COL["grab"], lw=2.6, zorder=3)
+    xmax = max(1.1 * max(p[f] for g in groups.values() for p in g), float(ad[f][-1]))
+    if K > 2:  # the bound at a checkpoint holds until the next one
+        gx, gy = np.append(ad[f][m], xmax), np.append(ad["gn"][m], ad["gn"][m][-1])
+        handles["grab"], = ax.step(gx, gy, where="post", color=COL["grab"], lw=2.6, zorder=3)
+        grab_line = (np.repeat(gx, 2)[1:], np.repeat(gy, 2)[:-1])
+    else:
+        handles["grab"], = ax.plot(ad[f][m], ad["gn"][m], "-", color=COL["grab"], lw=2.6, zorder=3)
+        grab_line = None
     items, lines = [], []
     for meth, group in groups.items():
         xs, ys = [p[f] for p in group], [p["gn"] for p in group]
@@ -97,17 +109,18 @@ for ax, f, xlabel in ((axs[0], "calls", "Gradient Calls"), (axs[1], "cpu", "Time
             lines.append((dense, trend(fit, dense)))
         items += [dict(x=p[f], y=p["gn"], text=str(p["param"]), color=COL[meth], key=(meth, p["param"]))
                   for p in group]
-    xmax = max(1.1 * max(p[f] for g in groups.values() for p in g), float(ad[f][-1]))
     ax.set_yscale("log"); ax.set_xlim(0, xmax)
     ax.set_xlabel(xlabel, fontsize=FS["label"]); ax.tick_params(labelsize=FS["tick"])
     ax.grid(True, color="#e6e5e0", lw=0.8); ax.set_axisbelow(True)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
     mv = (ad[f] > 0) & (ad[f] <= xmax)
-    per_axis.append((ax, items, lines + [(ad[f][mv], ad["gn"][mv])], float(ad["gn"][mv].min()), float(ad["gn"][mv].max())))
+    per_axis.append((ax, items, lines + [grab_line if grab_line is not None else (ad[f][mv], ad["gn"][mv])],
+                     float(ad["gn"][mv].min()), float(ad["gn"][mv].max())))
 xr = axs[0].get_xlim()[1]  # no tick label at the panel gap: left-panel ticks within 5% of its right edge dropped
 axs[0].set_xticks([t for t in mticker.MaxNLocator(nbins=5).tick_values(0, xr) if 0 <= t <= .95 * xr])
-axs[0].set_ylabel(YLAB, fontsize=FS["label"])
+if K == 2:  # K>2: the legend says which values are upper and lower bounds
+    axs[0].set_ylabel(YLAB, fontsize=FS["label"])
 y_lo = min(p[3] for p in per_axis) / 1.35
 y_hi = 1.9 * max(it["y"] for p in per_axis for it in p[1])
 if K >= 3 and np.log10(y_hi / y_lo) < 1.2:
@@ -118,9 +131,10 @@ if np.log10(y_hi / y_lo) < 2.2:  # short range: label the 2x, 3x and 5x ticks as
     axs[0].yaxis.set_minor_formatter(mticker.LogFormatterSciNotation(base=10, labelOnlyBase=False, minor_thresholds=(3, 3)))
     axs[0].tick_params(axis="y", which="minor", labelsize=FS["tick"] - 1)
     axs[1].tick_params(axis="y", which="both", labelleft=False)
-fig.legend([handles["grab"]] + [handles[m] for m in groups], ["GRAB"] + [NAME[m] for m in groups],
+fig.legend([handles["grab"]] + [handles[m] for m in groups],
+           ["GRAB" + (BOUND["grab"] if K > 2 else "")] + [NAME[m] + (BOUND[m] if K > 2 else "") for m in groups],
            loc="upper center", ncol=1 + len(groups), fontsize=FS["legend"], frameon=False, bbox_to_anchor=(0.5, 1.0))
-fig.subplots_adjust(left=0.105, right=0.985, bottom=0.15, top=0.87, wspace=0.07)
+fig.subplots_adjust(left=0.105 if K == 2 else 0.075, right=0.985, bottom=0.15, top=0.87, wspace=0.07)
 for ax, items, lines, _, _ in per_axis:  # labels last: they need the final limits and layout
     place(ax, items, lines, fontsize=FS["num"])
 out = _setup.Path(a.figures); out.mkdir(parents=True, exist_ok=True)
@@ -129,10 +143,12 @@ plt.close(fig)
 
 end = curve[-1]
 summary = dict(task=task, budget=config.TASKS[task]["budget"], not_plotted=[list(x) for x in skipped],
+               grab_value="exact" if K == 2 else "upper bound (mogym.bounds); baselines: their values (lower bounds)",
                grab=dict(calls=end["calls"], cpu=end["cpu"], cpu_range=[min(end["cpu_repeats"]), max(end["cpu_repeats"])],
                          timing_repeats=len(end["cpu_repeats"]), gn=end["gn"], outer_iterations=len(meta["lambdas"])),
                baselines={})
-print(f"{task}: GRAB {end['calls']:,} calls / {end['cpu']:.2f} s, GN {end['gn']:.4e}; {len(meta['lambdas'])} outer iterations")
+print(f"{task}: GRAB {end['calls']:,} calls / {end['cpu']:.2f} s, GN {'' if K == 2 else 'upper bound '}{end['gn']:.4e}; "
+      f"{len(meta['lambdas'])} outer iterations")
 for method, v, reason in skipped:
     print(f"  not plotted: {method} {v} ({reason})")
 for method, group in groups.items():

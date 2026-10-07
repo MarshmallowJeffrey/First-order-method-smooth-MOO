@@ -5,7 +5,7 @@ initial distribution rho0, the discount gamma, the KL coefficient tau and the un
 The tabular builders store float32 values (as the original SURF notebooks do); the arrays are then
 converted to float64.
 
-  fishwood      K=2   2 states, 2 actions        gamma 0.995, tau 0.5  (as in the SURF paper)
+  fishwood      K=2   2 states, 2 actions        gamma 0.995, tau 0.5  (as in SURF, Jiang et al.)
   fruittree_d6  K=6   Fruit Tree, depth 6        gamma 0.99,  tau 1  (64 states: 63 internal nodes + absorbing)
 """
 import numpy as np
@@ -53,7 +53,7 @@ def _fishwood(fishproba, woodproba):
 
 # ---------------------------------------------------------------- Fruit Tree
 def _fruit_tree(depth):
-    """The model of the paper: the 2^depth - 1 internal nodes (i, j), 0 <= i <= depth - 1, 0 <= j < 2^i, indexed
+    """The model: the 2^depth - 1 internal nodes (i, j), 0 <= i <= depth - 1, 0 <= j < 2^i, indexed
     2^i - 1 + j, and one absorbing state.  From (i, j) with i <= depth - 2 action a moves to (i + 1, 2j + a); from
     (depth - 1, j) action a picks the fruit of leaf 2j + a (its 6-dimensional nutrient vector is the reward) and
     moves to the absorbing state, which loops on itself with reward 0."""
